@@ -56,3 +56,7 @@ Live company and world-event data comes from Citizen API OpenAPI 0.4.0 on PR #2 
 ### OPEN DECISION
 
 `talentCostMultipliesBurn` in `src/dataSource.js` is the only switch for burn × talent cost. Local sample mode is on, matching PR #1. API mode is off, matching this service. The product has not decided which behavior ships.
+
+## Merge train
+
+Which slices land in which order, and what is already verified, is tracked in [STATE.md](STATE.md).

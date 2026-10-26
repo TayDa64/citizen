@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "description": "Citizen - Civic + Startup simulation game with real-world triggers",
+  "engines": {
+    "node": ">=22.22.2"
+  },
   "dependencies": {
     "@highcharts/react": "^5.0.0",
     "@xyflow/react": "^12.0.0",
