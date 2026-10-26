@@ -4,9 +4,14 @@ import { LineSeries } from '@highcharts/react/series/Line';
 import { talentCostShowsDollars } from '../dataSource';
 import { baselineBurnRate, previewBurnRate } from '../simulation';
 import {
+  formatTalentReadout,
+  talentMixOf,
+  talentMultiplierOf,
+} from '../talentMultiplier';
+import {
   deltaPhrase,
   describeTrigger,
-  formatDollars,
+  formatCurrency,
   formatHypePercent,
   formatTalentDollars,
   formatTalentMultiplier,
@@ -20,27 +25,6 @@ import {
 } from './chartModel';
 
 const LIGHT_LABEL = { color: '#e2e8f0', fontSize: '12px' };
-
-function burnDirectionOf(delta) {
-  if (delta > 0.0005) return 'up';
-  if (delta < -0.0005) return 'down';
-  return 'flat';
-}
-
-function directionArrow(direction) {
-  switch (direction) {
-    case 'up':
-      return '▲';
-    case 'down':
-      return '▼';
-    case 'flat':
-      return '■';
-    default: {
-      const neverDirection = direction;
-      throw new Error(`Unknown direction: ${String(neverDirection)}`);
-    }
-  }
-}
 
 function ReadoutRow({ label, value }) {
   return (
@@ -56,6 +40,54 @@ function formatTalentValue(value, dataSource) {
   return formatTalentMultiplier(value);
 }
 
+function TalentMixTable({ rows }) {
+  return (
+    <table className="talent-mix">
+      <caption>Talent mix</caption>
+      <thead>
+        <tr>
+          <th scope="col">Department</th>
+          <th scope="col">Headcount</th>
+          <th scope="col">Avg skill</th>
+          <th scope="col">Weight</th>
+          <th scope="col">Contribution</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => (
+          <tr key={`${row.department ?? 'unknown'}-${row.headcount}-${row.avgSkill}`}>
+            <td>{row.department ?? 'Unknown'}</td>
+            <td>{String(row.headcount)}</td>
+            <td>{Number(row.avgSkill).toFixed(2)}</td>
+            <td>{formatTalentReadout(row.weight)}</td>
+            <td>{formatTalentReadout(row.contribution)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function TalentBurnSummary({ state }) {
+  const multiplier = talentMultiplierOf(state);
+  const effective = previewBurnRate(state);
+  const base = baselineBurnRate(state);
+  const direction = effective > base ? 'up' : effective < base ? 'down' : 'unchanged';
+  const mix = talentMixOf(state);
+
+  return (
+    <section className="talent-burn" aria-labelledby="talent-burn-heading">
+      <h3 id="talent-burn-heading">Talent and burn</h3>
+      <p>
+        Effective burn {formatCurrency(effective)}{' '}
+        <span>×{formatTalentReadout(multiplier)} talent</span>
+        {`, ${direction} from base burn ${formatCurrency(base)}.`}
+      </p>
+      {mix.length > 0 ? <TalentMixTable rows={mix} /> : null}
+    </section>
+  );
+}
+
 function WorldEventEffect({ state }) {
   const active = state.activeTriggers ?? [];
   if (active.length === 0) return null;
@@ -63,11 +95,6 @@ function WorldEventEffect({ state }) {
   const dataSource = state.dataSource === 'api' ? 'api' : 'local';
   const before = state.baselines ?? { hype: state.company.hype, talentCost: 1 };
   const after = { hype: state.company.hype, talentCost: state.company.talentCost ?? 1 };
-  const nextBurn = previewBurnRate(state);
-  const baselineBurn = baselineBurnRate(state);
-  const burnDelta = baselineBurn === 0 ? 0 : nextBurn / baselineBurn - 1;
-  const burnDirection = burnDirectionOf(burnDelta);
-  const burnArrow = directionArrow(burnDirection);
 
   return (
     <section className="trigger-readout" aria-labelledby="world-event-effect-heading">
@@ -90,11 +117,6 @@ function WorldEventEffect({ state }) {
           value={`${formatTalentValue(after.talentCost, dataSource)} (${deltaPhrase((after.talentCost - before.talentCost) / (before.talentCost || 1))})`}
         />
       </dl>
-      <p className={`delta delta--${burnDirection}`}>
-        <span aria-hidden="true">{burnArrow}</span>
-        {' '}
-        Next month burn {formatDollars(nextBurn)} ({deltaPhrase(burnDelta)}) versus {formatDollars(baselineBurn)} at this tax rate before talent-cost events.
-      </p>
     </section>
   );
 }
@@ -135,6 +157,7 @@ export default function Dashboard({ state }) {
       <p>
         Cash: ${state.company.cash.toFixed(0)} | Burn/mo: ${state.company.burnRate} | Tax: {(state.taxRate * 100).toFixed(0)}%
       </p>
+      <TalentBurnSummary state={state} />
       <WorldEventEffect state={state} />
       <figure className="metrics-chart" aria-busy={ChartAccessibility === undefined}>
         <figcaption id="metrics-chart-description" className="chart-caption">

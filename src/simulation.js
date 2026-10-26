@@ -2,15 +2,23 @@
 // Slice 1: taxRate increases burn, then cash falls on each tick.
 // Slice 2: real-world triggers move hype and talent cost. With no active
 // trigger, talent cost stays 1 and burn matches the Slice 1 formula.
-// API mode uses dollar talent cost and does not multiply burn. That choice
-// lives only in talentCostMultipliesBurn (src/dataSource.js). OPEN DECISION.
-// The service is the source of truth for hype, talentCost, and baselines.
-// Cash and burn stay on the client simulation.
+// Burn is round(2000 * (1 + taxRate * 0.4) * talentMultiplier). The multiplier
+// comes from employees locally and from company.talentMultiplier on the API.
+// OPEN DECISION: triggerTalentCostAffectsBurn (src/talentMultiplier.js) is
+// false in both modes, matching the backend: effect.talentCost does not scale burn.
+// The service is the source of truth for hype, talentCost, baselines, and
+// talentMultiplier. Cash and burn stay on the client simulation.
 // `appliedAtIndex` on an active trigger is client runtime for the chart, not
 // part of the RealWorldTrigger payload in triggers.js.
 
-import { talentCostMultipliesBurn } from './dataSource';
 import { assertValidTrigger, describeTrigger } from './triggers';
+import {
+  burnRateFromMultiplier,
+  effectiveBurnRate,
+  readTalentMix,
+  readTalentMultiplier,
+  baseBurnRate as taxOnlyBurnRate,
+} from './talentMultiplier';
 
 export const BASE_BURN = 2000;
 export const BASE_HYPE = 0.3;
@@ -34,62 +42,28 @@ export const initialState = {
     talentCost: BASE_TALENT_COST,
   },
   dataSource: 'local',
+  employees: [],
+  talentMultiplier: 1,
+  talentMix: [],
   activeTriggers: [],
   lastTriggerChange: null,
 };
 
-// Minimal safe formula evaluator: supports {var} substitution + basic + - * /
-function evalFormula(formula, context) {
-  let expr = formula;
-  for (const [k, v] of Object.entries(context)) {
-    expr = expr.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v));
-  }
-  // Very limited: only numbers, operators, parentheses. No eval of arbitrary code.
-  if (!/^[0-9.+\-*/()\s]+$/.test(expr)) {
-    console.warn('Unsafe formula rejected:', formula);
-    return 0;
-  }
-  try {
-    // eslint-disable-next-line no-new-func
-    return Function(`"use strict"; return (${expr})`)();
-  } catch {
-    return 0;
-  }
-}
-
-function dataSourceOf(state) {
-  return state?.dataSource === 'api' ? 'api' : 'local';
-}
-
-export function computeBurnRate(taxRate, talentCost = BASE_TALENT_COST, dataSource = 'local') {
-  const talentFactor = talentCostMultipliesBurn(dataSource) ? (talentCost ?? BASE_TALENT_COST) : 1;
-  const formula = '{baseBurn} * (1 + {taxRate} * 0.4) * {talentFactor}';
-  return Math.round(
-    evalFormula(formula, {
-      baseBurn: BASE_BURN,
-      taxRate,
-      talentFactor,
-    })
-  );
+export function computeBurnRate(taxRate, talentMultiplier = 1) {
+  return burnRateFromMultiplier(taxRate, talentMultiplier);
 }
 
 export function previewBurnRate(state) {
-  return computeBurnRate(
-    state.taxRate,
-    state.company.talentCost ?? BASE_TALENT_COST,
-    dataSourceOf(state)
-  );
+  return effectiveBurnRate(state);
 }
 
 export function baselineBurnRate(state) {
-  const talent = state.baselines?.talentCost ?? state.company?.talentCost ?? BASE_TALENT_COST;
-  return computeBurnRate(state.taxRate, talent, dataSourceOf(state));
+  return taxOnlyBurnRate(state.taxRate);
 }
 
 export function applyEffects(state) {
   const next = structuredClone(state);
-  const talentCost = next.company.talentCost ?? BASE_TALENT_COST;
-  next.company.burnRate = computeBurnRate(next.taxRate, talentCost, dataSourceOf(next));
+  next.company.burnRate = previewBurnRate(next);
   next.company.cash = Math.max(0, next.company.cash - next.company.burnRate / 12);
   next.history.cash.push(Math.round(next.company.cash));
   next.history.burnRate.push(next.company.burnRate);
@@ -177,6 +151,9 @@ export function hydrateFromApi(prev, snapshot) {
     dataSource: 'api',
     baselines: nextBaselines,
     activeTriggers,
+    employees: [],
+    talentMultiplier: readTalentMultiplier(company.talentMultiplier),
+    talentMix: readTalentMix(company.talentMix),
     company: {
       ...prev.company,
       hype: Number(company.hype),

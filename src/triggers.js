@@ -1,3 +1,5 @@
+import { formatTalentReadout, talentMultiplierOf } from './talentMultiplier';
+
 /**
  * RealWorldTrigger API contract (v1).
  *
@@ -263,8 +265,16 @@ export function triggerDiagramOverlay(state) {
   const edgeLabels = {
     'einfra-7': 'talent cost',
   };
+  const multiplier = talentMultiplierOf(state);
+  const multiplierText = Math.abs(multiplier - 1) < 0.00005
+    ? ''
+    : `×${formatTalentReadout(multiplier)} talent`;
 
   if (active.length === 0) {
+    if (multiplierText) {
+      nodeLabels['civic-infra'] = `${ORIGINAL_INFRA_LABEL}\n${multiplierText}`;
+      edgeLabels['einfra-7'] = multiplierText;
+    }
     return { nodeLabels, edgeLabels, hypeNode: null };
   }
 
@@ -272,8 +282,14 @@ export function triggerDiagramOverlay(state) {
 
   if (Math.abs(talentRatio) >= 0.0005) {
     const arrow = talentRatio > 0 ? '▲' : '▼';
-    nodeLabels['civic-infra'] = `${ORIGINAL_INFRA_LABEL}\n${arrow} talent cost ${formatSignedPercent(talentRatio)}`;
-    edgeLabels['einfra-7'] = `talent cost ${formatSignedPercent(talentRatio)}`;
+    const talentText = multiplierText
+      ? `talent cost ${formatSignedPercent(talentRatio)} · ${multiplierText}`
+      : `talent cost ${formatSignedPercent(talentRatio)}`;
+    nodeLabels['civic-infra'] = `${ORIGINAL_INFRA_LABEL}\n${arrow} ${talentText}`;
+    edgeLabels['einfra-7'] = talentText;
+  } else if (multiplierText) {
+    nodeLabels['civic-infra'] = `${ORIGINAL_INFRA_LABEL}\n${multiplierText}`;
+    edgeLabels['einfra-7'] = multiplierText;
   }
 
   if (Math.abs(hypeDelta) < 0.0005) {

@@ -1,3 +1,4 @@
+import { readTalentMix, readTalentMultiplier } from './talentMultiplier';
 import { TRIGGER_TYPES, assertTriggerId, assertValidTrigger } from './triggers';
 
 const TRIGGER_FIELDS = ['id', 'type', 'label', 'source', 'timestamp', 'effect'];
@@ -130,6 +131,8 @@ export function createCitizenApi({ fetchImpl = globalThis.fetch, baseUrl } = {})
     if (!Array.isArray(triggers)) {
       throw new Error('Trigger service returned an unreadable response');
     }
+    readTalentMultiplier(company.talentMultiplier);
+    readTalentMix(company.talentMix);
     const baselines = company?.baselines;
     if (
       baselines == null ||

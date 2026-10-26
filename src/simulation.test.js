@@ -77,7 +77,7 @@ describe('applyTrigger', () => {
     expect(next.lastTriggerChange.before).toEqual({ hype: 0.3, talentCost: 1 });
     expect(next.lastTriggerChange.after.hype).toBe(0.3);
     expect(next.lastTriggerChange.after.talentCost).toBeCloseTo(1.12);
-    expect(previewBurnRate(next)).toBe(2464);
+    expect(previewBurnRate(next)).toBe(2200);
     expect(previewBurnRate(initialState)).toBe(2200);
   });
 
@@ -128,15 +128,15 @@ describe('applyTrigger', () => {
     expect(() => applyTrigger(initialState, { id: 'nope' })).toThrow(TypeError);
   });
 
-  test('the next month uses talent cost, and a no-trigger tick does not', () => {
+  test('with the trigger flag off, the next month ignores talent cost', () => {
     const baseline = applyEffects(initialState);
     const triggered = applyEffects(applyTrigger(initialState, policy));
 
     expect(baseline.company.burnRate).toBe(2200);
-    expect(triggered.company.burnRate).toBe(2464);
-    expect(triggered.company.cash).toBeLessThan(baseline.company.cash);
+    expect(triggered.company.burnRate).toBe(2200);
+    expect(triggered.company.cash).toBe(baseline.company.cash);
     expect(triggered.history.cash[0]).toBe(15000);
-    expect(triggered.history.burnRate).toEqual([2000, 2464]);
+    expect(triggered.history.burnRate).toEqual([2000, 2200]);
     expect(baseline.history.burnRate).toEqual([2000, 2200]);
   });
 
@@ -144,7 +144,7 @@ describe('applyTrigger', () => {
     const state = applyEffects(setTaxRate(applyTrigger(initialState, policy), 0.5));
     expect(state.taxRate).toBe(0.5);
     expect(state.company.talentCost).toBeCloseTo(1.12);
-    expect(state.company.burnRate).toBe(slice1Burn(0.5, 1.12));
+    expect(state.company.burnRate).toBe(slice1Burn(0.5));
   });
 
   test('the chart marker stays inside the 24-month window', () => {
@@ -197,8 +197,9 @@ describe('removeTrigger and clearTriggers', () => {
     expect(baselineBurnRate(apiState)).toBe(2200);
     expect(applyEffects(apiState).company.burnRate).toBe(2200);
     expect(applyEffects(apiState).history.burnRate).toEqual([2000, 2200]);
-    expect(computeBurnRate(0.25, 4480, 'api')).toBe(2200);
-    expect(computeBurnRate(0.25, 1.12, 'local')).toBe(2464);
+    expect(apiState.talentMultiplier).toBe(1);
+    expect(computeBurnRate(0.25, 1)).toBe(2200);
+    expect(computeBurnRate(0.25, 1.12)).toBe(2464);
 
     const stacked = applyTrigger(apiState, market);
     expect(stacked.baselines.talentCost).toBe(4000);
@@ -234,6 +235,42 @@ describe('removeTrigger and clearTriggers', () => {
     expect(refreshed.history).toEqual(ticking.history);
     expect(refreshed.company.hype).toBe(0.55);
     expect(refreshed.company.talentCost).toBe(4480);
+    expect(firstLoad.talentMultiplier).toBe(1);
+    expect(previewBurnRate(firstLoad)).toBe(2200);
+  });
+
+  test('a supplied talentMultiplier scales burn and an invalid one is rejected', () => {
+    const scaled = hydrateFromApi(initialState, {
+      company: {
+        id: 'company-1',
+        cash: 1,
+        burnRate: 9,
+        hype: 0.3,
+        talentCost: 4480,
+        baselines: { hype: 0.3, talentCost: 4000 },
+        talentMultiplier: 1.28,
+        talentMix: [{ department: 'tech', headcount: 1, avgSkill: 0.53, weight: 1.25, contribution: 1.28 }],
+      },
+      triggers: [],
+    });
+
+    expect(scaled.company.cash).toBe(15000);
+    expect(scaled.company.burnRate).toBe(2000);
+    expect(scaled.talentMultiplier).toBe(1.28);
+    expect(scaled.talentMix[0].department).toBe('tech');
+    expect(previewBurnRate(scaled)).toBe(2816);
+    expect(applyEffects(scaled).company.burnRate).toBe(2816);
+    expect(applyEffects(scaled).history.cash[0]).toBe(15000);
+
+    expect(() => hydrateFromApi(initialState, {
+      company: {
+        hype: 0.3,
+        talentCost: 4000,
+        baselines: { hype: 0.3, talentCost: 4000 },
+        talentMultiplier: 1.12345,
+      },
+      triggers: [],
+    })).toThrow(/4 decimal places/);
   });
 
   test('clearTriggers restores the Slice 1 hype and talent baseline without ticking', () => {

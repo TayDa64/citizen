@@ -67,8 +67,10 @@ describe('world event trigger', () => {
     expect(within(effect).getByText('Hype before')).toBeInTheDocument();
     expect(within(effect).getByText('Talent cost before')).toBeInTheDocument();
     expect(within(effect).getByText('Talent cost after')).toBeInTheDocument();
-    expect(within(effect).getByText(/\$2,464/)).toBeInTheDocument();
-    expect(within(effect).getByText(/\$2,200/)).toBeInTheDocument();
+    const talent = screen.getByRole('region', { name: 'Talent and burn' });
+    expect(talent).toHaveTextContent('×1.00 talent');
+    expect(talent).toHaveTextContent(/base burn \$2,200/i);
+    expect(screen.queryByText(/\$2,464/)).not.toBeInTheDocument();
     expect(screen.getByText(/Active world event: Policy change: talent cost \+12%/)).toBeInTheDocument();
   });
 
@@ -100,7 +102,7 @@ describe('world event trigger', () => {
     await user.click(screen.getByRole('button', { name: /^Policy change / }));
     await user.click(screen.getByRole('button', { name: /advance month/i }));
 
-    expect(screen.getByText(/Burn\/mo: \$2464/)).toBeInTheDocument();
+    expect(screen.getByText(/Burn\/mo: \$2200/)).toBeInTheDocument();
     expect(screen.getByRole('slider', { name: /tax rate/i })).toHaveValue('0.25');
   });
 });

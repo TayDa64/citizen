@@ -208,6 +208,18 @@ describe('triggerDiagramOverlay', () => {
     expect(overlay.hypeNode).toBeNull();
   });
 
+  test('shows an API talent multiplier on the infrastructure edge', () => {
+    const overlay = triggerDiagramOverlay({
+      dataSource: 'api',
+      talentMultiplier: 1.28,
+      company: { hype: 0.3, talentCost: 4000 },
+      baselines: { hype: 0.3, talentCost: 4000 },
+      activeTriggers: [],
+    });
+    expect(overlay.edgeLabels['einfra-7']).toBe('×1.28 talent');
+    expect(overlay.nodeLabels['civic-infra']).toContain('×1.28 talent');
+  });
+
   test('adds a hype node only when hype moved', () => {
     const overlay = triggerDiagramOverlay({
       company: { hype: 0.4, talentCost: 1 },
