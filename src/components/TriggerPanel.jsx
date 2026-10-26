@@ -1,4 +1,5 @@
-import { SAMPLE_TRIGGERS, describeTrigger, formatSignedPercent, formatTriggerDate } from '../triggers';
+import { useRef } from 'react';
+import { SAMPLE_TRIGGERS, formatSignedPercent, formatTriggerDate } from '../triggers';
 
 function TriggerGlyph({ type }) {
   const common = {
@@ -55,11 +56,25 @@ function effectParts(trigger) {
 
 export default function TriggerPanel({ state, announcement, onToggleTrigger, onClearTriggers }) {
   const activeIds = new Set((state.activeTriggers ?? []).map((trigger) => trigger.id));
+  const headingRef = useRef(null);
+
+  const handleClear = () => {
+    onClearTriggers();
+    const heading = headingRef.current;
+    if (!heading) return;
+    try {
+      heading.focus({ focusVisible: true });
+    } catch {
+      heading.focus();
+    }
+  };
 
   return (
     <section className="trigger-panel" aria-labelledby="world-events-heading">
       <div className="trigger-panel__header">
-        <h2 id="world-events-heading">World events</h2>
+        <h2 id="world-events-heading" ref={headingRef} tabIndex={-1}>
+          World events
+        </h2>
         <p className="trigger-panel__lede">
           Sample events stored on this device. A policy change, news spike, or market shift
           moves hype and talent cost. No live feed is connected.
@@ -71,24 +86,26 @@ export default function TriggerPanel({ state, announcement, onToggleTrigger, onC
       <div className="trigger-list">
         {SAMPLE_TRIGGERS.map((trigger) => {
           const active = activeIds.has(trigger.id);
+          const labelId = `${trigger.id}-label`;
           const sourceId = `${trigger.id}-source`;
+          const parts = effectParts(trigger);
+          const labelledBy = [labelId, ...parts.map((part) => `${trigger.id}-${part.key}`), sourceId].join(' ');
           return (
             <button
               key={trigger.id}
               type="button"
               className={active ? 'trigger-button trigger-button--active' : 'trigger-button'}
               aria-pressed={active}
-              aria-label={`${active ? 'Remove' : 'Apply'} ${describeTrigger(trigger)}`}
-              aria-describedby={sourceId}
+              aria-labelledby={labelledBy}
               onClick={() => onToggleTrigger(trigger)}
             >
               <span className="trigger-button__title">
                 <TriggerGlyph type={trigger.type} />
-                <span>{trigger.label}</span>
+                <span id={labelId}>{trigger.label}</span>
               </span>
               <span className="trigger-button__effect">
-                {effectParts(trigger).map((part) => (
-                  <span key={part.key} className={`delta delta--${part.direction}`}>
+                {parts.map((part) => (
+                  <span key={part.key} id={`${trigger.id}-${part.key}`} className={`delta delta--${part.direction}`}>
                     <span aria-hidden="true">{part.direction === 'up' ? '▲' : '▼'}</span>
                     {' '}
                     {part.direction === 'up' ? 'Up' : 'Down'}
@@ -107,7 +124,7 @@ export default function TriggerPanel({ state, announcement, onToggleTrigger, onC
         })}
       </div>
       {activeIds.size > 0 && (
-        <button type="button" className="trigger-clear" onClick={onClearTriggers}>
+        <button type="button" className="trigger-clear" onClick={handleClear}>
           Clear world events
         </button>
       )}

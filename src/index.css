@@ -33,6 +33,11 @@ button:focus-visible {
   color: #f8fafc;
 }
 
+.trigger-panel h2:focus {
+  outline: 3px solid #fde68a;
+  outline-offset: 3px;
+}
+
 .trigger-panel__lede {
   margin: 0 0 0.75rem;
   max-width: 68ch;

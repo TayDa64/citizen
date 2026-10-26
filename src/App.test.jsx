@@ -4,7 +4,7 @@ import { describe, expect, test } from 'vitest';
 import App from './App';
 
 describe('Slice 1 with no world event', () => {
-  test('renders the tax lever, advance month, and baseline cash and burn', () => {
+  test('renders the tax lever, advance month, and baseline cash and burn', async () => {
     render(<App />);
 
     expect(screen.getByRole('slider', { name: /tax rate/i })).toHaveValue('0.25');
@@ -12,13 +12,15 @@ describe('Slice 1 with no world event', () => {
     expect(screen.getByText(/Cash: \$15000/)).toBeInTheDocument();
     expect(screen.getByText(/Burn\/mo: \$2000/)).toBeInTheDocument();
     expect(screen.getByText(/Tax: 25%/)).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Cash & Burn Rate' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Cash & Burn Rate' })).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'World event effect' })).not.toBeInTheDocument();
     expect(within(screen.getByRole('region', { name: 'World events' })).getByRole('status')).toHaveTextContent('');
-    expect(screen.getByRole('button', { name: 'Apply Policy change: talent cost +12%' })).toHaveAttribute(
-      'aria-pressed',
-      'false'
-    );
+    for (const label of ['Policy change', 'News spike', 'Market shift']) {
+      const button = screen.getByRole('button', { name: new RegExp(`^${label} `) });
+      expect(button).not.toHaveAttribute('aria-label');
+      expect(button).toHaveAccessibleName(new RegExp(`^${label} `));
+      expect(button).toHaveAttribute('aria-pressed', 'false');
+    }
     expect(document.querySelector('[data-id="civic-infra"]').textContent).not.toContain('+12%');
   });
 
@@ -47,7 +49,7 @@ describe('world event trigger', () => {
 
     const events = screen.getByRole('region', { name: 'World events' });
     const button = within(events).getByRole('button', {
-      name: 'Apply Policy change: talent cost +12%',
+      name: /^Policy change /,
     });
     button.focus();
     expect(button).toHaveFocus();
@@ -72,16 +74,17 @@ describe('world event trigger', () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole('button', { name: 'Apply Policy change: talent cost +12%' }));
+    await user.click(screen.getByRole('button', { name: /^Policy change / }));
     await user.click(screen.getByRole('button', { name: 'Clear world events' }));
 
+    expect(screen.getByRole('heading', { name: 'World events' })).toHaveFocus();
     expect(within(screen.getByRole('region', { name: 'World events' })).getByRole('status')).toHaveTextContent(
       'World events cleared. Hype and talent cost returned to baseline.'
     );
     expect(screen.queryByRole('region', { name: 'World event effect' })).not.toBeInTheDocument();
     expect(screen.getByText(/Cash: \$15000/)).toBeInTheDocument();
     expect(screen.getByText(/Burn\/mo: \$2000/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Apply Policy change: talent cost +12%' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: /^Policy change / })).toHaveAttribute(
       'aria-pressed',
       'false'
     );
@@ -92,7 +95,7 @@ describe('world event trigger', () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole('button', { name: 'Apply Policy change: talent cost +12%' }));
+    await user.click(screen.getByRole('button', { name: /^Policy change / }));
     await user.click(screen.getByRole('button', { name: /advance month/i }));
 
     expect(screen.getByText(/Burn\/mo: \$2464/)).toBeInTheDocument();

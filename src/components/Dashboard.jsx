@@ -1,6 +1,6 @@
+import { useEffect, useState } from 'react';
 import { Chart, Title } from '@highcharts/react';
 import { LineSeries } from '@highcharts/react/series/Line';
-import { Accessibility } from '@highcharts/react/modules/Accessibility';
 import { computeBurnRate, previewBurnRate } from '../simulation';
 import {
   deltaPhrase,
@@ -9,7 +9,13 @@ import {
   formatHypePercent,
   formatTalentMultiplier,
 } from '../triggers';
-import { metricsChartDescription, seriesDataWithTriggerNotes, triggerChartMarkers } from './chartModel';
+import { loadChartAccessibility } from './loadChartAccessibility';
+import {
+  axisGuideOptions,
+  metricsChartDescription,
+  seriesDataWithTriggerNotes,
+  triggerChartMarkers,
+} from './chartModel';
 
 const LIGHT_LABEL = { color: '#e2e8f0', fontSize: '12px' };
 
@@ -89,37 +95,31 @@ export default function Dashboard({ state }) {
   const { cash, burnRate } = state.history;
   const categories = cash.map((_, i) => `T${i}`);
   const markers = triggerChartMarkers(state);
+  const guides = axisGuideOptions(markers);
   const description = metricsChartDescription(state);
+  const [ChartAccessibility, setChartAccessibility] = useState(undefined);
   const xAxis = {
     categories,
     labels: { style: LIGHT_LABEL },
     lineColor: '#64748b',
     tickColor: '#64748b',
+    plotBands: guides.plotBands,
+    plotLines: guides.plotLines,
   };
 
-  if (markers.length > 0) {
-    xAxis.plotBands = markers.map((marker) => ({
-      from: marker.bandFrom,
-      to: marker.bandTo,
-      color: 'rgba(251, 191, 36, 0.28)',
-      borderColor: '#fbbf24',
-      borderWidth: 1,
-      zIndex: 2,
-    }));
-    xAxis.plotLines = markers.map((marker) => ({
-      value: marker.value,
-      color: '#fbbf24',
-      dashStyle: marker.dashStyle,
-      width: marker.width,
-      zIndex: 4,
-      label: {
-        text: marker.text,
-        rotation: 0,
-        y: marker.labelY + 18,
-        style: { color: '#fde68a', fontWeight: '700', fontSize: '11px' },
-      },
-    }));
-  }
+  useEffect(() => {
+    let cancelled = false;
+    loadChartAccessibility()
+      .then((module) => {
+        if (!cancelled) setChartAccessibility(() => module.Accessibility);
+      })
+      .catch(() => {
+        if (!cancelled) setChartAccessibility(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <div className="dashboard" style={{ padding: '1rem', background: '#12121f', color: '#e0e0e0' }}>
@@ -128,54 +128,60 @@ export default function Dashboard({ state }) {
         Cash: ${state.company.cash.toFixed(0)} | Burn/mo: ${state.company.burnRate} | Tax: {(state.taxRate * 100).toFixed(0)}%
       </p>
       <WorldEventEffect state={state} />
-      <figure className="metrics-chart">
+      <figure className="metrics-chart" aria-busy={ChartAccessibility === undefined}>
         <figcaption id="metrics-chart-description" className="chart-caption">
           {description}
         </figcaption>
-        <Chart
-          options={{
-            chart: { backgroundColor: 'transparent', height: markers.length > 0 ? 260 : 220 },
-            title: { text: null },
-            xAxis,
-            yAxis: {
+        {ChartAccessibility === undefined ? (
+          <div className="metrics-chart__pending" style={{ minHeight: 220 }} />
+        ) : (
+          <Chart
+            options={{
+              chart: { backgroundColor: 'transparent', height: markers.length > 0 ? 260 : 220 },
               title: { text: null },
-              labels: { style: LIGHT_LABEL },
-              gridLineColor: '#334155',
-            },
-            legend: {
-              enabled: true,
-              itemStyle: { color: '#f8fafc' },
-              itemHoverStyle: { color: '#ffffff' },
-            },
-            credits: { enabled: false },
-          }}
-        >
-          <Title style={{ color: '#f8fafc', fontSize: '16px', fontWeight: '600' }}>Cash & Burn Rate</Title>
-          <Accessibility
-            linkedDescription="metrics-chart-description"
-            series={{ describeSingleSeries: true }}
-          />
-          <LineSeries
-            name="Cash"
-            data={seriesDataWithTriggerNotes(cash, state.activeTriggers, 'Cash')}
-            color="#4ade80"
-            options={{
-              accessibility: {
-                description: 'Company cash balance in dollars at each simulated month.',
+              xAxis,
+              yAxis: {
+                title: { text: null },
+                labels: { style: LIGHT_LABEL },
+                gridLineColor: '#334155',
               },
-            }}
-          />
-          <LineSeries
-            name="Burn Rate"
-            data={seriesDataWithTriggerNotes(burnRate, state.activeTriggers, 'Burn rate')}
-            color="#f87171"
-            options={{
-              accessibility: {
-                description: 'Monthly burn rate in dollars. Talent-cost events change burn on the following month.',
+              legend: {
+                enabled: true,
+                itemStyle: { color: '#f8fafc' },
+                itemHoverStyle: { color: '#ffffff' },
               },
+              credits: { enabled: false },
             }}
-          />
-        </Chart>
+          >
+            <Title style={{ color: '#f8fafc', fontSize: '16px', fontWeight: '600' }}>Cash & Burn Rate</Title>
+            {ChartAccessibility ? (
+              <ChartAccessibility
+                linkedDescription="metrics-chart-description"
+                series={{ describeSingleSeries: true }}
+              />
+            ) : null}
+            <LineSeries
+              name="Cash"
+              data={seriesDataWithTriggerNotes(cash, state.activeTriggers, 'Cash')}
+              color="#4ade80"
+              options={{
+                accessibility: {
+                  description: 'Company cash balance in dollars at each simulated month.',
+                },
+              }}
+            />
+            <LineSeries
+              name="Burn Rate"
+              data={seriesDataWithTriggerNotes(burnRate, state.activeTriggers, 'Burn rate')}
+              color="#f87171"
+              options={{
+                accessibility: {
+                  description: 'Monthly burn rate in dollars. Talent-cost events change burn on the following month.',
+                },
+              }}
+            />
+          </Chart>
+        )}
       </figure>
     </div>
   );

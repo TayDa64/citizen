@@ -4,6 +4,7 @@ export function triggerChartMarkers(state) {
   return (state.activeTriggers ?? []).map((trigger, index) => {
     const value = trigger.appliedAtIndex ?? 0;
     return {
+      id: trigger.id,
       value,
       text: describeTrigger(trigger),
       dashStyle: 'Dash',
@@ -15,15 +16,50 @@ export function triggerChartMarkers(state) {
   });
 }
 
+/**
+ * Guides for the metrics chart. Always returns both arrays, including when
+ * nothing is active. Highcharts Axis.update keeps existing plot lines and
+ * bands when the next options omit those keys. An empty array removes them.
+ */
+export function axisGuideOptions(markers) {
+  return {
+    plotBands: markers.map((marker) => ({
+      id: `${marker.id}-band`,
+      from: marker.bandFrom,
+      to: marker.bandTo,
+      color: 'rgba(251, 191, 36, 0.28)',
+      borderColor: '#fbbf24',
+      borderWidth: 1,
+      zIndex: 2,
+    })),
+    plotLines: markers.map((marker) => ({
+      id: `${marker.id}-line`,
+      value: marker.value,
+      color: '#fbbf24',
+      dashStyle: marker.dashStyle,
+      width: marker.width,
+      zIndex: 4,
+      label: {
+        text: marker.text,
+        rotation: 0,
+        y: marker.labelY + 18,
+        style: { color: '#fde68a', fontWeight: '700', fontSize: '11px' },
+      },
+    })),
+  };
+}
+
 export function seriesDataWithTriggerNotes(values, triggers, noun) {
   return values.map((y, index) => {
     const here = (triggers ?? []).filter((trigger) => (trigger.appliedAtIndex ?? 0) === index);
-    if (here.length === 0) return y;
+    // Point.applyOptions merges into the previous point. A bare number never
+    // deletes accessibility.description, so every point sets it explicitly.
+    const description = here.length === 0
+      ? null
+      : `${noun} at this month includes ${here.map((trigger) => describeTrigger(trigger)).join('; ')}.`;
     return {
       y,
-      accessibility: {
-        description: `${noun} at this month includes ${here.map((trigger) => describeTrigger(trigger)).join('; ')}.`,
-      },
+      accessibility: { description },
     };
   });
 }
