@@ -6,8 +6,21 @@ const EFFECT_FIELDS = new Set(['hype', 'talentCost']);
 
 export const SAMPLE_DATA_NOTE = 'Using sample data on this device.';
 export const EMPTY_COMPANIES_NOTE = 'No company was returned. Using sample data on this device.';
+export const UNREADABLE_COMPANY_NOTE =
+  'The company payload could not be read. Using sample data on this device.';
 export const LOADING_NOTE = 'Loading company and world events.';
 export const CONNECTED_NOTE = 'Connected to the Citizen service. Talent cost is shown in dollars.';
+export const MISSING_HYPE_NOTE = 'Hype was missing, so the baseline is shown.';
+export const MISSING_TALENT_COST_NOTE = 'Talent cost was missing, so the baseline is shown.';
+
+function finiteNumber(value) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+export function skippedTriggerAlert(count) {
+  const noun = count === 1 ? 'world event' : 'world events';
+  return `Skipped ${count} ${noun} the service sent in an unexpected shape.`;
+}
 export const HOST_REFUSED_ALERT =
   'The Citizen service refused this page (403). Use the local /api address on this machine.';
 
@@ -134,12 +147,10 @@ export function createCitizenApi({ fetchImpl = globalThis.fetch, baseUrl } = {})
     readTalentMultiplier(company.talentMultiplier);
     readTalentMix(company.talentMix);
     const baselines = company?.baselines;
-    if (
-      baselines == null ||
-      !Number.isFinite(Number(baselines.hype)) ||
-      !Number.isFinite(Number(baselines.talentCost))
-    ) {
-      throw new Error('Company service omitted baselines');
+    if (finiteNumber(baselines?.hype) == null || finiteNumber(baselines?.talentCost) == null) {
+      const error = new Error('Company payload could not be read');
+      error.code = 'unreadable-company';
+      throw error;
     }
     return { triggers, company };
   }
@@ -204,6 +215,15 @@ export async function loadCitizenWorld({ env = import.meta.env, fetchImpl = glob
       return {
         mode: 'local',
         note: EMPTY_COMPANIES_NOTE,
+        alert: null,
+        snapshot: null,
+        baseUrl: null,
+      };
+    }
+    if (error?.code === 'unreadable-company') {
+      return {
+        mode: 'local',
+        note: UNREADABLE_COMPANY_NOTE,
         alert: null,
         snapshot: null,
         baseUrl: null,

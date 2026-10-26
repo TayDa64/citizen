@@ -289,3 +289,66 @@ describe('removeTrigger and clearTriggers', () => {
     expect(applyEffects(cleared).history.burnRate).toEqual([2000, 2200]);
   });
 });
+
+describe('API payload guards', () => {
+  const apiCompany = {
+    id: 'company-1',
+    name: 'Northwind',
+    cash: 1,
+    burnRate: 9,
+    hype: 0.55,
+    talentCost: 4480,
+    baselines: { hype: 0.3, talentCost: 4000 },
+  };
+
+  test('skips an unknown type and an extra effect key without dropping a valid trigger', () => {
+    const state = hydrateFromApi(initialState, {
+      company: apiCompany,
+      triggers: [
+        {
+          id: 'evt-unknown',
+          type: 'employees',
+          label: 'Mystery',
+          source: 'mock:local',
+          timestamp: '2026-04-02T15:00:00.000Z',
+          effect: { hype: 0.1 },
+        },
+        {
+          ...policy,
+          id: 'evt-extra',
+          effect: { talentCost: 0.12, employees: 2 },
+        },
+        policy,
+      ],
+    });
+
+    expect(state.activeTriggers.map((trigger) => trigger.id)).toEqual([policy.id]);
+    expect(state.company.cash).toBe(15000);
+    expect(state.company.hype).toBe(0.55);
+    expect(state.company.talentCost).toBe(4480);
+  });
+
+  test('uses baselines when hype or talent cost is null or not finite, and keeps real zeroes', () => {
+    const missing = hydrateFromApi(initialState, {
+      company: { ...apiCompany, hype: null, talentCost: Number.POSITIVE_INFINITY },
+      triggers: [],
+    });
+    expect(missing.company.hype).toBe(0.3);
+    expect(missing.company.talentCost).toBe(4000);
+    expect(missing.baselines).toEqual({ hype: 0.3, talentCost: 4000 });
+
+    const zeroes = hydrateFromApi(initialState, {
+      company: { ...apiCompany, hype: 0, talentCost: 0 },
+      triggers: [],
+    });
+    expect(zeroes.company.hype).toBe(0);
+    expect(zeroes.company.talentCost).toBe(0);
+  });
+
+  test('throws for a company whose baselines are not finite numbers', () => {
+    expect(() => hydrateFromApi(initialState, {
+      company: { hype: null, talentCost: null, baselines: { hype: null, talentCost: 4000 } },
+      triggers: [policy],
+    })).toThrow(TypeError);
+  });
+});

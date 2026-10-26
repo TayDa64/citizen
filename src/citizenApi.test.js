@@ -3,6 +3,7 @@ import { SAMPLE_TRIGGERS } from './triggers';
 import {
   CONNECTED_NOTE,
   SAMPLE_DATA_NOTE,
+  UNREADABLE_COMPANY_NOTE,
   createCitizenApi,
   loadCitizenWorld,
   readCitizenApiBase,
@@ -318,5 +319,22 @@ describe('loadCitizenWorld', () => {
     expect(result.mode).toBe('api');
     expect(result.note).toBe(CONNECTED_NOTE);
     expect(result.snapshot.company.baselines.talentCost).toBe(4000);
+  });
+
+  test('a company with null baselines falls back to sample data', async () => {
+    const fetchImpl = vi.fn(async (url) => {
+      if (String(url).endsWith('/api/companies')) {
+        return jsonResponse([{ id: 'company-1', hype: null, talentCost: null, baselines: { hype: null, talentCost: 4000 } }]);
+      }
+      return jsonResponse([]);
+    });
+    const result = await loadCitizenWorld({
+      env: { VITE_CITIZEN_API: 'http://127.0.0.1:8787' },
+      fetchImpl,
+    });
+    expect(result.mode).toBe('local');
+    expect(result.snapshot).toBeNull();
+    expect(result.note).toBe(UNREADABLE_COMPANY_NOTE);
+    expect(result.alert).toBeNull();
   });
 });

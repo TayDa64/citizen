@@ -127,39 +127,76 @@ function storeTrigger(trigger, appliedAtIndex) {
   };
 }
 
-export function hydrateFromApi(prev, snapshot) {
+function finiteNumber(value) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function unreadableCompany() {
+  const error = new TypeError('Company payload could not be read');
+  error.code = 'unreadable-company';
+  return error;
+}
+
+export function readApiSnapshot(prev, snapshot) {
   const company = snapshot?.company;
   const baselines = company?.baselines;
-  if (baselines == null) throw new TypeError('Company baselines are required');
-  const nextBaselines = {
-    hype: Number(baselines.hype),
-    talentCost: Number(baselines.talentCost),
-  };
-  if (!Number.isFinite(nextBaselines.hype) || !Number.isFinite(nextBaselines.talentCost)) {
-    throw new TypeError('Company baselines must be finite numbers');
+  const baselineHype = finiteNumber(baselines?.hype);
+  const baselineTalent = finiteNumber(baselines?.talentCost);
+  if (
+    company == null
+    || typeof company !== 'object'
+    || Array.isArray(company)
+    || baselineHype == null
+    || baselineTalent == null
+  ) {
+    throw unreadableCompany();
   }
-  const triggers = Array.isArray(snapshot.triggers) ? snapshot.triggers : [];
-  for (const trigger of triggers) assertValidTrigger(trigger);
+
+  const rawTriggers = snapshot?.triggers;
+  const triggerList = Array.isArray(rawTriggers) ? rawTriggers : [];
+  const accepted = [];
+  let skipped = Array.isArray(rawTriggers) || rawTriggers == null ? 0 : 1;
+  for (const trigger of triggerList) {
+    try {
+      assertValidTrigger(trigger);
+      accepted.push(trigger);
+    } catch {
+      skipped += 1;
+    }
+  }
+
+  const hype = finiteNumber(company.hype);
+  const talentCost = finiteNumber(company.talentCost);
   const index = Math.max(0, (prev.history?.cash?.length ?? 1) - 1);
   const previousById = new Map((prev.activeTriggers ?? []).map((item) => [item.id, item]));
-  const activeTriggers = triggers.map((trigger) => {
+  const activeTriggers = accepted.map((trigger) => {
     const prior = previousById.get(trigger.id);
     return storeTrigger(trigger, prior?.appliedAtIndex ?? index);
   });
+
   return {
-    ...prev,
-    dataSource: 'api',
-    baselines: nextBaselines,
-    activeTriggers,
-    employees: [],
-    talentMultiplier: readTalentMultiplier(company.talentMultiplier),
-    talentMix: readTalentMix(company.talentMix),
-    company: {
-      ...prev.company,
-      hype: Number(company.hype),
-      talentCost: Number(company.talentCost),
+    state: {
+      ...prev,
+      dataSource: 'api',
+      baselines: { hype: baselineHype, talentCost: baselineTalent },
+      activeTriggers,
+      employees: [],
+      talentMultiplier: readTalentMultiplier(company.talentMultiplier),
+      talentMix: readTalentMix(company.talentMix),
+      company: {
+        ...prev.company,
+        hype: hype ?? baselineHype,
+        talentCost: talentCost ?? baselineTalent,
+      },
     },
+    skipped,
+    missingHype: hype == null,
+    missingTalent: talentCost == null,
   };
+}
+
+export function hydrateFromApi(prev, snapshot) {
+  return readApiSnapshot(prev, snapshot).state;
 }
 
 function applyActiveTriggers(next, before, change) {

@@ -17,5 +17,11 @@ export default defineConfig({
       // Relative /api keeps the Host header on localhost, which the API allows.
       '/api': 'http://127.0.0.1:8787',
     },
-  }
+  },
+  preview: {
+    proxy: {
+      // The browser suite builds, then serves with `vite preview`. Same Host rule.
+      '/api': 'http://127.0.0.1:8787',
+    },
+  },
 });

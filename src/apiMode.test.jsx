@@ -478,6 +478,145 @@ describe('API talent multiplier', () => {
   });
 });
 
+describe('out-of-contract API payloads', () => {
+  function installApi(handler) {
+    vi.stubEnv('VITE_CITIZEN_API', 'http://127.0.0.1:8787');
+    vi.stubGlobal('fetch', vi.fn(handler));
+  }
+
+  function companiesAndTriggers(company, triggers) {
+    return async (url) => {
+      const path = String(url);
+      if (path.endsWith('/api/companies')) return jsonResponse([company]);
+      if (path.endsWith('/api/triggers')) return jsonResponse(triggers);
+      return jsonResponse({ error: 'Not found' }, 404);
+    };
+  }
+
+  test('an unknown trigger type is skipped with an alert and the page stays up', async () => {
+    installApi(companiesAndTriggers(apiCompany, [
+      {
+        id: 'evt-not-a-type',
+        type: 'employees',
+        label: 'Mystery',
+        source: 'mock:local',
+        timestamp: '2026-04-02T15:00:00.000Z',
+        effect: { hype: 0.1 },
+      },
+      policy,
+    ]));
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: 'Citizen' })).toBeInTheDocument();
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/skipped 1 world event/i);
+    expect(alert).toHaveTextContent(/unexpected shape/i);
+    expect(screen.getByRole('status', { name: /citizen service/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Policy change / })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByRole('button', { name: /Mystery/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'World event effect' })).toHaveTextContent('$4,000');
+  });
+
+  test('an extra effect key is skipped with an alert and the page stays up', async () => {
+    installApi(companiesAndTriggers(apiCompany, [{
+      id: 'evt-extra-employees',
+      type: 'policy_change',
+      label: 'Policy change',
+      source: 'mock:local',
+      timestamp: '2026-04-02T15:00:00.000Z',
+      effect: { talentCost: 0.12, employees: 4 },
+    }]));
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: 'Citizen' })).toBeInTheDocument();
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/skipped 1 world event/i);
+    expect(screen.getByRole('status', { name: /citizen service/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Policy change / })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.queryByRole('region', { name: 'World event effect' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/NaN/)).not.toBeInTheDocument();
+  });
+
+  test('a malformed company falls back to sample data with a status', async () => {
+    installApi(companiesAndTriggers(
+      { id: 'company-1', name: 'Northwind', hype: null, talentCost: null, baselines: { hype: null, talentCost: 4000 } },
+      [policy]
+    ));
+    const user = userEvent.setup();
+    render(<App />);
+
+    const note = await screen.findByRole('status', { name: /company payload could not be read/i });
+    expect(note).toHaveTextContent(/using sample data on this device/i);
+    expect(screen.getByRole('heading', { name: 'Citizen' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText(/NaN/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /^Policy change / }));
+    expect(screen.getByText(/1\.12×/)).toBeInTheDocument();
+    expect(screen.queryByText(/\$2,464/)).not.toBeInTheDocument();
+  });
+
+  test('null hype and talent cost use the baselines and say they were missing', async () => {
+    installApi(companiesAndTriggers(
+      { ...apiCompany, hype: null, talentCost: null },
+      [policy]
+    ));
+    render(<App />);
+
+    const note = await screen.findByRole('status', { name: /hype was missing, so the baseline is shown/i });
+    expect(note).toHaveTextContent(/talent cost was missing, so the baseline is shown/i);
+    expect(note).toHaveTextContent(/citizen service/i);
+    const effect = await screen.findByRole('region', { name: 'World event effect' });
+    expect(within(effect).getByText('Hype after').parentElement).toHaveTextContent('30% (unchanged)');
+    expect(within(effect).getByText('Talent cost after').parentElement).toHaveTextContent('$4,000 (unchanged)');
+    expect(screen.queryByText(/NaN/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/\$0/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/-100%/)).not.toBeInTheDocument();
+  });
+
+  test('non-finite hype is treated as missing', async () => {
+    installApi(companiesAndTriggers(
+      { ...apiCompany, hype: Number.NaN, talentCost: 4480 },
+      [policy]
+    ));
+    render(<App />);
+
+    const note = await screen.findByRole('status', { name: /hype was missing, so the baseline is shown/i });
+    expect(note).not.toHaveTextContent(/talent cost was missing/i);
+    const effect = await screen.findByRole('region', { name: 'World event effect' });
+    expect(within(effect).getByText('Hype after').parentElement).toHaveTextContent('30% (unchanged)');
+    expect(within(effect).getByText('Talent cost after').parentElement).toHaveTextContent('$4,480');
+    expect(screen.queryByText(/NaN/)).not.toBeInTheDocument();
+  });
+
+  test('a 404 delete that still lists the trigger does not announce removal', async () => {
+    vi.stubEnv('VITE_CITIZEN_API', 'http://127.0.0.1:8787');
+    vi.stubGlobal('fetch', vi.fn(async (url, options = {}) => {
+      const path = String(url);
+      const method = options.method || 'GET';
+      if (method === 'DELETE') {
+        return jsonResponse({ error: 'Trigger not found', issues: [] }, 404);
+      }
+      if (path.endsWith('/api/companies')) {
+        return jsonResponse([{ ...apiCompany, hype: 0.3, talentCost: 4480 }]);
+      }
+      if (path.endsWith('/api/triggers')) return jsonResponse([policy]);
+      return jsonResponse({ error: 'Not found' }, 404);
+    }));
+
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole('button', { name: /^Policy change /, pressed: true }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/still listed/i);
+    const live = within(screen.getByRole('region', { name: 'World events' })).getByRole('status');
+    expect(live).not.toHaveTextContent(/removed/i);
+    expect(live).toHaveTextContent('Policy change: talent cost +12%');
+    expect(screen.getByRole('button', { name: /^Policy change / })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('region', { name: 'World event effect' })).toHaveTextContent('$4,480');
+  });
+});
+
 describe('local diagram still uses the multiplier baseline', () => {
   test('api hydration does not treat the current dollar talent cost as the baseline', () => {
     const state = applyTrigger(
