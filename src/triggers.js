@@ -14,8 +14,13 @@
  * - timestamp: ISO-8601 string.
  * - effect:
  *     hype?: absolute delta on the 0..1 scale. 0.1 raises hype by 10 points.
+ *       Finite, between -1 and 1, at most 4 decimal places.
  *     talentCost?: relative delta. 0.12 multiplies talent cost by 1.12.
+ *       Finite, between -100 and 100, at most 4 decimal places.
  *   At least one effect must be non-zero. Unknown effect keys are rejected.
+ *   The API rejects unknown top-level fields. Strip client keys such as
+ *   appliedAtIndex before POST. The API trims label and source and stores
+ *   timestamp with Date#toISOString().
  *
  * Announcement grammar (talent cost first, then hype):
  *   "{label}: talent cost ±N%, hype ±N%"
@@ -88,13 +93,48 @@ export const SAMPLE_TRIGGERS = Object.freeze([
   }),
 ]);
 
+function hasAtMostDecimalPlaces(value, places) {
+  const factor = 10 ** places;
+  const scaled = value * factor;
+  return Math.abs(scaled - Math.round(scaled)) <= 1e-6;
+}
+
+function assertDelta(value, key, min, max) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new TypeError(`Trigger.effect.${key} must be a finite number`);
+  }
+  if (!hasAtMostDecimalPlaces(value, 4)) {
+    throw new TypeError(`Trigger.effect.${key} must have at most 4 decimal places`);
+  }
+  if (value < min || value > max) {
+    throw new TypeError(`Trigger.effect.${key} must be between ${min} and ${max}`);
+  }
+}
+
+export function roundTo(value, places) {
+  const factor = 10 ** places;
+  return Math.round((value + Math.sign(value) * 1e-10) * factor) / factor;
+}
+
+const USD_CURRENCY = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+export function assertTriggerId(id) {
+  if (typeof id !== 'string' || id.length < 1 || id.length > 200 || id.trim() === '') {
+    throw new TypeError('Trigger id must be 1–200 characters');
+  }
+  return id;
+}
+
 export function assertValidTrigger(trigger) {
   if (trigger === null || typeof trigger !== 'object' || Array.isArray(trigger)) {
     throw new TypeError('Trigger must be an object');
   }
-  if (typeof trigger.id !== 'string' || trigger.id.trim() === '') {
-    throw new TypeError('Trigger.id must be a non-empty string');
-  }
+  assertTriggerId(trigger.id);
   if (!TRIGGER_TYPES.includes(trigger.type)) {
     throw new TypeError(`Trigger.type must be one of: ${TRIGGER_TYPES.join(', ')}`);
   }
@@ -116,9 +156,12 @@ export function assertValidTrigger(trigger) {
     if (!Object.prototype.hasOwnProperty.call(TRIGGER_CONTRACT.effectFields, key)) {
       throw new TypeError(`Trigger.effect.${key} is not part of the contract`);
     }
-    if (typeof trigger.effect[key] !== 'number' || Number.isNaN(trigger.effect[key])) {
-      throw new TypeError(`Trigger.effect.${key} must be a number`);
-    }
+  }
+  if (Object.prototype.hasOwnProperty.call(trigger.effect, 'hype')) {
+    assertDelta(trigger.effect.hype, 'hype', -1, 1);
+  }
+  if (Object.prototype.hasOwnProperty.call(trigger.effect, 'talentCost')) {
+    assertDelta(trigger.effect.talentCost, 'talentCost', -100, 100);
   }
 
   const hypeMoves = typeof trigger.effect.hype === 'number' && trigger.effect.hype !== 0;
@@ -178,12 +221,24 @@ export function formatTalentMultiplier(value) {
   return `${Number(value).toFixed(2)}×`;
 }
 
+export function projectedTalentDollars(baseline, delta) {
+  if (!Number.isFinite(baseline) || !Number.isFinite(delta)) return null;
+  return roundTo(Math.max(0, baseline * (1 + delta)), 2);
+}
+
+export function formatCurrency(value) {
+  const amount = roundTo(Number(value), 2);
+  if (!Number.isFinite(amount)) return '$0';
+  const body = USD_CURRENCY.format(Math.abs(amount)).replace(/\.00$/, '');
+  return amount < 0 ? `-${body}` : body;
+}
+
+export function formatTalentDollars(value) {
+  return formatCurrency(value);
+}
+
 export function formatDollars(value) {
-  const rounded = Math.round(value);
-  const sign = rounded < 0 ? '-' : '';
-  const digits = String(Math.abs(rounded));
-  const withCommas = digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  return `${sign}$${withCommas}`;
+  return formatCurrency(value);
 }
 
 export function formatTriggerDate(timestamp) {

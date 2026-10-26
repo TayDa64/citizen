@@ -2,9 +2,14 @@
 // Slice 1: taxRate increases burn, then cash falls on each tick.
 // Slice 2: real-world triggers move hype and talent cost. With no active
 // trigger, talent cost stays 1 and burn matches the Slice 1 formula.
+// API mode uses dollar talent cost and does not multiply burn. That choice
+// lives only in talentCostMultipliesBurn (src/dataSource.js). OPEN DECISION.
+// The service is the source of truth for hype, talentCost, and baselines.
+// Cash and burn stay on the client simulation.
 // `appliedAtIndex` on an active trigger is client runtime for the chart, not
 // part of the RealWorldTrigger payload in triggers.js.
 
+import { talentCostMultipliesBurn } from './dataSource';
 import { assertValidTrigger, describeTrigger } from './triggers';
 
 export const BASE_BURN = 2000;
@@ -28,6 +33,7 @@ export const initialState = {
     hype: BASE_HYPE,
     talentCost: BASE_TALENT_COST,
   },
+  dataSource: 'local',
   activeTriggers: [],
   lastTriggerChange: null,
 };
@@ -51,25 +57,39 @@ function evalFormula(formula, context) {
   }
 }
 
-export function computeBurnRate(taxRate, talentCost = BASE_TALENT_COST) {
-  const formula = '{baseBurn} * (1 + {taxRate} * 0.4) * {talentCost}';
+function dataSourceOf(state) {
+  return state?.dataSource === 'api' ? 'api' : 'local';
+}
+
+export function computeBurnRate(taxRate, talentCost = BASE_TALENT_COST, dataSource = 'local') {
+  const talentFactor = talentCostMultipliesBurn(dataSource) ? (talentCost ?? BASE_TALENT_COST) : 1;
+  const formula = '{baseBurn} * (1 + {taxRate} * 0.4) * {talentFactor}';
   return Math.round(
     evalFormula(formula, {
       baseBurn: BASE_BURN,
       taxRate,
-      talentCost: talentCost ?? BASE_TALENT_COST,
+      talentFactor,
     })
   );
 }
 
 export function previewBurnRate(state) {
-  return computeBurnRate(state.taxRate, state.company.talentCost ?? BASE_TALENT_COST);
+  return computeBurnRate(
+    state.taxRate,
+    state.company.talentCost ?? BASE_TALENT_COST,
+    dataSourceOf(state)
+  );
+}
+
+export function baselineBurnRate(state) {
+  const talent = state.baselines?.talentCost ?? state.company?.talentCost ?? BASE_TALENT_COST;
+  return computeBurnRate(state.taxRate, talent, dataSourceOf(state));
 }
 
 export function applyEffects(state) {
   const next = structuredClone(state);
   const talentCost = next.company.talentCost ?? BASE_TALENT_COST;
-  next.company.burnRate = computeBurnRate(next.taxRate, talentCost);
+  next.company.burnRate = computeBurnRate(next.taxRate, talentCost, dataSourceOf(next));
   next.company.cash = Math.max(0, next.company.cash - next.company.burnRate / 12);
   next.history.cash.push(Math.round(next.company.cash));
   next.history.burnRate.push(next.company.burnRate);
@@ -119,15 +139,87 @@ function combinedEffects(baselines, activeTriggers) {
 }
 
 function storeTrigger(trigger, appliedAtIndex) {
+  const effect = {};
+  if (typeof trigger.effect?.hype === 'number') effect.hype = trigger.effect.hype;
+  if (typeof trigger.effect?.talentCost === 'number') effect.talentCost = trigger.effect.talentCost;
   return {
     id: trigger.id,
     type: trigger.type,
     label: trigger.label,
     source: trigger.source,
     timestamp: trigger.timestamp,
-    effect: { ...trigger.effect },
+    effect,
     appliedAtIndex,
   };
+}
+
+function finiteNumber(value) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function unreadableCompany() {
+  const error = new TypeError('Company payload could not be read');
+  error.code = 'unreadable-company';
+  return error;
+}
+
+export function readApiSnapshot(prev, snapshot) {
+  const company = snapshot?.company;
+  const baselines = company?.baselines;
+  const baselineHype = finiteNumber(baselines?.hype);
+  const baselineTalent = finiteNumber(baselines?.talentCost);
+  if (
+    company == null
+    || typeof company !== 'object'
+    || Array.isArray(company)
+    || baselineHype == null
+    || baselineTalent == null
+  ) {
+    throw unreadableCompany();
+  }
+
+  const rawTriggers = snapshot?.triggers;
+  const triggerList = Array.isArray(rawTriggers) ? rawTriggers : [];
+  const accepted = [];
+  let skipped = Array.isArray(rawTriggers) || rawTriggers == null ? 0 : 1;
+  for (const trigger of triggerList) {
+    try {
+      assertValidTrigger(trigger);
+      accepted.push(trigger);
+    } catch {
+      skipped += 1;
+    }
+  }
+
+  const hype = finiteNumber(company.hype);
+  const talentCost = finiteNumber(company.talentCost);
+  const index = Math.max(0, (prev.history?.cash?.length ?? 1) - 1);
+  const previousById = new Map((prev.activeTriggers ?? []).map((item) => [item.id, item]));
+  const activeTriggers = accepted.map((trigger) => {
+    const prior = previousById.get(trigger.id);
+    return storeTrigger(trigger, prior?.appliedAtIndex ?? index);
+  });
+
+  return {
+    state: {
+      ...prev,
+      dataSource: 'api',
+      baselines: { hype: baselineHype, talentCost: baselineTalent },
+      activeTriggers,
+      company: {
+        ...prev.company,
+        hype: hype ?? baselineHype,
+        talentCost: talentCost ?? baselineTalent,
+      },
+    },
+    skipped,
+    missingHype: hype == null,
+    missingTalent: talentCost == null,
+  };
+}
+
+export function hydrateFromApi(prev, snapshot) {
+  return readApiSnapshot(prev, snapshot).state;
 }
 
 function applyActiveTriggers(next, before, change) {

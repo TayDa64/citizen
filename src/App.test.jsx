@@ -13,6 +13,8 @@ describe('Slice 1 with no world event', () => {
     expect(screen.getByText(/Burn\/mo: \$2000/)).toBeInTheDocument();
     expect(screen.getByText(/Tax: 25%/)).toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: 'Cash & Burn Rate' })).toBeInTheDocument();
+    expect(screen.getByRole('main')).toContainElement(screen.getByRole('heading', { name: 'Cash & Burn Rate' }));
+    expect(screen.getByRole('main')).toContainElement(document.getElementById('metrics-chart-description'));
     expect(screen.queryByRole('region', { name: 'World event effect' })).not.toBeInTheDocument();
     expect(within(screen.getByRole('region', { name: 'World events' })).getByRole('status')).toHaveTextContent('');
     for (const label of ['Policy change', 'News spike', 'Market shift']) {

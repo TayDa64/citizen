@@ -2,7 +2,10 @@ import { describe, expect, test } from 'vitest';
 import {
   applyEffects,
   applyTrigger,
+  baselineBurnRate,
   clearTriggers,
+  computeBurnRate,
+  hydrateFromApi,
   initialState,
   previewBurnRate,
   removeTrigger,
@@ -105,8 +108,11 @@ describe('applyTrigger', () => {
   test('news spike adds hype and a huge spike clamps at 1', () => {
     expect(applyTrigger(initialState, news).company.hype).toBeCloseTo(0.4);
     expect(
-      applyTrigger(initialState, { ...news, id: 'huge-news', effect: { hype: 5 } }).company.hype
+      applyTrigger(initialState, { ...news, id: 'huge-news', effect: { hype: 0.8 } }).company.hype
     ).toBe(1);
+    expect(() =>
+      applyTrigger(initialState, { ...news, id: 'illegal-news', effect: { hype: 5 } })
+    ).toThrow(TypeError);
   });
 
   test('a negative talent shock cannot drive talent cost below zero', () => {
@@ -165,6 +171,71 @@ describe('removeTrigger and clearTriggers', () => {
     expect(remaining.company.cash).toBe(stacked.company.cash);
   });
 
+  test('api mode keeps the Slice 1 burn formula and the dollar baseline', () => {
+    const apiState = hydrateFromApi(initialState, {
+      company: {
+        id: 'company-1',
+        name: 'Northwind',
+        cash: 15000,
+        burnRate: 2000,
+        hype: 0.3,
+        talentCost: 4480,
+        baselines: { hype: 0.3, talentCost: 4000 },
+      },
+      triggers: [policy],
+    });
+
+    expect(apiState.dataSource).toBe('api');
+    expect(apiState.baselines).toEqual({ hype: 0.3, talentCost: 4000 });
+    expect(apiState.company.talentCost).toBe(4480);
+    expect(apiState.company.cash).toBe(15000);
+    expect(apiState.company.burnRate).toBe(2000);
+    expect(apiState.activeTriggers[0].appliedAtIndex).toBe(0);
+    expect(apiState.activeTriggers[0].appliedAtIndex).not.toBeUndefined();
+    expect(Object.keys(apiState.activeTriggers[0])).not.toContain('chartNote');
+    expect(previewBurnRate(apiState)).toBe(2200);
+    expect(baselineBurnRate(apiState)).toBe(2200);
+    expect(applyEffects(apiState).company.burnRate).toBe(2200);
+    expect(applyEffects(apiState).history.burnRate).toEqual([2000, 2200]);
+    expect(computeBurnRate(0.25, 4480, 'api')).toBe(2200);
+    expect(computeBurnRate(0.25, 1.12, 'local')).toBe(2464);
+
+    const stacked = applyTrigger(apiState, market);
+    expect(stacked.baselines.talentCost).toBe(4000);
+    expect(stacked.company.talentCost).toBeCloseTo(4480 * 0.92, 5);
+    expect(previewBurnRate(stacked)).toBe(2200);
+  });
+
+  test('hydrate keeps client cash and burn and takes only hype, talent cost, and baselines', () => {
+    const ticking = applyEffects(initialState);
+    const snapshot = {
+      company: {
+        id: 'company-1',
+        cash: 1,
+        burnRate: 9,
+        hype: 0.55,
+        talentCost: 4480,
+        baselines: { hype: 0.3, talentCost: 4000 },
+      },
+      triggers: [policy],
+    };
+
+    const firstLoad = hydrateFromApi(initialState, snapshot);
+    expect(firstLoad.company.cash).toBe(initialState.company.cash);
+    expect(firstLoad.company.burnRate).toBe(initialState.company.burnRate);
+    expect(firstLoad.history).toEqual(initialState.history);
+    expect(firstLoad.company.hype).toBe(0.55);
+    expect(firstLoad.company.talentCost).toBe(4480);
+    expect(firstLoad.baselines).toEqual({ hype: 0.3, talentCost: 4000 });
+
+    const refreshed = hydrateFromApi(ticking, snapshot);
+    expect(refreshed.company.cash).toBe(ticking.company.cash);
+    expect(refreshed.company.burnRate).toBe(ticking.company.burnRate);
+    expect(refreshed.history).toEqual(ticking.history);
+    expect(refreshed.company.hype).toBe(0.55);
+    expect(refreshed.company.talentCost).toBe(4480);
+  });
+
   test('clearTriggers restores the Slice 1 hype and talent baseline without ticking', () => {
     const stacked = applyTrigger(applyTrigger(initialState, policy), market);
     const cleared = clearTriggers(stacked);
@@ -179,5 +250,68 @@ describe('removeTrigger and clearTriggers', () => {
     expect(cleared.lastTriggerChange).toBeNull();
     expect(applyEffects(cleared).company.burnRate).toBe(2200);
     expect(applyEffects(cleared).history.burnRate).toEqual([2000, 2200]);
+  });
+});
+
+describe('API payload guards', () => {
+  const apiCompany = {
+    id: 'company-1',
+    name: 'Northwind',
+    cash: 1,
+    burnRate: 9,
+    hype: 0.55,
+    talentCost: 4480,
+    baselines: { hype: 0.3, talentCost: 4000 },
+  };
+
+  test('skips an unknown type and an extra effect key without dropping a valid trigger', () => {
+    const state = hydrateFromApi(initialState, {
+      company: apiCompany,
+      triggers: [
+        {
+          id: 'evt-unknown',
+          type: 'employees',
+          label: 'Mystery',
+          source: 'mock:local',
+          timestamp: '2026-04-02T15:00:00.000Z',
+          effect: { hype: 0.1 },
+        },
+        {
+          ...policy,
+          id: 'evt-extra',
+          effect: { talentCost: 0.12, employees: 2 },
+        },
+        policy,
+      ],
+    });
+
+    expect(state.activeTriggers.map((trigger) => trigger.id)).toEqual([policy.id]);
+    expect(state.company.cash).toBe(15000);
+    expect(state.company.hype).toBe(0.55);
+    expect(state.company.talentCost).toBe(4480);
+  });
+
+  test('uses baselines when hype or talent cost is null or not finite, and keeps real zeroes', () => {
+    const missing = hydrateFromApi(initialState, {
+      company: { ...apiCompany, hype: null, talentCost: Number.POSITIVE_INFINITY },
+      triggers: [],
+    });
+    expect(missing.company.hype).toBe(0.3);
+    expect(missing.company.talentCost).toBe(4000);
+    expect(missing.baselines).toEqual({ hype: 0.3, talentCost: 4000 });
+
+    const zeroes = hydrateFromApi(initialState, {
+      company: { ...apiCompany, hype: 0, talentCost: 0 },
+      triggers: [],
+    });
+    expect(zeroes.company.hype).toBe(0);
+    expect(zeroes.company.talentCost).toBe(0);
+  });
+
+  test('throws for a company whose baselines are not finite numbers', () => {
+    expect(() => hydrateFromApi(initialState, {
+      company: { hype: null, talentCost: null, baselines: { hype: null, talentCost: 4000 } },
+      triggers: [policy],
+    })).toThrow(TypeError);
   });
 });

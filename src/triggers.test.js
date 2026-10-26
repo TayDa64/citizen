@@ -4,7 +4,10 @@ import {
   TRIGGER_CONTRACT,
   assertValidTrigger,
   describeTrigger,
+  formatDollars,
   formatSignedPercent,
+  formatTalentDollars,
+  projectedTalentDollars,
   triggerDiagramOverlay,
 } from './triggers';
 
@@ -99,6 +102,64 @@ describe('trigger contract', () => {
         effect: { talentCost: 0.12 },
       })
     ).toThrow(TypeError);
+  });
+
+  test('accepts only finite deltas inside the API bounds with at most 4 decimal places', () => {
+    const base = {
+      id: 'x',
+      type: 'policy_change',
+      label: 'Policy change',
+      source: 'mock:local',
+      timestamp: '2026-04-02T15:00:00.000Z',
+    };
+
+    expect(assertValidTrigger({ ...base, effect: { hype: -1, talentCost: 0 } })).toMatchObject({
+      effect: { hype: -1, talentCost: 0 },
+    });
+    expect(assertValidTrigger({ ...base, effect: { hype: 1 } }).effect.hype).toBe(1);
+    expect(assertValidTrigger({ ...base, effect: { talentCost: -100 } }).effect.talentCost).toBe(-100);
+    expect(assertValidTrigger({ ...base, effect: { talentCost: 100 } }).effect.talentCost).toBe(100);
+    expect(assertValidTrigger({ ...base, effect: { hype: 0.1234 } }).effect.hype).toBe(0.1234);
+    expect(assertValidTrigger({ ...base, effect: { hype: 0, talentCost: 0.12 } }).effect).toEqual({
+      hype: 0,
+      talentCost: 0.12,
+    });
+
+    expect(() => assertValidTrigger({ ...base, effect: { hype: Number.POSITIVE_INFINITY } })).toThrow(
+      /finite/
+    );
+    expect(() => assertValidTrigger({ ...base, effect: { talentCost: Number.NaN } })).toThrow(TypeError);
+    expect(() => assertValidTrigger({ ...base, effect: { hype: 1.0001 } })).toThrow(/between -1 and 1/);
+    expect(() => assertValidTrigger({ ...base, effect: { hype: -1.0001 } })).toThrow(/between -1 and 1/);
+    expect(() => assertValidTrigger({ ...base, effect: { talentCost: 100.0001 } })).toThrow(
+      /between -100 and 100/
+    );
+    expect(() => assertValidTrigger({ ...base, effect: { talentCost: -100.0001 } })).toThrow(
+      /between -100 and 100/
+    );
+    expect(() => assertValidTrigger({ ...base, effect: { hype: 0.123456 } })).toThrow(/4 decimal places/);
+    expect(() => assertValidTrigger({ ...base, effect: { talentCost: 0.00001 } })).toThrow(/4 decimal places/);
+    expect(() => assertValidTrigger({ ...base, effect: { hype: 0, talentCost: 0 } })).toThrow(
+      /hype or talentCost/
+    );
+    expect(() => assertValidTrigger({ ...base, id: 'x'.repeat(201), effect: { hype: 0.1 } })).toThrow(/1–200/);
+    expect(assertValidTrigger({ ...base, id: 'x'.repeat(200), effect: { hype: 0.1 } }).id).toHaveLength(200);
+  });
+});
+
+describe('talent cost dollars', () => {
+  test('formats talent cost with the same thousands separator as burn and cash', () => {
+    expect(projectedTalentDollars(4000, 0.12)).toBe(4480);
+    expect(formatTalentDollars(4480)).toBe('$4,480');
+    expect(formatTalentDollars(projectedTalentDollars(4000, 0.12))).toBe('$4,480');
+    expect(formatDollars(4480)).toBe(formatTalentDollars(4480));
+    expect(formatDollars(15000)).toBe('$15,000');
+    expect(formatDollars(2200)).toBe('$2,200');
+    expect(formatSignedPercent(0.12)).toBe('+12%');
+    expect(formatTalentDollars(4121.6)).toBe('$4,121.60');
+    expect(formatDollars(4121.6)).toBe('$4,121.60');
+    expect(formatTalentDollars(-4121.6)).toBe('-$4,121.60');
+    expect(projectedTalentDollars(4000, -0.08)).toBe(3680);
   });
 });
 
