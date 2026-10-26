@@ -1,0 +1,238 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Citizen API",
+    "version": "0.4.0",
+    "description": "TRIGGER_CONTRACT v1. effect.hype is an absolute delta on the 0..1 scale and the result is clamped to 0..1. effect.talentCost is a relative delta: 0.12 multiplies companies.talent_cost by 1.12 and the result is floored at 0. At least one effect must be non-zero. Posting the same id replaces that trigger and reapplies the stack from each company's captured baseline; it does not stack a second copy. DELETE /api/triggers/{id} removes one trigger. DELETE /api/triggers clears every v1 trigger and restores hype and talent cost to the captured baselines. Input deltas are bounded (hype -1..1, talentCost -100..100, at most 4 decimal places) so the NUMERIC(12,2) talent column cannot overflow from a single field. A company inserted while triggers are already active keeps its own hype and talent cost until the next trigger create, replace, delete, or clear."
+  },
+  "paths": {
+    "/api/triggers": {
+      "get": {
+        "summary": "List v1 real-world triggers, newest first",
+        "responses": {
+          "200": {
+            "description": "Trigger records mapped from real_world_triggers.client_id and effects. Legacy trigger types are omitted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Trigger" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Validate, store, and apply a v1 trigger. The same id replaces the previous effect.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/Trigger" },
+              "example": {
+                "id": "evt-news-sector-spike",
+                "type": "news_spike",
+                "label": "News spike",
+                "source": "mock:local",
+                "timestamp": "2026-04-18T13:30:00.000Z",
+                "effect": { "hype": 0.1 }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Stored trigger",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Trigger" },
+                "example": {
+                  "id": "evt-news-sector-spike",
+                  "type": "news_spike",
+                  "label": "News spike",
+                  "source": "mock:local",
+                  "timestamp": "2026-04-18T13:30:00.000Z",
+                  "effect": { "hype": 0.1 }
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid trigger payload" }
+        }
+      },
+      "delete": {
+        "summary": "Clear every v1 trigger and restore company hype and talent cost to their captured baselines",
+        "responses": {
+          "204": {
+            "description": "Cleared. Legacy trigger rows are left in place. Repeating the request stays empty."
+          }
+        }
+      }
+    },
+    "/api/triggers/{id}": {
+      "delete": {
+        "summary": "Remove one v1 trigger by client id and recompute every company from its baseline",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "minLength": 1, "maxLength": 200 }
+          }
+        ],
+        "responses": {
+          "204": { "description": "Removed and recomputed" },
+          "400": { "description": "Invalid trigger id" },
+          "404": { "description": "No v1 trigger with that id" }
+        }
+      }
+    },
+    "/api/triggers/mock": {
+      "post": {
+        "summary": "Insert one of the three TRIGGER_CONTRACT sample triggers",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "scenario": {
+                    "type": "string",
+                    "enum": ["news_spike", "policy_change", "market_shift"]
+                  }
+                }
+              },
+              "example": { "scenario": "policy_change" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Stored sample trigger. Sending the same scenario again replaces that id.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Trigger" },
+                "examples": {
+                  "news_spike": {
+                    "value": {
+                      "id": "evt-news-sector-spike",
+                      "type": "news_spike",
+                      "label": "News spike",
+                      "source": "mock:local",
+                      "timestamp": "2026-04-18T13:30:00.000Z",
+                      "effect": { "hype": 0.1 }
+                    }
+                  },
+                  "policy_change": {
+                    "value": {
+                      "id": "evt-policy-wage-ordinance",
+                      "type": "policy_change",
+                      "label": "Policy change",
+                      "source": "mock:local",
+                      "timestamp": "2026-04-02T15:00:00.000Z",
+                      "effect": { "talentCost": 0.12 }
+                    }
+                  },
+                  "market_shift": {
+                    "value": {
+                      "id": "evt-market-cooling",
+                      "type": "market_shift",
+                      "label": "Market shift",
+                      "source": "mock:local",
+                      "timestamp": "2026-05-01T09:00:00.000Z",
+                      "effect": { "talentCost": -0.08, "hype": -0.05 }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/companies": {
+      "get": {
+        "summary": "Read company metrics after v1 trigger effects have been recomputed from baselines",
+        "responses": {
+          "200": {
+            "description": "Companies. baselines are the values captured before the first v1 trigger.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Company" }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Trigger": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "type", "label", "source", "timestamp", "effect"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "type": {
+            "type": "string",
+            "enum": ["news_spike", "policy_change", "market_shift"]
+          },
+          "label": { "type": "string", "minLength": 1, "maxLength": 160 },
+          "source": { "type": "string", "minLength": 1, "maxLength": 2048 },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "effect": { "$ref": "#/components/schemas/Effect" }
+        }
+      },
+      "Effect": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "description": "At least one of hype or talentCost must be non-zero. A field may be present and 0 when the other is non-zero.",
+        "properties": {
+          "hype": {
+            "type": "number",
+            "minimum": -1,
+            "maximum": 1,
+            "description": "Absolute delta on the 0..1 hype scale. 0.1 raises hype by 10 points from the company baseline. Results are clamped to 0..1."
+          },
+          "talentCost": {
+            "type": "number",
+            "minimum": -100,
+            "maximum": 100,
+            "description": "Relative delta. 0.12 multiplies the company talent-cost baseline by 1.12. Results are floored at 0."
+          }
+        }
+      },
+      "Company": {
+        "type": "object",
+        "description": "hype and talentCost are the stacked values when this row already has baselines. A company created while v1 triggers are active is not rewritten until the next trigger create, replace, delete, or clear.",
+        "additionalProperties": false,
+        "required": ["id", "name", "cash", "burnRate", "hype", "talentCost", "baselines"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
+          "cash": { "type": "number" },
+          "burnRate": { "type": "number" },
+          "hype": { "type": "number" },
+          "talentCost": { "type": "number" },
+          "baselines": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["hype", "talentCost"],
+            "properties": {
+              "hype": { "type": "number" },
+              "talentCost": { "type": "number" }
+            }
+          }
+        }
+      }
+    }
+  }
+}
