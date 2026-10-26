@@ -5,7 +5,29 @@ import { test } from 'node:test';
 test('OpenAPI document publishes TRIGGER_CONTRACT v1', () => {
   const spec = JSON.parse(fs.readFileSync('openapi.json', 'utf8'));
   assert.equal(spec.openapi, '3.0.3');
-  assert.equal(spec.info.version, '0.4.0');
+  assert.equal(spec.info.version, '0.5.0');
+  const methods = ['get', 'post', 'put', 'patch', 'delete', 'options', 'head'];
+  for (const [path, item] of Object.entries(spec.paths)) {
+    for (const method of methods) {
+      if (!item[method]) continue;
+      assert.equal(
+        item[method].responses['403'].$ref,
+        '#/components/responses/ForbiddenHost',
+        `${method} ${path}`
+      );
+    }
+  }
+  assert.equal(
+    spec.components.responses.ForbiddenHost.content['application/json'].example.error,
+    'Forbidden host'
+  );
+  const company = spec.components.schemas.Company;
+  assert.equal(company.properties.talentMultiplier.multipleOf, 0.0001);
+  assert.equal(company.properties.baseBurnRate.type, 'number');
+  assert.equal(company.properties.baselines.properties.talentMultiplier, undefined);
+  assert.ok(company.required.includes('talentMultiplier'));
+  assert.ok(company.required.includes('talentMix'));
+  assert.ok(company.required.includes('baseBurnRate'));
   assert.equal(spec.paths['/api/triggers'].delete.responses['204'].description.length > 0, true);
   assert.equal(spec.paths['/api/triggers/{id}'].delete.responses['204'].description.length > 0, true);
   assert.equal(spec.paths['/api/triggers/{id}'].delete.responses['404'].description.length > 0, true);

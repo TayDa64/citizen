@@ -5,19 +5,27 @@ import {
   stackTriggerEffects,
   validateTriggerRecord
 } from './triggerContract.js';
+import { burnFromTax, composeTalentMultiplier } from './talentBurn.js';
 
-// Tax → burn rate is Slice 1 and stays on its own formula.
-// Real-world triggers adjust hype and talent cost only.
+// Tax → burn is Slice 1, then one employee talent multiplier.
+// burnRate = round(2000 * (1 + taxRate * 0.4) * talentMultiplier), rounded once.
+// baseBurnRate = round(2000 * (1 + taxRate * 0.4)).
+// No employees keeps talentMultiplier at 1, so the Slice 1 integers stay put.
+// Trigger talentCost does not enter this formula.
 
 export const initialState = {
   taxRate: 0.25,
   company: {
     cash: 15000,
     burnRate: 2000,
+    baseBurnRate: 2000,
+    talentMultiplier: 1,
+    talentMix: [],
     hype: 0.3,
     productQuality: 0.4,
     talentCost: 4000
   },
+  employees: [],
   history: {
     cash: [15000],
     burnRate: [2000],
@@ -31,33 +39,16 @@ export const initialState = {
   triggers: []
 };
 
-// Minimal safe formula evaluator: supports {var} substitution + basic + - * /
-function evalFormula(formula, context) {
-  let expr = formula;
-  for (const [k, v] of Object.entries(context)) {
-    expr = expr.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v));
-  }
-  // Very limited: only numbers, operators, parentheses. No eval of arbitrary code.
-  if (!/^[0-9.+\-*/()\s]+$/.test(expr)) {
-    console.warn('Unsafe formula rejected:', formula);
-    return 0;
-  }
-  try {
-    // eslint-disable-next-line no-new-func
-    return Function(`"use strict"; return (${expr})`)();
-  } catch {
-    return 0;
-  }
-}
-
 export function applyEffects(state) {
   const next = structuredClone(state);
-  // Effect: taxRate increases burnRate (example formula)
-  const formula = '{baseBurn} * (1 + {taxRate} * 0.4)';
-  const baseBurn = 2000;
-  next.company.burnRate = Math.round(
-    evalFormula(formula, { baseBurn, taxRate: next.taxRate })
-  );
+  const { talentMultiplier, talentMix } = composeTalentMultiplier({
+    employees: next.employees
+  });
+  const burn = burnFromTax(next.taxRate, talentMultiplier);
+  next.company.talentMultiplier = talentMultiplier;
+  next.company.talentMix = talentMix;
+  next.company.baseBurnRate = burn.baseBurnRate;
+  next.company.burnRate = burn.burnRate;
   // Simple tick: cash decreases by burn
   next.company.cash = Math.max(0, next.company.cash - next.company.burnRate / 12);
   next.history.cash.push(Math.round(next.company.cash));

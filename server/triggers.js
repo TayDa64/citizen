@@ -9,6 +9,7 @@ import {
   validateTriggerPayload,
   validateTriggerRecord
 } from '../src/triggerContract.js';
+import { burnFromBase, composeTalentMultiplier } from '../src/talentBurn.js';
 
 const METRICS = {
   hype: { objectName: 'hype', bounds: HYPE_BOUNDS, op: 'add' },
@@ -289,21 +290,45 @@ export async function listCompanies(pool) {
      FROM companies
      ORDER BY founded_at ASC, id ASC`
   );
-  return result.rows.map((row) => ({
-    id: row.id,
-    name: row.name,
-    cash: Number(row.cash),
-    burnRate: Number(row.burn_rate),
-    hype: row.hype == null ? null : roundTo(Number(row.hype), 4),
-    talentCost: row.talent_cost == null ? null : roundTo(Number(row.talent_cost), 2),
-    baselines: {
-      hype: baselineNumber(row.hype_baseline, row.hype, HYPE_BOUNDS.fallback, 4),
-      talentCost: baselineNumber(
-        row.talent_cost_baseline,
-        row.talent_cost,
-        TALENT_COST_BOUNDS.fallback,
-        2
-      )
+  const ids = result.rows.map((row) => row.id);
+  const employeesByCompany = new Map();
+  if (ids.length > 0) {
+    const employees = await pool.query(
+      `SELECT company_id, department, skill_tech, skill_marketing, skill_sales, is_active
+       FROM employees
+       WHERE company_id = ANY($1::uuid[])`,
+      [ids]
+    );
+    for (const employee of employees.rows) {
+      const list = employeesByCompany.get(employee.company_id) ?? [];
+      list.push(employee);
+      employeesByCompany.set(employee.company_id, list);
     }
-  }));
+  }
+  return result.rows.map((row) => {
+    const { talentMultiplier, talentMix } = composeTalentMultiplier({
+      employees: employeesByCompany.get(row.id) ?? []
+    });
+    const burn = burnFromBase(row.burn_rate, talentMultiplier);
+    return {
+      id: row.id,
+      name: row.name,
+      cash: Number(row.cash),
+      baseBurnRate: burn.baseBurnRate,
+      burnRate: burn.burnRate,
+      talentMultiplier,
+      talentMix,
+      hype: row.hype == null ? null : roundTo(Number(row.hype), 4),
+      talentCost: row.talent_cost == null ? null : roundTo(Number(row.talent_cost), 2),
+      baselines: {
+        hype: baselineNumber(row.hype_baseline, row.hype, HYPE_BOUNDS.fallback, 4),
+        talentCost: baselineNumber(
+          row.talent_cost_baseline,
+          row.talent_cost,
+          TALENT_COST_BOUNDS.fallback,
+          2
+        )
+      }
+    };
+  });
 }

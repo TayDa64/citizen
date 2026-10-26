@@ -95,12 +95,27 @@ export default function WorkflowDiagram({
             }
           };
         }
+        if (n.id === '3') {
+          const mix = state.company.talentMix ?? [];
+          const summary = mix.length
+            ? mix
+                .map((group) => `${group.department ?? 'unassigned'} ${group.headcount}`)
+                .join(', ')
+            : 'no employees';
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              label: `Hire Staff\n(Tech / Marketing / Sales)\nTalent ×${(state.company.talentMultiplier ?? 1).toFixed(4)}\n${summary}`
+            }
+          };
+        }
         if (n.id === '7') {
           return {
             ...n,
             data: {
               ...n.data,
-              label: `Launch / Market / Sell\nTrack Runway & Hype\nHype: ${Math.round(state.company.hype * 100)}%`
+              label: `Launch / Market / Sell\nTrack Runway & Hype\nBurn: $${state.company.burnRate} (base $${state.company.baseBurnRate ?? state.company.burnRate})\nTalent ×${(state.company.talentMultiplier ?? 1).toFixed(4)}\nHype: ${Math.round(state.company.hype * 100)}%`
             }
           };
         }

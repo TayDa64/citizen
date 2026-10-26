@@ -14,6 +14,8 @@ export default function Dashboard({ state }) {
       <p>
         Cash: <span data-testid="cash-value">${state.company.cash.toFixed(0)}</span>
         {' '}| Burn/mo: <span data-testid="burn-value">${state.company.burnRate}</span>
+        {' '}| Base burn: <span data-testid="base-burn-value">${state.company.baseBurnRate ?? state.company.burnRate}</span>
+        {' '}| Talent mix: <span data-testid="talent-multiplier-value">{(state.company.talentMultiplier ?? 1).toFixed(4)}</span>
         {' '}| Tax: {(state.taxRate * 100).toFixed(0)}%
         {' '}| Hype: <span data-testid="hype-value">{Math.round(state.company.hype * 100)}%</span>
         {' '}| Talent cost: <span data-testid="talent-cost-value">{formatTalentDollars(state.company.talentCost)}</span>
@@ -58,6 +60,20 @@ export default function Dashboard({ state }) {
         <Title>Talent Cost</Title>
         <LineSeries name="Talent cost" data={talentCost} color="#fbbf24" />
       </Chart>
+      <div data-testid="talent-mix">
+        <h4 style={{ margin: '0.5rem 0' }}>Talent mix</h4>
+        {(state.company.talentMix ?? []).length === 0 ? (
+          <p data-testid="talent-mix-empty">No employees. Talent multiplier is 1.0000.</p>
+        ) : (
+          <ul style={{ margin: 0, paddingLeft: '1.2rem' }}>
+            {state.company.talentMix.map((group) => (
+              <li key={group.department ?? 'none'} data-testid="talent-mix-row">
+                {group.department ?? 'unassigned'}: {group.headcount} @ skill {group.avgSkill} × {group.weight} → {group.contribution}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
       <div data-testid="trigger-list">
         <h4 style={{ margin: '0.5rem 0' }}>Real-world triggers</h4>
         {state.triggers.length === 0 ? (

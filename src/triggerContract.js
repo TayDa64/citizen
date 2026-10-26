@@ -15,8 +15,8 @@
 // - Timestamps are stored and returned as Date#toISOString().
 // - Label and source are trimmed.
 // The talent baseline is companies.talent_cost (default 4000). This API does
-// not adopt the client simulation's dimensionless baseline of 1, and it does
-// not multiply burn rate by talent cost.
+// not adopt the client simulation's dimensionless baseline of 1. Burn uses
+// the employee talent multiplier, not this talentCost dollar figure.
 
 export const TRIGGER_CONTRACT_VERSION = 1;
 export const TRIGGER_FIELDS = Object.freeze([

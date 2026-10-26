@@ -1,20 +1,22 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import http from 'node:http';
 import net from 'node:net';
 import { test } from 'node:test';
 import config from '../../vite.config.js';
-import { isAllowedHostHeader, startServer } from '../../server/index.js';
+import { classifyHostHeader, isAllowedHostHeader, startServer } from '../../server/index.js';
 
-function rawStatus(port, payload) {
+function rawExchange(port, payload) {
   return new Promise((resolve, reject) => {
     const socket = net.connect(port, '127.0.0.1', () => socket.write(payload));
     const chunks = [];
     socket.on('data', (chunk) => chunks.push(chunk));
     socket.on('error', reject);
     socket.on('end', () => {
-      const statusLine = Buffer.concat(chunks).toString('utf8').split('\r\n', 1)[0];
-      const status = Number(statusLine.split(' ')[1]);
-      resolve(status);
+      const text = Buffer.concat(chunks).toString('utf8');
+      const [head, body = ''] = text.split('\r\n\r\n');
+      const status = Number(head.split('\r\n', 1)[0].split(' ')[1]);
+      resolve({ status, body });
     });
   });
 }
@@ -82,11 +84,35 @@ test('the API rejects a rebinding Host and still answers loopback names', async 
       assert.deepEqual(JSON.parse(response.body), { error: 'Forbidden host' });
     }
 
-    const missing = await rawStatus(
+    const missing = await rawExchange(
       port,
       `GET /no-such HTTP/1.1\r\nConnection: close\r\n\r\n`
     );
-    assert.equal(missing, 400);
+    assert.equal(missing.status, 400);
+
+    const http10 = await rawExchange(port, `GET /no-such HTTP/1.0\r\n\r\n`);
+    assert.equal(http10.status, 400);
+    assert.deepEqual(JSON.parse(http10.body), { error: 'Host required' });
+
+    const http10Allowed = await rawExchange(
+      port,
+      `GET /no-such HTTP/1.0\r\nHost: 127.0.0.1:${port}\r\n\r\n`
+    );
+    assert.equal(http10Allowed.status, 404);
+
+    const duplicate = await rawExchange(
+      port,
+      `GET /no-such HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\nHost: evil.example\r\nConnection: close\r\n\r\n`
+    );
+    assert.equal(duplicate.status, 400);
+    assert.deepEqual(JSON.parse(duplicate.body), { error: 'Duplicate host' });
+
+    const swapped = await rawExchange(
+      port,
+      `GET /no-such HTTP/1.1\r\nhost: evil.example\r\nHost: 127.0.0.1:${port}\r\nConnection: close\r\n\r\n`
+    );
+    assert.equal(swapped.status, 400);
+    assert.deepEqual(JSON.parse(swapped.body), { error: 'Duplicate host' });
 
     const options = await request({
       port,
@@ -115,4 +141,31 @@ test('the Vite /api proxy rewrites Host to the loopback API', () => {
   const proxy = config.server.proxy['/api'];
   assert.equal(proxy.target, 'http://127.0.0.1:8787');
   assert.equal(proxy.changeOrigin, true);
+  const readme = fs.readFileSync('README.md', 'utf8');
+  assert.match(readme, /127\.0\.0\.1:8787/);
+  assert.match(readme, /non-default `PORT`/);
+  assert.match(readme, /proxy `target`/);
+});
+
+test('a missing Host is 400 and a repeated Host is 400', () => {
+  assert.deepEqual(
+    classifyHostHeader({ hostHeader: undefined, rawHeaders: [], port: 8787 }),
+    { status: 400, error: 'Host required' }
+  );
+  assert.deepEqual(
+    classifyHostHeader({
+      hostHeader: '127.0.0.1:8787',
+      rawHeaders: ['Host', '127.0.0.1:8787', 'Host', 'evil.example'],
+      port: 8787
+    }),
+    { status: 400, error: 'Duplicate host' }
+  );
+  assert.equal(
+    classifyHostHeader({
+      hostHeader: '127.0.0.1:8787',
+      rawHeaders: ['Host', '127.0.0.1:8787'],
+      port: 8787
+    }),
+    null
+  );
 });

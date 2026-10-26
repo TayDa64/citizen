@@ -18,6 +18,8 @@ Forked conceptually from civic-brief ideas and expanded into a full game backend
 4. `npm run dev`
 5. Extend the WorkflowDiagram.jsx and add backend schema from previous design.
 
+`npm run dev` proxies `/api` to `http://127.0.0.1:8787`. The API listens on port 8787 unless `PORT` is set. A non-default `PORT` needs the same change in the Vite proxy `target` in `vite.config.js`. `changeOrigin` rewrites `Host` to that target, and the API accepts only `localhost`, `127.0.0.1`, and `[::1]` on the bound port.
+
 See the React Flow component in `src/WorkflowDiagram.jsx` for the core gameplay loop visualization.
 
 ## Local Postgres

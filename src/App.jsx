@@ -19,7 +19,11 @@ function App() {
           company: {
             ...prev.company,
             hype: company.hype,
-            talentCost: company.talentCost
+            talentCost: company.talentCost,
+            burnRate: company.burnRate ?? prev.company.burnRate,
+            baseBurnRate: company.baseBurnRate ?? prev.company.baseBurnRate,
+            talentMultiplier: company.talentMultiplier ?? prev.company.talentMultiplier,
+            talentMix: company.talentMix ?? prev.company.talentMix
           },
           baselines: company.baselines ?? prev.baselines,
           history: {
@@ -67,7 +71,7 @@ function App() {
     <div className="App" style={{ background: '#0f0f1a', minHeight: '100vh', color: 'white' }}>
       <header style={{ padding: '1rem', background: '#1a1a2e', textAlign: 'center' }}>
         <h1>Citizen</h1>
-        <p>Civic + Startup Simulation — Tax → burn rate, triggers → hype and talent cost</p>
+        <p>Civic + Startup Simulation — Tax and employees → burn, triggers → hype and talent cost</p>
       </header>
       <WorkflowDiagram
         state={state}
