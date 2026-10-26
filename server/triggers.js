@@ -95,9 +95,23 @@ async function metricId(client, objectName, bounds) {
   return result.rows[0].id;
 }
 
+function finiteRounded(value, places) {
+  if (value == null || value === '') return null;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  return roundTo(numeric, places);
+}
+
+function firstFinite(places, ...values) {
+  for (const value of values) {
+    const rounded = finiteRounded(value, places);
+    if (rounded != null) return rounded;
+  }
+  return null;
+}
+
 function baselineNumber(stored, current, fallback, places) {
-  const value = stored != null ? Number(stored) : current != null ? Number(current) : fallback;
-  return roundTo(value, places);
+  return firstFinite(places, stored, current, fallback);
 }
 
 // Recompute runs on trigger create, replace, delete, and clear. A company
@@ -306,20 +320,33 @@ export async function listCompanies(pool) {
     }
   }
   return result.rows.map((row) => {
-    const { talentMultiplier, talentMix } = composeTalentMultiplier({
+    const profile = composeTalentMultiplier({
       employees: employeesByCompany.get(row.id) ?? []
     });
-    const burn = burnFromBase(row.burn_rate, talentMultiplier);
+    const talentMultiplier = finiteRounded(profile.talentMultiplier, 4) ?? 1;
+    const burn = burnFromBase(finiteRounded(row.burn_rate, 2) ?? 0, talentMultiplier);
+    const talentMix = (profile.talentMix ?? []).map((group) => ({
+      department: group.department == null || group.department === '' ? null : String(group.department),
+      headcount: finiteRounded(group.headcount, 0) ?? 0,
+      avgSkill: finiteRounded(group.avgSkill, 4) ?? 0,
+      weight: finiteRounded(group.weight, 4) ?? 1,
+      contribution: finiteRounded(group.contribution, 4) ?? 0
+    }));
     return {
       id: row.id,
       name: row.name,
-      cash: Number(row.cash),
+      cash: finiteRounded(row.cash, 2) ?? 0,
       baseBurnRate: burn.baseBurnRate,
       burnRate: burn.burnRate,
       talentMultiplier,
       talentMix,
-      hype: row.hype == null ? null : roundTo(Number(row.hype), 4),
-      talentCost: row.talent_cost == null ? null : roundTo(Number(row.talent_cost), 2),
+      hype: firstFinite(4, row.hype, row.hype_baseline, HYPE_BOUNDS.fallback),
+      talentCost: firstFinite(
+        2,
+        row.talent_cost,
+        row.talent_cost_baseline,
+        TALENT_COST_BOUNDS.fallback
+      ),
       baselines: {
         hype: baselineNumber(row.hype_baseline, row.hype, HYPE_BOUNDS.fallback, 4),
         talentCost: baselineNumber(

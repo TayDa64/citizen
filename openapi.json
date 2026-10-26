@@ -255,7 +255,7 @@
       },
       "Company": {
         "type": "object",
-        "description": "hype and talentCost are the stacked values when this row already has baselines. A company created while v1 triggers are active is not rewritten until the next trigger create, replace, delete, or clear. There is no baselines.talentMultiplier. effect.talentCost does not change talentMultiplier or burnRate.",
+        "description": "hype and talentCost are the stacked values when this row already has baselines. A NULL hype or talent_cost falls back to its baseline column, then to 0.3 or 4000. Numeric company fields are never null. talentMix.department is null only when the employee department is NULL or blank. A company created while v1 triggers are active is not rewritten until the next trigger create, replace, delete, or clear. There is no baselines.talentMultiplier. effect.talentCost does not change talentMultiplier or burnRate.",
         "additionalProperties": false,
         "required": ["id", "name", "cash", "burnRate", "baseBurnRate", "talentMultiplier", "talentMix", "hype", "talentCost", "baselines"],
         "properties": {
@@ -264,25 +264,31 @@
           "cash": { "type": "number" },
           "burnRate": {
             "type": "number",
-            "description": "Effective monthly burn: round(baseBurnRate * talentMultiplier). With no employees this stays the stored integer burn."
+            "description": "Effective monthly burn: round(baseBurnRate * talentMultiplier). With no employees this stays the stored integer burn. Always a finite number."
           },
           "baseBurnRate": {
             "type": "number",
-            "description": "Stored companies.burn_rate, the Slice 1 burn before the employee multiplier. Previously returned as burnRate."
+            "description": "Stored companies.burn_rate, the Slice 1 burn before the employee multiplier. Previously returned as burnRate. A NULL burn_rate is returned as 0, the column default. Always a finite number."
           },
           "talentMultiplier": {
             "type": "number",
             "minimum": 0,
             "multipleOf": 0.0001,
-            "description": "Mean of per-employee department weight times skill factor, rounded to 4 decimal places. Exactly 1 when the company has no counted employees."
+            "description": "Mean of per-employee department weight times skill factor, rounded to 4 decimal places. Exactly 1 when the company has no counted employees. Always a finite number."
           },
           "talentMix": {
             "type": "array",
             "description": "Department groups. contribution is that group's share of talentMultiplier. Rounded shares sum to talentMultiplier.",
             "items": { "$ref": "#/components/schemas/TalentMixGroup" }
           },
-          "hype": { "type": "number" },
-          "talentCost": { "type": "number" },
+          "hype": {
+            "type": "number",
+            "description": "Stacked hype. A NULL hype column falls back to hype_baseline, then the column default 0.3. The response never sends null."
+          },
+          "talentCost": {
+            "type": "number",
+            "description": "Stacked talent cost in dollars. A NULL talent_cost column falls back to talent_cost_baseline, then the column default 4000. The response never sends null."
+          },
           "baselines": {
             "type": "object",
             "additionalProperties": false,

@@ -22,6 +22,7 @@
     "preview": "vite preview",
     "start:api": "node server/index.js",
     "test:api": "node --test test/api/*.api.js",
-    "test": "npm run test:api"
+    "test:unit": "node --test test/unit/*.api.js",
+    "test": "npm run test:unit"
   }
 }

@@ -32,4 +32,8 @@ A company inserted while v1 triggers are already active keeps its own hype and t
 
 ## Tests
 
-`npm test` runs the API suite (`npm run test:api`). Those files live in `test/api` and are named `*.api.js`, which is outside Vitest's default include (`**/*.{test,spec}.?(c|m)[jt]s?(x)`). The frontend Vitest config should set `include` to `src/**` so it does not collect this suite.
+`npm test` runs the database-free unit and simulation suite in `test/unit`. It does not need Postgres. CI's `npm run test --if-present` uses this script.
+
+`npm run test:api` runs the Postgres suite in `test/api`. That suite creates and drops `citizen_slice2_test_*` databases on the local socket and does not read `DATABASE_URL`.
+
+Both suites use `*.api.js` names, which sit outside Vitest's default include (`**/*.{test,spec}.?(c|m)[jt]s?(x)`). The frontend Vitest config should set `include` to `src/**` so it does not collect them.
