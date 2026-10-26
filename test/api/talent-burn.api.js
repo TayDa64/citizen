@@ -198,17 +198,81 @@ describe('company API talent multiplier', { concurrency: 1, timeout: 120_000 }, 
       });
       const [floored] = await listCompanies(db.pool);
       assert.equal(floored.talentCost, 0);
-      assert.equal(floored.talentCostFactor, 0);
-      assert.equal(floored.effectiveMultiplier, 0);
-      assert.equal(floored.burnRate, 0);
+      assert.equal(floored.talentCostFactor, 0.1);
+      assert.equal(floored.talentCostFactorClamped, true);
+      assert.equal(floored.effectiveMultiplier, 0.1);
+      assert.equal(floored.burnRate, 200);
 
       await clearTriggers(db.pool);
       const [cleared] = await listCompanies(db.pool);
       assert.equal(cleared.talentCost, 4000);
       assert.equal(cleared.talentCostFactor, 1);
+      assert.equal(cleared.talentCostFactorClamped, false);
       assert.equal(cleared.effectiveMultiplier, 1);
       assert.equal(cleared.burnRate, 2000);
       assert.equal(cleared.hype, 0.3);
+    } finally {
+      await db.close();
+    }
+  });
+
+  test('three +100 triggers clamp the read factor to 3 and clear restores 1', async () => {
+    const db = await createThrowawayDatabase();
+    try {
+      await applyMigration(db.pool, 'migrations/001_initial_schema.sql', 'up');
+      await applyMigration(db.pool, 'migrations/002_real_world_trigger_effects.sql', 'up');
+      await applyMigration(db.pool, 'migrations/003_trigger_contract_v1.sql', 'up');
+      await db.pool.query(
+        `INSERT INTO companies (name, cash, burn_rate, hype)
+         VALUES ('Citizen', 15000, 2000, 0.3)`
+      );
+      for (const id of ['evt-max-a', 'evt-max-b', 'evt-max-c']) {
+        await createTrigger(db.pool, {
+          id,
+          type: 'policy_change',
+          label: id,
+          source: 'mock:local',
+          timestamp: '2026-06-01T00:00:00.000Z',
+          effect: { talentCost: 100 }
+        });
+      }
+      const [company] = await listCompanies(db.pool);
+      assert.equal(company.talentCost, 4121204000);
+      assert.equal(company.talentCostFactor, 3);
+      assert.equal(company.talentCostFactorClamped, true);
+      assert.equal(company.talentMultiplier, 1);
+      assert.equal(company.effectiveMultiplier, 3);
+      assert.equal(company.burnRate, 6000);
+      assert.equal(company.hype, 0.3);
+      assert.equal(Number.isFinite(company.burnRate), true);
+      assert.ok(company.burnRate > 0);
+      assert.ok(company.burnRate <= 2000 * 3);
+      const stored = await db.pool.query('SELECT talent_cost, burn_rate, hype FROM companies');
+      assert.equal(Number(stored.rows[0].talent_cost), 4121204000);
+      assert.equal(Number(stored.rows[0].burn_rate), 2000);
+      assert.equal(Number(stored.rows[0].hype), 0.3);
+
+      const server = await startServer({ pool: db.pool, port: 0, host: '127.0.0.1' });
+      try {
+        const response = await fetch(`http://127.0.0.1:${server.address().port}/api/companies`);
+        assert.equal(response.status, 200);
+        const body = await response.json();
+        assert.equal(body[0].talentCostFactor, 3);
+        assert.equal(body[0].talentCostFactorClamped, true);
+        assert.equal(body[0].burnRate, 6000);
+        assert.equal(body[0].talentCost, 4121204000);
+      } finally {
+        await new Promise((resolve, reject) => {
+          server.close((err) => (err ? reject(err) : resolve()));
+        });
+      }
+
+      await clearTriggers(db.pool);
+      const [cleared] = await listCompanies(db.pool);
+      assert.equal(cleared.talentCost, 4000);
+      assert.equal(cleared.talentCostFactor, 1);
+      assert.equal(cleared.talentCostFactorClamped, false);
+      assert.equal(cleared.burnRate, 2000);
     } finally {
       await db.close();
     }

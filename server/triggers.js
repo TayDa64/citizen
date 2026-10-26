@@ -9,7 +9,7 @@ import {
   validateTriggerPayload,
   validateTriggerRecord
 } from '../src/triggerContract.js';
-import { burnFromBase, composeTalentMultiplier, talentCostFactor } from '../src/talentBurn.js';
+import { burnFromBase, composeTalentMultiplier, resolveTalentCostFactor } from '../src/talentBurn.js';
 
 const METRICS = {
   hype: { objectName: 'hype', bounds: HYPE_BOUNDS, op: 'add' },
@@ -339,8 +339,13 @@ export async function listCompanies(pool) {
         2
       )
     };
-    const factor = talentCostFactor(talentCost, baselines.talentCost);
-    const burn = burnFromBase(finiteRounded(row.burn_rate, 2) ?? 0, talentMultiplier, factor);
+    const resolved = resolveTalentCostFactor(talentCost, baselines.talentCost);
+    const burn = burnFromBase(
+      finiteRounded(row.burn_rate, 2) ?? 0,
+      talentMultiplier,
+      resolved.talentCostFactor,
+      resolved.talentCostFactorClamped
+    );
     const talentMix = (profile.talentMix ?? []).map((group) => ({
       department: group.department == null || group.department === '' ? null : String(group.department),
       headcount: finiteRounded(group.headcount, 0) ?? 0,
@@ -356,6 +361,7 @@ export async function listCompanies(pool) {
       burnRate: burn.burnRate,
       talentMultiplier,
       talentCostFactor: burn.talentCostFactor,
+      talentCostFactorClamped: burn.talentCostFactorClamped,
       effectiveMultiplier: burn.effectiveMultiplier,
       talentMix,
       hype: firstFinite(4, row.hype, row.hype_baseline, HYPE_BOUNDS.fallback),

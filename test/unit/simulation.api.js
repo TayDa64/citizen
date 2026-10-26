@@ -112,8 +112,9 @@ describe('trigger effects on simulation state', () => {
       effect: { talentCost: -5 }
     });
     assert.equal(floored.company.talentCost, 0);
-    assert.equal(floored.company.talentCostFactor, 0);
-    assert.equal(floored.company.burnRate, 0);
+    assert.equal(floored.company.talentCostFactor, 0.1);
+    assert.equal(floored.company.talentCostFactorClamped, true);
+    assert.equal(floored.company.burnRate, 220);
     assert.equal(floored.company.hype, newsAgain.company.hype);
 
     const recovered = applyTriggerEffect(floored, {

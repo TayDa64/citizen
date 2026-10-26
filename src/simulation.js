@@ -5,15 +5,15 @@ import {
   stackTriggerEffects,
   validateTriggerRecord
 } from './triggerContract.js';
-import { burnFromTax, composeTalentMultiplier, talentCostFactor } from './talentBurn.js';
+import { burnFromTax, composeTalentMultiplier, resolveTalentCostFactor } from './talentBurn.js';
 
-// Tax → burn is Slice 1, then the employee talent multiplier and the talent-cost factor.
-// burnRate = round(2000 * (1 + taxRate * 0.4) * talentMultiplier * talentCostFactor), once.
+// Tax → burn is Slice 1, then the employee talent multiplier and the clamped talent-cost factor.
 // baseBurnRate = round(2000 * (1 + taxRate * 0.4)).
-// talentMultiplier is the employee mean (exactly 1 with no employees).
-// talentCostFactor is talentCost / baselines.talentCost (exactly 1 with no trigger).
-// effectiveMultiplier is that product. A second tick recomputes this product;
-// it does not multiply the previous burnRate again.
+// burnRate = round(baseBurnRate * talentMultiplier * talentCostFactor), once.
+// talentMultiplier is the employee mean (exactly 1 with no employees) and is not clamped.
+// talentCostFactor clamps the stacked talentCost / baselines.talentCost to [0.1, 3].
+// It is 1 when there is no trigger. The dollar talentCost stays raw.
+// A second tick recomputes this product; it does not multiply the previous burnRate again.
 
 export const initialState = {
   taxRate: 0.25,
@@ -23,6 +23,7 @@ export const initialState = {
     baseBurnRate: 2000,
     talentMultiplier: 1,
     talentCostFactor: 1,
+    talentCostFactorClamped: false,
     effectiveMultiplier: 1,
     talentMix: [],
     hype: 0.3,
@@ -47,11 +48,17 @@ function assignBurn(next) {
   const { talentMultiplier, talentMix } = composeTalentMultiplier({
     employees: next.employees
   });
-  const factor = talentCostFactor(next.company.talentCost, next.baselines?.talentCost);
-  const burn = burnFromTax(next.taxRate, talentMultiplier, factor);
+  const resolved = resolveTalentCostFactor(next.company.talentCost, next.baselines?.talentCost);
+  const burn = burnFromTax(
+    next.taxRate,
+    talentMultiplier,
+    resolved.talentCostFactor,
+    resolved.talentCostFactorClamped
+  );
   next.company.talentMultiplier = talentMultiplier;
   next.company.talentMix = talentMix;
   next.company.talentCostFactor = burn.talentCostFactor;
+  next.company.talentCostFactorClamped = burn.talentCostFactorClamped;
   next.company.effectiveMultiplier = burn.effectiveMultiplier;
   next.company.baseBurnRate = burn.baseBurnRate;
   next.company.burnRate = burn.burnRate;

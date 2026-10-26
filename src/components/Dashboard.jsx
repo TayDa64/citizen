@@ -17,6 +17,7 @@ export default function Dashboard({ state }) {
         {' '}| Base burn: <span data-testid="base-burn-value">${state.company.baseBurnRate ?? state.company.burnRate}</span>
         {' '}| Talent mix: <span data-testid="talent-multiplier-value">{(state.company.talentMultiplier ?? 1).toFixed(4)}</span>
         {' '}| Cost factor: <span data-testid="talent-cost-factor-value">{(state.company.talentCostFactor ?? 1).toFixed(4)}</span>
+        {' '}<span data-testid="talent-cost-factor-clamped">{state.company.talentCostFactorClamped ? 'clamped' : 'not clamped'}</span>
         {' '}| Effective: <span data-testid="effective-multiplier-value">{(state.company.effectiveMultiplier ?? 1).toFixed(4)}</span>
         {' '}| Tax: {(state.taxRate * 100).toFixed(0)}%
         {' '}| Hype: <span data-testid="hype-value">{Math.round(state.company.hype * 100)}%</span>

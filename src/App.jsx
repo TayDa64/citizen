@@ -24,6 +24,8 @@ function App() {
             baseBurnRate: company.baseBurnRate ?? prev.company.baseBurnRate,
             talentMultiplier: company.talentMultiplier ?? prev.company.talentMultiplier,
             talentCostFactor: company.talentCostFactor ?? prev.company.talentCostFactor,
+            talentCostFactorClamped:
+              company.talentCostFactorClamped ?? prev.company.talentCostFactorClamped,
             effectiveMultiplier: company.effectiveMultiplier ?? prev.company.effectiveMultiplier,
             talentMix: company.talentMix ?? prev.company.talentMix
           },

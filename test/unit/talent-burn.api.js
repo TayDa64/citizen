@@ -8,9 +8,12 @@ import {
   setTaxRate
 } from '../../src/simulation.js';
 import {
+  TALENT_COST_FACTOR_MAX,
+  TALENT_COST_FACTOR_MIN,
   clampSkill,
   composeTalentMultiplier,
   effectiveMultiplier,
+  resolveTalentCostFactor,
   skillFactor,
   talentCostFactor
 } from '../../src/talentBurn.js';
@@ -37,12 +40,26 @@ test('talentMultiplier stays the employee mean and the cost factor is separate',
   const empty = composeTalentMultiplier({ employees: [] });
   assert.equal(empty.talentMultiplier, 1);
   assert.deepEqual(empty.talentMix, []);
+  assert.equal(TALENT_COST_FACTOR_MIN, 0.1);
+  assert.equal(TALENT_COST_FACTOR_MAX, 3);
   assert.equal(talentCostFactor(4000, 4000), 1);
+  assert.equal(resolveTalentCostFactor(4000, 4000).talentCostFactorClamped, false);
   assert.equal(talentCostFactor(4000, null), 1);
+  assert.equal(resolveTalentCostFactor(4000, null).talentCostFactorClamped, false);
   assert.equal(talentCostFactor(4000, 0), 1);
+  assert.equal(resolveTalentCostFactor(4000, 0).talentCostFactorClamped, false);
+  assert.equal(talentCostFactor(4000, -5), 1);
+  assert.equal(resolveTalentCostFactor(4000, -5).talentCostFactorClamped, false);
   assert.equal(talentCostFactor(4000, Number.NaN), 1);
-  assert.equal(talentCostFactor(0, 4000), 0);
+  assert.equal(resolveTalentCostFactor(4000, Number.POSITIVE_INFINITY).talentCostFactorClamped, false);
+  assert.equal(talentCostFactor(0, 4000), 0.1);
+  assert.equal(resolveTalentCostFactor(0, 4000).talentCostFactorClamped, true);
+  assert.equal(talentCostFactor(-1, 4000), 0.1);
+  assert.equal(talentCostFactor(400, 4000), 0.1);
+  assert.equal(resolveTalentCostFactor(400, 4000).talentCostFactorClamped, false);
+  assert.equal(talentCostFactor(0.16, 4000), 0.1);
   assert.equal(talentCostFactor(4480, 4000), 1.12);
+  assert.equal(resolveTalentCostFactor(4480, 4000).talentCostFactorClamped, false);
   const tech = composeTalentMultiplier({
     employees: [{ department: 'tech', skillTech: 1 }]
   });
@@ -265,7 +282,7 @@ describe('Slice 1 burn with the employee multiplier', () => {
     assert.equal(replaced.company.burnRate, Math.round(2200 * 1.2));
   });
 
-  test('a talent cost of 0 makes the factor and burn 0', () => {
+  test('a talent cost of 0 clamps the factor to 0.1 and keeps burn above 0', () => {
     const floored = applyTriggerEffect(initialState, {
       id: 'evt-shock',
       type: 'market_shift',
@@ -275,10 +292,117 @@ describe('Slice 1 burn with the employee multiplier', () => {
       effect: { talentCost: -5 }
     });
     assert.equal(floored.company.talentCost, 0);
-    assert.equal(floored.company.talentCostFactor, 0);
-    assert.equal(floored.company.effectiveMultiplier, 0);
-    assert.equal(floored.company.burnRate, 0);
+    assert.equal(floored.company.talentCostFactor, 0.1);
+    assert.equal(floored.company.talentCostFactorClamped, true);
+    assert.equal(floored.company.effectiveMultiplier, 0.1);
+    assert.equal(floored.company.burnRate, 220);
     assert.equal(floored.company.hype, 0.3);
+    assert.equal(Number.isFinite(floored.company.burnRate), true);
+    assert.ok(floored.company.burnRate > 0);
+  });
+
+  test('a single -100% trigger and stacked near-zero triggers clamp the factor to 0.1', () => {
+    const wiped = applyTriggerEffect(initialState, {
+      id: 'evt-wipe',
+      type: 'market_shift',
+      label: 'Wipe',
+      source: 'mock:local',
+      timestamp: '2026-06-01T00:00:00.000Z',
+      effect: { talentCost: -1 }
+    });
+    assert.equal(wiped.company.talentCost, 0);
+    assert.equal(wiped.company.talentCostFactor, 0.1);
+    assert.equal(wiped.company.talentCostFactorClamped, true);
+    assert.equal(wiped.company.burnRate, 220);
+    assert.equal(wiped.company.hype, 0.3);
+    assert.ok(wiped.company.burnRate > 0);
+
+    const near = ['evt-near-a', 'evt-near-b'].reduce(
+      (state, id) =>
+        applyTriggerEffect(state, {
+          id,
+          type: 'market_shift',
+          label: id,
+          source: 'mock:local',
+          timestamp: '2026-06-01T00:00:00.000Z',
+          effect: { talentCost: -0.99 }
+        }),
+      initialState
+    );
+    assert.ok(near.company.talentCost > 0);
+    assert.ok(near.company.talentCost < 400);
+    assert.equal(near.company.talentCostFactor, 0.1);
+    assert.equal(near.company.talentCostFactorClamped, true);
+    assert.equal(near.company.burnRate, 220);
+    assert.equal(near.company.hype, 0.3);
+  });
+
+  test('three +100 triggers clamp the stacked factor to 3 and leave talent cost raw', () => {
+    const stacked = ['evt-max-a', 'evt-max-b', 'evt-max-c'].reduce(
+      (state, id) =>
+        applyTriggerEffect(state, {
+          id,
+          type: 'policy_change',
+          label: id,
+          source: 'mock:local',
+          timestamp: '2026-06-01T00:00:00.000Z',
+          effect: { talentCost: 100 }
+        }),
+      initialState
+    );
+    assert.equal(stacked.company.talentCost, 4121204000);
+    assert.equal(stacked.company.talentCostFactor, 3);
+    assert.equal(stacked.company.talentCostFactorClamped, true);
+    assert.equal(stacked.company.hype, 0.3);
+    assert.equal(stacked.company.talentMultiplier, 1);
+  });
+
+  test('four tech employees stay at 1.75 and burn 14700 or 490 at the factor bounds', () => {
+    const staffed = setTaxRate(
+      {
+        ...initialState,
+        employees: [
+          { department: 'tech', skillTech: 1 },
+          { department: 'tech', skillTech: 1 },
+          { department: 'tech', skillTech: 1 },
+          { department: 'tech', skillTech: 1 }
+        ]
+      },
+      1
+    );
+    const maximized = ['evt-max-a', 'evt-max-b', 'evt-max-c'].reduce(
+      (state, id) =>
+        applyTriggerEffect(state, {
+          id,
+          type: 'policy_change',
+          label: id,
+          source: 'mock:local',
+          timestamp: '2026-06-01T00:00:00.000Z',
+          effect: { talentCost: 100 }
+        }),
+      staffed
+    );
+    assert.equal(maximized.company.talentMultiplier, 1.75);
+    assert.equal(maximized.company.talentCostFactor, 3);
+    assert.equal(maximized.company.effectiveMultiplier, 5.25);
+    assert.equal(maximized.company.burnRate, 14700);
+    assert.equal(maximized.company.burnRate, 2800 * 1.75 * 3);
+    assert.equal(Number.isFinite(maximized.company.burnRate), true);
+
+    const minimized = applyTriggerEffect(staffed, {
+      id: 'evt-wipe',
+      type: 'market_shift',
+      label: 'Wipe',
+      source: 'mock:local',
+      timestamp: '2026-06-01T00:00:00.000Z',
+      effect: { talentCost: -1 }
+    });
+    assert.equal(minimized.company.talentMultiplier, 1.75);
+    assert.equal(minimized.company.talentCostFactor, 0.1);
+    assert.equal(minimized.company.talentCost, 0);
+    assert.equal(minimized.company.burnRate, 490);
+    assert.equal(minimized.company.burnRate, 2800 * 1.75 * 0.1);
+    assert.ok(minimized.company.burnRate > 0);
   });
 });
 

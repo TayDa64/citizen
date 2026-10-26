@@ -5,7 +5,7 @@ import { test } from 'node:test';
 test('OpenAPI document publishes TRIGGER_CONTRACT v1', () => {
   const spec = JSON.parse(fs.readFileSync('openapi.json', 'utf8'));
   assert.equal(spec.openapi, '3.0.3');
-  assert.equal(spec.info.version, '0.6.0');
+  assert.equal(spec.info.version, '0.7.0');
   const methods = ['get', 'post', 'put', 'patch', 'delete', 'options', 'head'];
   for (const [path, item] of Object.entries(spec.paths)) {
     for (const method of methods) {
@@ -32,13 +32,18 @@ test('OpenAPI document publishes TRIGGER_CONTRACT v1', () => {
   const company = spec.components.schemas.Company;
   assert.equal(company.properties.talentMultiplier.multipleOf, 0.0001);
   assert.equal(company.properties.talentCostFactor.multipleOf, 0.0001);
-  assert.equal(company.properties.talentCostFactor.minimum, 0);
+  assert.equal(company.properties.talentCostFactor.minimum, 0.1);
+  assert.equal(company.properties.talentCostFactor.maximum, 3);
+  assert.equal(company.properties.talentCostFactorClamped.type, 'boolean');
   assert.equal(company.properties.effectiveMultiplier.multipleOf, 0.0001);
+  assert.match(company.properties.burnRate.description, /no tax/);
+  assert.match(company.properties.burnRate.description, /rounded once/);
   assert.equal(company.properties.effectiveMultiplier.minimum, 0);
   assert.equal(company.properties.baseBurnRate.type, 'number');
   assert.equal(company.properties.baselines.properties.talentMultiplier, undefined);
   assert.ok(company.required.includes('talentMultiplier'));
   assert.ok(company.required.includes('talentCostFactor'));
+  assert.ok(company.required.includes('talentCostFactorClamped'));
   assert.ok(company.required.includes('effectiveMultiplier'));
   assert.ok(company.required.includes('talentMix'));
   assert.ok(company.required.includes('baseBurnRate'));

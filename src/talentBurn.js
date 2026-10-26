@@ -23,14 +23,18 @@ import { roundTo } from './triggerContract.js';
 // talentMultiplier is exactly 1. Display order is tech, marketing, sales,
 // then other names A-Z, then NULL.
 //
-// talentMultiplier stays that employee mean. Trigger talent cost does not
-// scale it or the mix. talentCostFactor is talentCost / baselines.talentCost.
-// It is 1 when there is no movement from the baseline, the baseline is
-// missing, or the baseline is 0. A stacked talent cost of 0 (the -5 delta
-// floors the dollar cost at 0) makes the factor 0, and burn becomes 0.
-// effectiveMultiplier is the product. Both factors are finite and >= 0.
+// talentMultiplier stays that employee mean and is not clamped. Trigger talent
+// cost does not scale it or the mix. The burn factor is the stacked ratio
+// talentCost / baselines.talentCost, clamped once to [0.1, 3] and then rounded
+// to 4 decimal places. It is 1, and not clamped, when there is no movement
+// from the baseline or the baseline is missing, 0, negative, or non-finite.
+// A stacked talent cost of 0 or below clamps the factor to 0.1. The dollar
+// talentCost and hype stay raw. effectiveMultiplier is the rounded product.
+// burnRate is round(base * talentMultiplier * talentCostFactor), once.
 
 export const BASE_MONTHLY_BURN = 2000;
+export const TALENT_COST_FACTOR_MIN = 0.1;
+export const TALENT_COST_FACTOR_MAX = 3;
 
 const DEPARTMENT_WEIGHTS = Object.freeze({
   tech: 1.25,
@@ -185,17 +189,30 @@ function nonNegativeFinite(value, fallback) {
   return numeric;
 }
 
-export function talentCostFactor(talentCost, baselineTalentCost) {
+function unclampedFactor() {
+  return { talentCostFactor: 1, talentCostFactorClamped: false };
+}
+
+export function resolveTalentCostFactor(talentCost, baselineTalentCost) {
+  if (baselineTalentCost == null || baselineTalentCost === '') return unclampedFactor();
   const baseline = Number(baselineTalentCost);
-  if (baselineTalentCost == null || baselineTalentCost === '') return 1;
-  if (!Number.isFinite(baseline) || baseline <= 0) return 1;
-  if (talentCost == null || talentCost === '') return 1;
+  if (!Number.isFinite(baseline) || baseline <= 0) return unclampedFactor();
+  if (talentCost == null || talentCost === '') return unclampedFactor();
   const cost = Number(talentCost);
-  if (!Number.isFinite(cost)) return 1;
-  if (cost <= 0) return 0;
-  const factor = cost / baseline;
-  if (!Number.isFinite(factor) || factor < 0) return 0;
-  return roundTo(factor, 4);
+  if (!Number.isFinite(cost)) return unclampedFactor();
+  const rawFactor = cost / baseline;
+  if (!Number.isFinite(rawFactor)) return unclampedFactor();
+  const talentCostFactorClamped =
+    rawFactor < TALENT_COST_FACTOR_MIN || rawFactor > TALENT_COST_FACTOR_MAX;
+  const clamped = Math.min(TALENT_COST_FACTOR_MAX, Math.max(TALENT_COST_FACTOR_MIN, rawFactor));
+  return {
+    talentCostFactor: roundTo(clamped, 4),
+    talentCostFactorClamped
+  };
+}
+
+export function talentCostFactor(talentCost, baselineTalentCost) {
+  return resolveTalentCostFactor(talentCost, baselineTalentCost).talentCostFactor;
 }
 
 export function effectiveMultiplier(talentMultiplier, costFactor) {
@@ -212,30 +229,33 @@ function publishedFactor(costFactor) {
   return roundTo(factor, 4);
 }
 
-export function burnFromTax(taxRate, talentMultiplier, costFactor = 1) {
+export function burnFromTax(taxRate, talentMultiplier, costFactor = 1, talentCostFactorClamped = false) {
   const rate = Number(taxRate);
   const safeRate = Number.isFinite(rate) ? rate : 0;
   const taxTerm = BASE_MONTHLY_BURN * (1 + safeRate * 0.4);
-  const employee = nonNegativeFinite(talentMultiplier, 1);
-  const factor = publishedFactor(costFactor);
-  return {
-    baseBurnRate: Math.round(taxTerm),
-    burnRate: Math.round(taxTerm * employee * factor),
-    talentCostFactor: factor,
-    effectiveMultiplier: effectiveMultiplier(employee, factor)
-  };
+  return burnFromBase(
+    Math.round(taxTerm),
+    talentMultiplier,
+    costFactor,
+    talentCostFactorClamped
+  );
 }
 
-export function burnFromBase(baseBurnRate, talentMultiplier, costFactor = 1) {
+export function burnFromBase(
+  baseBurnRate,
+  talentMultiplier,
+  costFactor = 1,
+  talentCostFactorClamped = false
+) {
   const base = Number(baseBurnRate);
   const safeBase = Number.isFinite(base) ? base : 0;
   const employee = nonNegativeFinite(talentMultiplier, 1);
   const factor = publishedFactor(costFactor);
-  const effective = effectiveMultiplier(employee, factor);
   return {
     baseBurnRate: safeBase,
-    burnRate: Math.round(safeBase * effective),
+    burnRate: Math.round(safeBase * employee * factor),
     talentCostFactor: factor,
-    effectiveMultiplier: effective
+    talentCostFactorClamped: talentCostFactorClamped === true,
+    effectiveMultiplier: effectiveMultiplier(employee, factor)
   };
 }
