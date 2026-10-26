@@ -10,10 +10,18 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import CivicLeverNode from './nodes/CivicLeverNode';
+import { formatEffect } from './triggerContract';
 
 const nodeTypes = { civicLever: CivicLeverNode };
 
-export default function WorkflowDiagram({ state, setState, onTick }) {
+export default function WorkflowDiagram({
+  state,
+  setState,
+  onTick,
+  onMockTrigger,
+  triggerError,
+  triggerPending
+}) {
   const initialNodes = [
     { id: '1', type: 'input', data: { label: 'Found Startup\n(Citizen)' }, position: { x: 300, y: 0 } },
     { id: '2', data: { label: 'Choose Idea\n+ Target Market' }, position: { x: 300, y: 100 } },
@@ -60,16 +68,46 @@ export default function WorkflowDiagram({ state, setState, onTick }) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
-  // Keep civic-tax node value in sync with state
+  // Keep lever readouts in sync. civic-tax stays the tax control.
   useEffect(() => {
+    const latest = state.triggers[0];
     setNodes((nds) =>
-      nds.map((n) =>
-        n.id === 'civic-tax'
-          ? { ...n, data: { ...n.data, value: state.taxRate } }
-          : n
-      )
+      nds.map((n) => {
+        if (n.id === 'civic-tax') {
+          return { ...n, data: { ...n.data, value: state.taxRate } };
+        }
+        if (n.id === '5') {
+          const detail = latest ? `\n${latest.label}\n${formatEffect(latest.effect)}` : '';
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              label: `Real-World Triggers\n(Firecrawl + Events)${detail}`
+            }
+          };
+        }
+        if (n.id === 'civic-infra') {
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              label: `Civic Lever:\nInfrastructure / Talent\nTalent cost: $${Math.round(state.company.talentCost)}`
+            }
+          };
+        }
+        if (n.id === '7') {
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              label: `Launch / Market / Sell\nTrack Runway & Hype\nHype: ${Math.round(state.company.hype * 100)}%`
+            }
+          };
+        }
+        return n;
+      })
     );
-  }, [state.taxRate, setNodes]);
+  }, [state, setNodes]);
 
   const onConnect = useCallback(
     (params) => setEdges((eds) => addEdge({ ...params, animated: true }, eds)),
@@ -77,10 +115,11 @@ export default function WorkflowDiagram({ state, setState, onTick }) {
   );
 
   return (
-    <div style={{ width: '100%', height: '60vh' }}>
+    <div>
       <h2 style={{ textAlign: 'center', margin: '8px 0', color: '#e0e0e0' }}>
         Citizen — Startup + Civic Workflow
       </h2>
+      <div style={{ width: '100%', height: '60vh' }}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -94,10 +133,32 @@ export default function WorkflowDiagram({ state, setState, onTick }) {
         <Controls />
         <MiniMap />
       </ReactFlow>
-      <div style={{ textAlign: 'center', marginTop: 8 }}>
-        <button onClick={onTick} style={{ padding: '6px 16px' }}>
+      </div>
+      <div style={{ textAlign: 'center', margin: '8px 0 12px' }}>
+        <button type="button" onClick={onTick} style={{ padding: '6px 16px' }}>
           Advance Month (apply effects)
         </button>
+        <button
+          type="button"
+          data-testid="mock-hype-trigger"
+          onClick={() => onMockTrigger?.('hype')}
+          disabled={triggerPending}
+          style={{ padding: '6px 16px', marginLeft: 8 }}
+        >
+          Apply mock hype trigger
+        </button>
+        <button
+          type="button"
+          data-testid="mock-talent-trigger"
+          onClick={() => onMockTrigger?.('talent')}
+          disabled={triggerPending}
+          style={{ padding: '6px 16px', marginLeft: 8 }}
+        >
+          Apply mock talent-cost trigger
+        </button>
+        {triggerError ? (
+          <p data-testid="trigger-error" style={{ color: '#f87171' }}>{triggerError}</p>
+        ) : null}
       </div>
     </div>
   );

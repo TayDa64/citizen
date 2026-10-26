@@ -1,0 +1,177 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Citizen API",
+    "version": "0.2.0",
+    "description": "Slice 2 real-world triggers. effect.hype and effect.talentCost are signed deltas, not absolute values. At least one is required."
+  },
+  "paths": {
+    "/api/triggers": {
+      "get": {
+        "summary": "List applied real-world triggers, newest first",
+        "responses": {
+          "200": {
+            "description": "Trigger records mapped from real_world_triggers and effects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Trigger" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Validate, store, and apply a trigger",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/TriggerInput" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Stored trigger",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Trigger" },
+                "example": {
+                  "id": "11111111-1111-4111-8111-111111111111",
+                  "type": "news",
+                  "label": "Mock press cycle lifts founder hype",
+                  "source": "mock:press-cycle",
+                  "timestamp": "2026-10-26T15:00:00.000Z",
+                  "effect": { "hype": 0.1 }
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid trigger payload" }
+        }
+      }
+    },
+    "/api/triggers/mock": {
+      "post": {
+        "summary": "Insert a built-in mock trigger",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "scenario": { "type": "string", "enum": ["hype", "talent"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Stored mock trigger",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Trigger" },
+                "examples": {
+                  "hype": {
+                    "value": {
+                      "id": "11111111-1111-4111-8111-111111111111",
+                      "type": "news",
+                      "label": "Mock press cycle lifts founder hype",
+                      "source": "mock:press-cycle",
+                      "timestamp": "2026-10-26T15:00:00.000Z",
+                      "effect": { "hype": 0.1 }
+                    }
+                  },
+                  "talent": {
+                    "value": {
+                      "id": "22222222-2222-4222-8222-222222222222",
+                      "type": "talent",
+                      "label": "Mock hiring surge raises talent cost",
+                      "source": "mock:labor-market",
+                      "timestamp": "2026-10-26T15:00:01.000Z",
+                      "effect": { "talentCost": 500 }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/companies": {
+      "get": {
+        "summary": "Read company metrics after trigger effects have been applied",
+        "responses": {
+          "200": {
+            "description": "Companies",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Company" }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "TriggerInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "label", "source", "effect"],
+        "properties": {
+          "type": { "type": "string", "enum": ["news", "market", "talent", "policy"] },
+          "label": { "type": "string", "maxLength": 160 },
+          "source": { "type": "string", "maxLength": 2048 },
+          "effect": { "$ref": "#/components/schemas/Effect" }
+        }
+      },
+      "Trigger": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "type", "label", "source", "timestamp", "effect"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "type": { "type": "string", "enum": ["news", "market", "talent", "policy"] },
+          "label": { "type": "string" },
+          "source": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "effect": { "$ref": "#/components/schemas/Effect" }
+        }
+      },
+      "Effect": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "properties": {
+          "hype": { "type": "number", "minimum": -1, "maximum": 1 },
+          "talentCost": { "type": "number", "minimum": -100000, "maximum": 100000 }
+        }
+      },
+      "Company": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "cash", "burnRate", "hype", "talentCost"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
+          "cash": { "type": "number" },
+          "burnRate": { "type": "number" },
+          "hype": { "type": "number" },
+          "talentCost": { "type": "number" }
+        }
+      }
+    }
+  }
+}

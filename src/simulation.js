@@ -1,5 +1,13 @@
-// Simple client-side simulation for Slice 1 (tax → burn rate)
-// Matches the Postgres schema shape so it can later move server-side.
+import {
+  applyDelta,
+  HYPE_BOUNDS,
+  TALENT_COST_BOUNDS,
+  TriggerValidationError,
+  validateTriggerRecord
+} from './triggerContract.js';
+
+// Tax → burn rate is Slice 1 and stays on its own formula.
+// Real-world triggers adjust hype and talent cost only.
 
 export const initialState = {
   taxRate: 0.25,
@@ -7,12 +15,16 @@ export const initialState = {
     cash: 15000,
     burnRate: 2000,
     hype: 0.3,
-    productQuality: 0.4
+    productQuality: 0.4,
+    talentCost: 4000
   },
   history: {
     cash: [15000],
-    burnRate: [2000]
-  }
+    burnRate: [2000],
+    hype: [0.3],
+    talentCost: [4000]
+  },
+  triggers: []
 };
 
 // Minimal safe formula evaluator: supports {var} substitution + basic + - * /
@@ -55,4 +67,33 @@ export function applyEffects(state) {
 
 export function setTaxRate(state, taxRate) {
   return { ...state, taxRate: Math.max(0, Math.min(1, taxRate)) };
+}
+
+function appendHistory(series, value) {
+  const next = [...(series || []), value];
+  if (next.length > 24) next.splice(0, next.length - 24);
+  return next;
+}
+
+export function applyTriggerEffect(state, trigger) {
+  const validated = validateTriggerRecord(trigger);
+  if (!validated.ok) {
+    throw new TriggerValidationError('Invalid trigger payload', validated.issues);
+  }
+  const next = structuredClone(state);
+  const effect = validated.value.effect;
+  if (effect.hype != null) {
+    next.company.hype = applyDelta(next.company.hype, effect.hype, HYPE_BOUNDS);
+  }
+  if (effect.talentCost != null) {
+    next.company.talentCost = applyDelta(
+      next.company.talentCost,
+      effect.talentCost,
+      TALENT_COST_BOUNDS
+    );
+  }
+  next.triggers = [validated.value, ...(next.triggers || [])];
+  next.history.hype = appendHistory(next.history.hype, next.company.hype);
+  next.history.talentCost = appendHistory(next.history.talentCost, next.company.talentCost);
+  return next;
 }
