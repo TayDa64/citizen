@@ -3,16 +3,16 @@
 Tracker for the Citizen pull requests on this merge train.
 Heads below are the SHAs at this commit. They move when a branch is updated.
 
-Last updated: 2026-10-26, after PR #4 merged to `main` at `eb02b8b`.
+Last updated: 2026-10-26, after PR #5 merged to `main` at `d0fbbad`.
 
 ## Merge order
 
 1. **PR #3** — merged.
 2. **PR #1** — merged. Frontend sample world events.
 3. **PR #4** — merged. UI adapted to the OpenAPI 0.4.0 trigger API.
-4. **PR #5** — next. Was stacked on #4; base is now `main`. Type-weighted employee multiplier and clamped talent-cost factor in the UI.
-5. **PR #2** — backend only. Its duplicate UI edits are dropped because #4 and #5 supersede them. Osiris rebases this branch backend-only after #5.
-6. **PR #6** — stacked on #2. OpenAPI 0.7.0 talent multiplier and clamp.
+4. **PR #5** — merged. Type-weighted employee multiplier and clamped talent-cost factor in the UI.
+5. **PR #2** — next. Osiris is rebasing it to be backend-only and dropping the UI files that #5 supersedes: `src/App.jsx`, `src/WorkflowDiagram.jsx`, `src/components/Dashboard.jsx`, `src/simulation.js`, `src/triggerClient.js`. Any UI file the rebase touches needs Brainiac's review.
+6. **PR #6** — after #2. Rebases onto the backend-only #2 with the N1-api fix. OpenAPI 0.7.0 talent multiplier and clamp.
 
 Order: **#3 → #1 → #4 → #5 → #2 → #6**.
 
@@ -23,9 +23,9 @@ Order: **#3 → #1 → #4 → #5 → #2 → #6**.
 | [#3](https://github.com/TayDa64/citizen/pull/3) | Pin Node 22.22 and add minimal CI | Merged to `main` at `d47559c` | `02801b1` | `engines` `>=22.22.2`, `.nvmrc` `22`, CI workflow (`npm ci`, build, test); CI green | yes | Origin trace `diag-20261026-4856e83c`: the PR #1 run whose finding led to #3, not a regression of #3. CI run [40365561385](https://github.com/TayDa64/citizen/actions/runs/40365561385) is green. |
 | [#1](https://github.com/TayDa64/citizen/pull/1) | Show sample world events on hype and talent cost | Merged to `main` at `7ea00f0` | `107d8fd` | Regression pass, Slice 1 numbers intact, sample world events update hype and talent cost | yes | Pre-merge `diag-20261026-04496e36` |
 | [#4](https://github.com/TayDa64/citizen/pull/4) | Adapt the Citizen UI to the OpenAPI 0.4.0 trigger API | Merged to `main` at `eb02b8b` | `793b7e0` | UI on OpenAPI 0.4.0 trigger API, G1–G4 fixed, regression pass. Pre-merge: 83/83 tests, Slice 1 numbers hold, G1–G4 20/20, axe 0 violations. Brainiac confirmed. CI [40389688395](https://github.com/TayDa64/citizen/actions/runs/40389688395) | yes | Pre-merge `diag-20261026-ebca9b87` |
-| [#5](https://github.com/TayDa64/citizen/pull/5) | Scale burn by the talent-cost factor | Open; next. Base is `main` (was stacked on #4) | `1769f01` | Type-weighted employee multiplier and clamped trigger talent-cost factor in the UI, parity with the server over a 15k fuzz, regression pass | no | `diag-20261026-3afe8cce` |
-| [#2](https://github.com/TayDa64/citizen/pull/2) | Add real-world triggers for hype and talent cost | Open; backend-only rebase after #5 (duplicate UI edits dropped; #4/#5 supersede them) | `63f6fbc` | Backend (migrations 001–003, local-only DB guard, Host checks, triggers API), regression pass | no | `diag-20261026-3f44e8ad` |
-| [#6](https://github.com/TayDa64/citizen/pull/6) | Scale burn by employees and a clamped talent-cost factor | Open; stacked on #2 | `cc0b661` | OpenAPI 0.7.0, talent multiplier and clamp, regression pass | no | `diag-20261026-feab2fe6` |
+| [#5](https://github.com/TayDa64/citizen/pull/5) | Scale burn by the talent-cost factor | Merged to `main` at `d0fbbad` | `a93f3ac` | Type-weighted employee multiplier and clamped trigger talent-cost factor in the UI, parity with the server over a 15k fuzz, regression pass. Pre-merge: 130/130 tests, Slice 1 numbers hold, clamp suite passed, K1 parity 0 mismatches over 15k cases, axe 0 violations. Brainiac confirmed. CI [40391307880](https://github.com/TayDa64/citizen/actions/runs/40391307880) | yes | Pre-merge `diag-20261026-c6e15877` |
+| [#2](https://github.com/TayDa64/citizen/pull/2) | Add real-world triggers for hype and talent cost | Open; next. Osiris is rebasing it backend-only, dropping UI files #5 supersedes (`src/App.jsx`, `src/WorkflowDiagram.jsx`, `src/components/Dashboard.jsx`, `src/simulation.js`, `src/triggerClient.js`). Any UI file the rebase touches needs Brainiac's review | `63f6fbc` | Backend (migrations 001–003, local-only DB guard, Host checks, triggers API), regression pass | no | `diag-20261026-3f44e8ad` |
+| [#6](https://github.com/TayDa64/citizen/pull/6) | Scale burn by employees and a clamped talent-cost factor | Open; after #2. Rebases onto the backend-only #2 with the N1-api fix | `cc0b661` | OpenAPI 0.7.0, talent multiplier and clamp, regression pass | no | `diag-20261026-feab2fe6` |
 
 ## Invariants
 
@@ -44,7 +44,7 @@ After these land: **Slice 3 kickoff** — persist employees and a hiring flow in
 
 ## Known open low items
 
-- **N1-api** (low, pre-existing, on #6, `data.schema`): `ErrorMessage` does not allow `issues`. 400 validation and 405 bodies include `issues`. Osiris is fixing this during the rebase.
+- **N1-api** (low, pre-existing, on #6, `data.schema`): `ErrorMessage` does not allow `issues`. 400 validation and 405 bodies include `issues`. Osiris fixes this when #6 rebases after #2.
 - **A1** (low, pre-existing from #1): axe moderate `landmark-one-main` and `region`.
 - **S1** (low): `main`'s lockfile `engines` did not match `package.json`. Fixed by #1's lockfile.
 - **R3b-style info items** (non-blocking):
