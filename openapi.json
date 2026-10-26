@@ -2,16 +2,16 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Citizen API",
-    "version": "0.2.0",
-    "description": "Slice 2 real-world triggers. effect.hype and effect.talentCost are signed deltas, not absolute values. At least one is required."
+    "version": "0.3.0",
+    "description": "TRIGGER_CONTRACT v1. effect.hype is an absolute delta on the 0..1 scale and the result is clamped to 0..1. effect.talentCost is a relative delta: 0.12 multiplies companies.talent_cost by 1.12 and the result is floored at 0. At least one effect must be non-zero. Posting the same id replaces that trigger and reapplies the stack from each company's captured baseline; it does not stack a second copy. Input deltas are bounded (hype -1..1, talentCost -100..100, at most 4 decimal places) so the NUMERIC(12,2) talent column cannot overflow from a single field."
   },
   "paths": {
     "/api/triggers": {
       "get": {
-        "summary": "List applied real-world triggers, newest first",
+        "summary": "List v1 real-world triggers, newest first",
         "responses": {
           "200": {
-            "description": "Trigger records mapped from real_world_triggers and effects",
+            "description": "Trigger records mapped from real_world_triggers.client_id and effects. Legacy trigger types are omitted.",
             "content": {
               "application/json": {
                 "schema": {
@@ -24,12 +24,20 @@
         }
       },
       "post": {
-        "summary": "Validate, store, and apply a trigger",
+        "summary": "Validate, store, and apply a v1 trigger. The same id replaces the previous effect.",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/TriggerInput" }
+              "schema": { "$ref": "#/components/schemas/Trigger" },
+              "example": {
+                "id": "evt-news-sector-spike",
+                "type": "news_spike",
+                "label": "News spike",
+                "source": "mock:local",
+                "timestamp": "2026-04-18T13:30:00.000Z",
+                "effect": { "hype": 0.1 }
+              }
             }
           }
         },
@@ -40,11 +48,11 @@
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/Trigger" },
                 "example": {
-                  "id": "11111111-1111-4111-8111-111111111111",
-                  "type": "news",
-                  "label": "Mock press cycle lifts founder hype",
-                  "source": "mock:press-cycle",
-                  "timestamp": "2026-10-26T15:00:00.000Z",
+                  "id": "evt-news-sector-spike",
+                  "type": "news_spike",
+                  "label": "News spike",
+                  "source": "mock:local",
+                  "timestamp": "2026-04-18T13:30:00.000Z",
                   "effect": { "hype": 0.1 }
                 }
               }
@@ -56,7 +64,7 @@
     },
     "/api/triggers/mock": {
       "post": {
-        "summary": "Insert a built-in mock trigger",
+        "summary": "Insert one of the three TRIGGER_CONTRACT sample triggers",
         "requestBody": {
           "required": false,
           "content": {
@@ -65,37 +73,51 @@
                 "type": "object",
                 "additionalProperties": false,
                 "properties": {
-                  "scenario": { "type": "string", "enum": ["hype", "talent"] }
+                  "scenario": {
+                    "type": "string",
+                    "enum": ["news_spike", "policy_change", "market_shift"]
+                  }
                 }
-              }
+              },
+              "example": { "scenario": "policy_change" }
             }
           }
         },
         "responses": {
           "201": {
-            "description": "Stored mock trigger",
+            "description": "Stored sample trigger. Sending the same scenario again replaces that id.",
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/Trigger" },
                 "examples": {
-                  "hype": {
+                  "news_spike": {
                     "value": {
-                      "id": "11111111-1111-4111-8111-111111111111",
-                      "type": "news",
-                      "label": "Mock press cycle lifts founder hype",
-                      "source": "mock:press-cycle",
-                      "timestamp": "2026-10-26T15:00:00.000Z",
+                      "id": "evt-news-sector-spike",
+                      "type": "news_spike",
+                      "label": "News spike",
+                      "source": "mock:local",
+                      "timestamp": "2026-04-18T13:30:00.000Z",
                       "effect": { "hype": 0.1 }
                     }
                   },
-                  "talent": {
+                  "policy_change": {
                     "value": {
-                      "id": "22222222-2222-4222-8222-222222222222",
-                      "type": "talent",
-                      "label": "Mock hiring surge raises talent cost",
-                      "source": "mock:labor-market",
-                      "timestamp": "2026-10-26T15:00:01.000Z",
-                      "effect": { "talentCost": 500 }
+                      "id": "evt-policy-wage-ordinance",
+                      "type": "policy_change",
+                      "label": "Policy change",
+                      "source": "mock:local",
+                      "timestamp": "2026-04-02T15:00:00.000Z",
+                      "effect": { "talentCost": 0.12 }
+                    }
+                  },
+                  "market_shift": {
+                    "value": {
+                      "id": "evt-market-cooling",
+                      "type": "market_shift",
+                      "label": "Market shift",
+                      "source": "mock:local",
+                      "timestamp": "2026-05-01T09:00:00.000Z",
+                      "effect": { "talentCost": -0.08, "hype": -0.05 }
                     }
                   }
                 }
@@ -107,10 +129,10 @@
     },
     "/api/companies": {
       "get": {
-        "summary": "Read company metrics after trigger effects have been applied",
+        "summary": "Read company metrics after v1 trigger effects have been recomputed from baselines",
         "responses": {
           "200": {
-            "description": "Companies",
+            "description": "Companies. baselines are the values captured before the first v1 trigger.",
             "content": {
               "application/json": {
                 "schema": {
@@ -126,26 +148,18 @@
   },
   "components": {
     "schemas": {
-      "TriggerInput": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["type", "label", "source", "effect"],
-        "properties": {
-          "type": { "type": "string", "enum": ["news", "market", "talent", "policy"] },
-          "label": { "type": "string", "maxLength": 160 },
-          "source": { "type": "string", "maxLength": 2048 },
-          "effect": { "$ref": "#/components/schemas/Effect" }
-        }
-      },
       "Trigger": {
         "type": "object",
         "additionalProperties": false,
         "required": ["id", "type", "label", "source", "timestamp", "effect"],
         "properties": {
-          "id": { "type": "string", "format": "uuid" },
-          "type": { "type": "string", "enum": ["news", "market", "talent", "policy"] },
-          "label": { "type": "string" },
-          "source": { "type": "string" },
+          "id": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "type": {
+            "type": "string",
+            "enum": ["news_spike", "policy_change", "market_shift"]
+          },
+          "label": { "type": "string", "minLength": 1, "maxLength": 160 },
+          "source": { "type": "string", "minLength": 1, "maxLength": 2048 },
           "timestamp": { "type": "string", "format": "date-time" },
           "effect": { "$ref": "#/components/schemas/Effect" }
         }
@@ -154,22 +168,42 @@
         "type": "object",
         "additionalProperties": false,
         "minProperties": 1,
+        "description": "At least one of hype or talentCost must be non-zero. A field may be present and 0 when the other is non-zero.",
         "properties": {
-          "hype": { "type": "number", "minimum": -1, "maximum": 1 },
-          "talentCost": { "type": "number", "minimum": -100000, "maximum": 100000 }
+          "hype": {
+            "type": "number",
+            "minimum": -1,
+            "maximum": 1,
+            "description": "Absolute delta on the 0..1 hype scale. 0.1 raises hype by 10 points from the company baseline. Results are clamped to 0..1."
+          },
+          "talentCost": {
+            "type": "number",
+            "minimum": -100,
+            "maximum": 100,
+            "description": "Relative delta. 0.12 multiplies the company talent-cost baseline by 1.12. Results are floored at 0."
+          }
         }
       },
       "Company": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "name", "cash", "burnRate", "hype", "talentCost"],
+        "required": ["id", "name", "cash", "burnRate", "hype", "talentCost", "baselines"],
         "properties": {
           "id": { "type": "string", "format": "uuid" },
           "name": { "type": "string" },
           "cash": { "type": "number" },
           "burnRate": { "type": "number" },
           "hype": { "type": "number" },
-          "talentCost": { "type": "number" }
+          "talentCost": { "type": "number" },
+          "baselines": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["hype", "talentCost"],
+            "properties": {
+              "hype": { "type": "number" },
+              "talentCost": { "type": "number" }
+            }
+          }
         }
       }
     }

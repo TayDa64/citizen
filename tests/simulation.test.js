@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
+import { SAMPLE_TRIGGERS } from '../src/triggerContract.js';
 import {
   applyEffects,
   applyTriggerEffect,
@@ -7,20 +8,10 @@ import {
   setTaxRate
 } from '../src/simulation.js';
 
+const [POLICY, NEWS, MARKET] = SAMPLE_TRIGGERS;
+
 function burnFor(taxRate) {
   return Math.round(2000 * (1 + taxRate * 0.4));
-}
-
-function record(effect, extra = {}) {
-  return {
-    id: '11111111-1111-4111-8111-111111111111',
-    type: 'news',
-    label: 'Mock press cycle lifts founder hype',
-    source: 'mock:press-cycle',
-    timestamp: '2026-10-26T15:00:00.000Z',
-    ...extra,
-    effect
-  };
 }
 
 describe('Slice 1 tax to burn rate', () => {
@@ -66,7 +57,7 @@ describe('Slice 1 tax to burn rate', () => {
 describe('trigger effects on simulation state', () => {
   test('applies a hype delta without touching burn rate or cash', () => {
     const taxed = applyEffects(initialState);
-    const next = applyTriggerEffect(taxed, record({ hype: 0.1 }));
+    const next = applyTriggerEffect(taxed, NEWS);
     assert.equal(next.company.hype, 0.4);
     assert.equal(next.company.talentCost, taxed.company.talentCost);
     assert.equal(next.company.burnRate, taxed.company.burnRate);
@@ -78,35 +69,57 @@ describe('trigger effects on simulation state', () => {
     assert.equal(taxed.triggers.length, 0);
   });
 
-  test('applies a talent-cost delta and clamps both metrics', () => {
-    const talent = applyTriggerEffect(initialState, record({ talentCost: 500 }, { type: 'talent' }));
-    assert.equal(talent.company.talentCost, initialState.company.talentCost + 500);
-    assert.equal(talent.company.hype, initialState.company.hype);
+  test('replaces the same id and multiplies talent cost from the baseline', () => {
+    const once = applyTriggerEffect(initialState, POLICY);
+    assert.equal(once.company.talentCost, 4480);
+    assert.equal(once.company.hype, 0.3);
+    assert.equal(once.triggers.length, 1);
 
-    const both = applyTriggerEffect(initialState, record({ hype: 0.05, talentCost: 250.5 }));
-    assert.equal(both.company.hype, 0.35);
-    assert.equal(both.company.talentCost, initialState.company.talentCost + 250.5);
+    const twice = applyTriggerEffect(once, POLICY);
+    assert.equal(twice.company.talentCost, 4480);
+    assert.equal(twice.triggers.length, 1);
+    assert.equal(twice.triggers[0].id, POLICY.id);
 
-    const second = applyTriggerEffect(
-      both,
-      record({ talentCost: 500 }, {
-        id: '22222222-2222-4222-8222-222222222222',
-        type: 'talent'
-      })
-    );
-    assert.equal(second.triggers[0].type, 'talent');
-    assert.deepEqual(second.triggers[1].effect, { hype: 0.05, talentCost: 250.5 });
+    const replaced = applyTriggerEffect(twice, { ...POLICY, effect: { talentCost: 0.2 } });
+    assert.equal(replaced.company.talentCost, 4800);
+    assert.equal(replaced.triggers.length, 1);
+    assert.notEqual(replaced.company.talentCost, 4480 * 1.2);
 
-    const highHype = structuredClone(initialState);
-    highHype.company.hype = 0.95;
-    assert.equal(applyTriggerEffect(highHype, record({ hype: 0.1 })).company.hype, 1);
+    const stacked = applyTriggerEffect(replaced, MARKET);
+    assert.equal(stacked.triggers.length, 2);
+    assert.equal(stacked.triggers[0].id, MARKET.id);
+    assert.equal(stacked.company.talentCost, 4416);
+    assert.equal(stacked.company.hype, 0.25);
+    assert.equal(stacked.company.burnRate, initialState.company.burnRate);
 
-    const lowTalent = structuredClone(initialState);
-    lowTalent.company.talentCost = 100;
-    assert.equal(
-      applyTriggerEffect(lowTalent, record({ talentCost: -500 })).company.talentCost,
-      0
-    );
+    const news = applyTriggerEffect(stacked, NEWS);
+    assert.equal(news.company.hype, 0.35);
+    assert.equal(news.company.talentCost, 4416);
+
+    const newsAgain = applyTriggerEffect(news, { ...NEWS, effect: { hype: 0.05 } });
+    assert.equal(newsAgain.company.hype, 0.3);
+    assert.equal(newsAgain.triggers.filter((trigger) => trigger.id === NEWS.id).length, 1);
+
+    const floored = applyTriggerEffect(newsAgain, {
+      id: 'evt-shock',
+      type: 'market_shift',
+      label: 'Shock',
+      source: 'mock:local',
+      timestamp: '2026-06-01T00:00:00.000Z',
+      effect: { talentCost: -5 }
+    });
+    assert.equal(floored.company.talentCost, 0);
+
+    const recovered = applyTriggerEffect(floored, {
+      id: 'evt-shock',
+      type: 'market_shift',
+      label: 'Shock',
+      source: 'mock:local',
+      timestamp: '2026-06-01T00:00:00.000Z',
+      effect: { talentCost: 0.1 }
+    });
+    assert.equal(recovered.company.talentCost, 4857.6);
+    assert.equal(recovered.triggers.length, 4);
   });
 
   test('rejects a bad trigger without mutating state', () => {
@@ -116,7 +129,7 @@ describe('trigger effects on simulation state', () => {
   });
 
   test('a later tax tick keeps the trigger effect and the burn formula', () => {
-    const triggered = applyTriggerEffect(initialState, record({ hype: 0.1 }));
+    const triggered = applyTriggerEffect(initialState, NEWS);
     const ticked = applyEffects(triggered);
     assert.equal(ticked.company.hype, 0.4);
     assert.equal(ticked.company.talentCost, initialState.company.talentCost);

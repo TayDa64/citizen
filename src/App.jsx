@@ -21,6 +21,7 @@ function App() {
             hype: company.hype,
             talentCost: company.talentCost
           },
+          baselines: company.baselines ?? prev.baselines,
           history: {
             ...prev.history,
             hype: [company.hype],

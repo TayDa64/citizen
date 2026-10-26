@@ -1,8 +1,8 @@
 import {
-  applyDelta,
-  HYPE_BOUNDS,
-  TALENT_COST_BOUNDS,
+  DEFAULT_HYPE,
+  DEFAULT_TALENT_COST,
   TriggerValidationError,
+  stackTriggerEffects,
   validateTriggerRecord
 } from './triggerContract.js';
 
@@ -23,6 +23,10 @@ export const initialState = {
     burnRate: [2000],
     hype: [0.3],
     talentCost: [4000]
+  },
+  baselines: {
+    hype: 0.3,
+    talentCost: 4000
   },
   triggers: []
 };
@@ -81,18 +85,16 @@ export function applyTriggerEffect(state, trigger) {
     throw new TriggerValidationError('Invalid trigger payload', validated.issues);
   }
   const next = structuredClone(state);
-  const effect = validated.value.effect;
-  if (effect.hype != null) {
-    next.company.hype = applyDelta(next.company.hype, effect.hype, HYPE_BOUNDS);
-  }
-  if (effect.talentCost != null) {
-    next.company.talentCost = applyDelta(
-      next.company.talentCost,
-      effect.talentCost,
-      TALENT_COST_BOUNDS
-    );
-  }
-  next.triggers = [validated.value, ...(next.triggers || [])];
+  const baselines = next.baselines ?? { hype: DEFAULT_HYPE, talentCost: DEFAULT_TALENT_COST };
+  const triggers = [
+    validated.value,
+    ...(next.triggers || []).filter((item) => item.id !== validated.value.id)
+  ];
+  const stacked = stackTriggerEffects(baselines, triggers);
+  next.baselines = { hype: baselines.hype, talentCost: baselines.talentCost };
+  next.company.hype = stacked.hype;
+  next.company.talentCost = stacked.talentCost;
+  next.triggers = triggers;
   next.history.hype = appendHistory(next.history.hype, next.company.hype);
   next.history.talentCost = appendHistory(next.history.talentCost, next.company.talentCost);
   return next;

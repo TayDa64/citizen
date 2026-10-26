@@ -40,14 +40,22 @@ export async function applyMigration(client, filePath, direction) {
   await client.query(statement);
 }
 
+export const UP_MIGRATIONS = Object.freeze([
+  'migrations/001_initial_schema.sql',
+  'migrations/002_real_world_trigger_effects.sql',
+  'migrations/003_trigger_contract_v1.sql'
+]);
+
+export const DOWN_MIGRATIONS = Object.freeze([
+  'migrations/003_trigger_contract_v1.sql',
+  'migrations/002_real_world_trigger_effects.sql'
+]);
+
 async function applyDirection(databaseUrl, direction) {
   assertLocalDatabase(databaseUrl);
   const pool = new pg.Pool({ connectionString: databaseUrl, max: 1 });
   try {
-    const files =
-      direction === 'down'
-        ? ['migrations/002_real_world_trigger_effects.sql']
-        : ['migrations/001_initial_schema.sql', 'migrations/002_real_world_trigger_effects.sql'];
+    const files = direction === 'down' ? DOWN_MIGRATIONS : UP_MIGRATIONS;
     for (const file of files) {
       await applyMigration(pool, file, direction === 'down' ? 'down' : 'up');
     }

@@ -10,7 +10,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import CivicLeverNode from './nodes/CivicLeverNode';
-import { formatEffect } from './triggerContract';
+import { describeTrigger, formatTalentDollars } from './triggerContract';
 
 const nodeTypes = { civicLever: CivicLeverNode };
 
@@ -77,7 +77,7 @@ export default function WorkflowDiagram({
           return { ...n, data: { ...n.data, value: state.taxRate } };
         }
         if (n.id === '5') {
-          const detail = latest ? `\n${latest.label}\n${formatEffect(latest.effect)}` : '';
+          const detail = latest ? `\n${describeTrigger(latest)}` : '';
           return {
             ...n,
             data: {
@@ -91,7 +91,7 @@ export default function WorkflowDiagram({
             ...n,
             data: {
               ...n.data,
-              label: `Civic Lever:\nInfrastructure / Talent\nTalent cost: $${Math.round(state.company.talentCost)}`
+              label: `Civic Lever:\nInfrastructure / Talent\nTalent cost: ${formatTalentDollars(state.company.talentCost)}`
             }
           };
         }
@@ -141,20 +141,29 @@ export default function WorkflowDiagram({
         <button
           type="button"
           data-testid="mock-hype-trigger"
-          onClick={() => onMockTrigger?.('hype')}
+          onClick={() => onMockTrigger?.('news_spike')}
           disabled={triggerPending}
           style={{ padding: '6px 16px', marginLeft: 8 }}
         >
-          Apply mock hype trigger
+          Apply news spike
         </button>
         <button
           type="button"
           data-testid="mock-talent-trigger"
-          onClick={() => onMockTrigger?.('talent')}
+          onClick={() => onMockTrigger?.('policy_change')}
           disabled={triggerPending}
           style={{ padding: '6px 16px', marginLeft: 8 }}
         >
-          Apply mock talent-cost trigger
+          Apply policy change
+        </button>
+        <button
+          type="button"
+          data-testid="mock-market-trigger"
+          onClick={() => onMockTrigger?.('market_shift')}
+          disabled={triggerPending}
+          style={{ padding: '6px 16px', marginLeft: 8 }}
+        >
+          Apply market shift
         </button>
         {triggerError ? (
           <p data-testid="trigger-error" style={{ color: '#f87171' }}>{triggerError}</p>

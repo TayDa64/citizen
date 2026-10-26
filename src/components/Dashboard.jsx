@@ -1,7 +1,7 @@
 import { Chart, Title } from '@highcharts/react';
 import { LineSeries } from '@highcharts/react/series/Line';
 
-import { formatEffect } from '../triggerContract';
+import { describeTrigger, formatTalentDollars } from '../triggerContract';
 
 export default function Dashboard({ state }) {
   const { cash, burnRate, hype, talentCost } = state.history;
@@ -16,7 +16,7 @@ export default function Dashboard({ state }) {
         {' '}| Burn/mo: <span data-testid="burn-value">${state.company.burnRate}</span>
         {' '}| Tax: {(state.taxRate * 100).toFixed(0)}%
         {' '}| Hype: <span data-testid="hype-value">{Math.round(state.company.hype * 100)}%</span>
-        {' '}| Talent cost: <span data-testid="talent-cost-value">${Math.round(state.company.talentCost)}</span>
+        {' '}| Talent cost: <span data-testid="talent-cost-value">{formatTalentDollars(state.company.talentCost)}</span>
       </p>
       <Chart
         options={{
@@ -66,7 +66,7 @@ export default function Dashboard({ state }) {
           <ul style={{ margin: 0, paddingLeft: '1.2rem' }}>
             {state.triggers.map((trigger) => (
               <li key={trigger.id} data-testid="trigger-row">
-                {trigger.type}: {trigger.label} ({formatEffect(trigger.effect)}) — {trigger.source}
+                {describeTrigger(trigger)} — {trigger.source}
               </li>
             ))}
           </ul>
