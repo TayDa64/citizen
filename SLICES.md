@@ -19,12 +19,23 @@
 ### Next suggested slice
 Real-world trigger (mock or Firecrawl) updates hype or talent cost and appears in the diagram + dashboard.
 
+## Slice 2
+**A sample world event updates hype and talent cost, and the effect is visible.**
+
+### What works
+- `src/triggers.js` is the RealWorldTrigger contract (id, type, label, source, timestamp, effect.hype, effect.talentCost) plus frozen `mock:local` samples.
+- `applyTrigger`, `removeTrigger`, and `clearTriggers` in `src/simulation.js` stack those effects from the Slice 1 baseline. No active trigger leaves burn on the Slice 1 formula.
+- The diagram shows the talent-cost delta on the infrastructure node and edge, and adds a hype node when hype moves.
+- The dashboard draws a dashed Highcharts plot line and band at the trigger month, with a before/after readout.
+- World-event buttons are keyboard operable and announce the effect in an `aria-live="polite"` region.
+
 ### Local test
 ```bash
 npm install
+npm test
 npm run dev
 ```
-Drag the tax slider, click “Advance Month”, watch the chart.
+Drag the tax slider, click “Advance Month”, watch the chart. Apply “Policy change” and confirm talent cost +12% without moving cash until the next month.
 
 ## Merge train
 

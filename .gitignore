@@ -4,3 +4,9 @@ dist
 *.log
 .env
 .env.local
+
+.playwright-mcp/
+.playwright-shots/
+playwright-report/
+test-results/
+blob-report/
