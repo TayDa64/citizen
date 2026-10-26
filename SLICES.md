@@ -36,3 +36,7 @@ npm test
 npm run dev
 ```
 Drag the tax slider, click “Advance Month”, watch the chart. Apply “Policy change” and confirm talent cost +12% without moving cash until the next month.
+
+## Merge train
+
+Which slices land in which order, and what is already verified, is tracked in [STATE.md](STATE.md).
