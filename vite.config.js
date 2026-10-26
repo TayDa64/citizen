@@ -14,14 +14,20 @@ export default defineConfig({
     port: 5173,
     open: true,
     proxy: {
-      // Relative /api keeps the Host header on localhost, which the API allows.
-      '/api': 'http://127.0.0.1:8787',
+      // The API accepts only a loopback Host on its own port. changeOrigin
+      // rewrites the browser Host (5173 or 4173) to 127.0.0.1:8787.
+      '/api': {
+        target: 'http://127.0.0.1:8787',
+        changeOrigin: true,
+      },
     },
   },
   preview: {
     proxy: {
-      // The browser suite builds, then serves with `vite preview`. Same Host rule.
-      '/api': 'http://127.0.0.1:8787',
+      '/api': {
+        target: 'http://127.0.0.1:8787',
+        changeOrigin: true,
+      },
     },
   },
 });

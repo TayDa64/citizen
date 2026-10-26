@@ -12,6 +12,7 @@ import {
   removeTrigger,
   setTaxRate,
 } from './simulation';
+import { burnFromStoredBase, talentCostFactorOf, effectiveMultiplierOf } from './talentMultiplier';
 import { SAMPLE_TRIGGERS } from './triggers';
 
 const policy = SAMPLE_TRIGGERS.find((trigger) => trigger.type === 'policy_change');
@@ -124,6 +125,9 @@ describe('applyTrigger', () => {
       effect: { talentCost: -5 },
     });
     expect(crash.company.talentCost).toBe(0);
+    expect(talentCostFactorOf(crash)).toBe(0);
+    expect(effectiveMultiplierOf(crash)).toBe(0);
+    expect(previewBurnRate(crash)).toBe(0);
   });
 
   test('rejects an invalid trigger', () => {
@@ -152,13 +156,63 @@ describe('applyTrigger', () => {
     expect(state.company.burnRate).toBe(2688);
   });
 
-  test('no employees plus a policy burns 2240 at tax 0 and 2464 at 25%', () => {
+  test('no employees plus a policy burns 2240 at the stored base and 2464 at 25%', () => {
     const policyState = applyTrigger(initialState, policy);
+    expect(talentCostFactorOf(policyState)).toBe(1.12);
+    expect(effectiveMultiplierOf(policyState)).toBe(1.12);
+    expect(burnFromStoredBase(2000, effectiveMultiplierOf(policyState))).toBe(2240);
     const atZero = setTaxRate(policyState, 0);
     expect(previewBurnRate(atZero)).toBe(2240);
     expect(applyEffects(atZero).company.burnRate).toBe(2240);
     expect(previewBurnRate(policyState)).toBe(2464);
     expect(applyEffects(policyState).company.burnRate).toBe(2464);
+  });
+
+  test('four tech employees plus a policy stay at 1.75 and burn 5488 at tax 1', () => {
+    const staffed = setTaxRate({
+      ...initialState,
+      employees: [
+        { department: 'tech', skillTech: 1 },
+        { department: 'tech', skillTech: 1 },
+        { department: 'tech', skillTech: 1 },
+        { department: 'tech', skillTech: 1 },
+      ],
+    }, 1);
+    const triggered = applyTrigger(staffed, policy);
+    expect(talentCostFactorOf(triggered)).toBe(1.12);
+    expect(effectiveMultiplierOf(triggered)).toBe(1.96);
+    expect(previewBurnRate(triggered)).toBe(5488);
+    const ticked = applyEffects(triggered);
+    expect(ticked.talentMultiplier).toBe(1.75);
+    expect(ticked.company.talentMultiplier).toBe(1.75);
+    expect(ticked.company.burnRate).toBe(5488);
+  });
+
+  test('policy then market uses talent-cost factor 1.0304', () => {
+    const stacked = applyTrigger(applyTrigger(initialState, policy), market);
+    expect(stacked.company.talentCost).toBeCloseTo(1.12 * 0.92, 5);
+    expect(talentCostFactorOf(stacked)).toBe(1.0304);
+    expect(effectiveMultiplierOf(stacked)).toBe(1.0304);
+    expect(previewBurnRate(stacked)).toBe(2267);
+
+    const apiStacked = hydrateFromApi(initialState, {
+      company: {
+        id: 'company-1',
+        hype: 0.25,
+        talentCost: 4121.6,
+        baselines: { hype: 0.3, talentCost: 4000 },
+        talentMultiplier: 1,
+        baseBurnRate: 2000,
+        burnRate: 2061,
+      },
+      triggers: [policy, market],
+    });
+    expect(apiStacked.company.cash).toBe(15000);
+    expect(apiStacked.company.burnRate).toBe(2000);
+    expect(talentCostFactorOf(apiStacked)).toBe(1.0304);
+    expect(effectiveMultiplierOf(apiStacked)).toBe(1.0304);
+    expect(burnFromStoredBase(2000, 1.0304)).toBe(2061);
+    expect(previewBurnRate(apiStacked)).toBe(2267);
   });
 
   test('the chart marker stays inside the 24-month window', () => {

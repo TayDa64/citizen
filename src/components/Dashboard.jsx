@@ -4,8 +4,13 @@ import { LineSeries } from '@highcharts/react/series/Line';
 import { talentCostShowsDollars } from '../dataSource';
 import { previewBurnRate } from '../simulation';
 import {
+  baseBurnRate,
+  effectiveMultiplierOf,
+  formatTalentCostFactor,
   formatTalentReadout,
+  talentCostFactorOf,
   talentMixOf,
+  talentMultiplierOf,
 } from '../talentMultiplier';
 import {
   deltaPhrase,
@@ -17,6 +22,7 @@ import {
   formatHypePercent,
   formatTalentDollars,
   formatTalentMultiplier,
+  talentEquation,
 } from '../triggers';
 import { loadChartAccessibility } from './loadChartAccessibility';
 import {
@@ -82,11 +88,15 @@ function TalentMixTable({ rows }) {
 
 function TalentBurnSummary({ state }) {
   const mix = talentMixOf(state);
+  const equation = talentEquation(state);
 
   return (
     <section className="talent-burn" aria-labelledby="talent-burn-heading">
       <h3 id="talent-burn-heading">Talent and burn</h3>
       <p>{formatBurnBreakdown(state)}</p>
+      <p data-testid="talent-equation" role="group" aria-label={equation.name}>
+        {equation.visible}
+      </p>
       {mix.length > 0 ? (
         <TalentMixTable rows={mix} />
       ) : (
@@ -167,7 +177,19 @@ export default function Dashboard({ state }) {
     <div className="dashboard" style={{ padding: '1rem', background: '#12121f', color: '#e0e0e0' }}>
       <h3 style={{ margin: '0 0 0.5rem' }}>Company Metrics (Slice 1)</h3>
       <p>
-        Cash: ${state.company.cash.toFixed(0)} | Burn/mo: {formatCurrency(previewBurnRate(state))} | Tax: {(state.taxRate * 100).toFixed(0)}%
+        <span data-testid="cash-value">Cash: ${state.company.cash.toFixed(0)}</span>
+        {' | '}
+        <span id="burn-value" data-testid="burn-value">Burn/mo: {formatCurrency(previewBurnRate(state))}</span>
+        {' | '}
+        <span id="base-burn-value" data-testid="base-burn-value">Base burn: {formatCurrency(baseBurnRate(state.taxRate))}</span>
+        {' | '}
+        <span id="talent-multiplier-value" data-testid="talent-multiplier-value">Talent multiplier: {formatTalentReadout(talentMultiplierOf(state))}</span>
+        {' | '}
+        <span id="talent-cost-factor-value" data-testid="talent-cost-factor-value">Talent cost factor: {formatTalentCostFactor(talentCostFactorOf(state))}</span>
+        {' | '}
+        <span id="effective-multiplier-value" data-testid="effective-multiplier-value">Effective multiplier: {formatTalentCostFactor(effectiveMultiplierOf(state))}</span>
+        {' | '}
+        Tax: {(state.taxRate * 100).toFixed(0)}%
       </p>
       <TalentBurnSummary state={state} />
       <WorldEventEffect state={state} />

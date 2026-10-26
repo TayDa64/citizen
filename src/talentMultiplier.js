@@ -22,11 +22,14 @@
  * is missing. That field stays employee-only. It does not absorb talent cost.
  * There is no baselines.talentMultiplier.
  *
- * talentCostFactor = talentCost / baselines.talentCost. It is 1 when there
- * is no trigger, or when the baseline is missing or 0. effectiveMultiplier
- * is talentMultiplier × talentCostFactor.
- * burnRate = round(2000 * (1 + taxRate * 0.4) * effectiveMultiplier), rounded
- * once. baseBurnRate = round(2000 * (1 + taxRate * 0.4)).
+ * talentCostFactor = talentCost / baselines.talentCost, rounded to 4 decimals.
+ * It is 1 when there is no trigger, or when the baseline is missing or 0.
+ * A stacked talent cost of 0 makes the factor 0, and burn is 0.
+ * effectiveMultiplier is talentMultiplier × talentCostFactor, rounded to 4
+ * decimals. The simulation burn is
+ * round(2000 * (1 + taxRate * 0.4) * effectiveMultiplier), rounded once.
+ * The API's own burnRate is round(stored baseBurnRate * effectiveMultiplier).
+ * baseBurnRate for the tax slider is round(2000 * (1 + taxRate * 0.4)).
  *
  * APPLY_TALENT_COST_TO_BURN is on. A 0.6.0 company may send talentCostFactor
  * and effectiveMultiplier. A 0.5.0 company omits them and the client computes
@@ -288,10 +291,33 @@ export function burnMultiplier({ talentMultiplier = 1, talentCostFactor: factor 
 }
 
 export function talentCostFactor(talentCost, baselineTalentCost) {
-  const current = Number(talentCost);
+  if (baselineTalentCost == null || baselineTalentCost === '') return 1;
   const baseline = Number(baselineTalentCost);
-  if (!Number.isFinite(current) || !Number.isFinite(baseline) || baseline === 0) return 1;
-  return current / baseline;
+  if (!Number.isFinite(baseline) || baseline <= 0) return 1;
+  if (talentCost == null || talentCost === '') return 1;
+  const cost = Number(talentCost);
+  if (!Number.isFinite(cost)) return 1;
+  if (cost <= 0) return 0;
+  const factor = cost / baseline;
+  if (!Number.isFinite(factor) || factor < 0) return 0;
+  return roundTo(factor, 4);
+}
+
+export function roundedEffectiveMultiplier(talentMultiplier, costFactor) {
+  const employee = Number(talentMultiplier);
+  const factor = Number(costFactor);
+  if (!Number.isFinite(employee) || employee < 0) return 0;
+  if (!Number.isFinite(factor) || factor < 0) return 0;
+  const product = employee * factor;
+  if (!Number.isFinite(product) || product < 0) return 0;
+  return roundTo(product, 4);
+}
+
+export function burnFromStoredBase(baseBurnRate, effective) {
+  const base = Number(baseBurnRate);
+  const multiplier = Number(effective);
+  if (!Number.isFinite(base) || !Number.isFinite(multiplier)) return 0;
+  return Math.round(base * multiplier);
 }
 
 export function baseBurnRate(taxRate) {
@@ -322,7 +348,7 @@ export function readOptionalFactor(value, label) {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
     throw new TypeError(`${label} must be a finite number >= 0`);
   }
-  return value;
+  return roundTo(value, 4);
 }
 
 export function talentMultiplierOf(state) {
@@ -345,7 +371,7 @@ export function effectiveMultiplierOf(state) {
   const employee = talentMultiplierOf(state);
   if (!APPLY_TALENT_COST_TO_BURN) return employee;
   if (state?.dataSource === 'api' && state.effectiveMultiplier != null) return state.effectiveMultiplier;
-  return employee * talentCostFactorOf(state);
+  return roundedEffectiveMultiplier(employee, talentCostFactorOf(state));
 }
 
 export function effectiveBurnRate(state) {

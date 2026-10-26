@@ -6,6 +6,7 @@ import {
   SAMPLE_EMPLOYEES,
   baseBurnRate,
   burnMultiplier,
+  burnFromStoredBase,
   burnRateFromMultiplier,
   composeTalentMultiplier,
   computeTalentMultiplier,
@@ -15,8 +16,10 @@ import {
   readTalentMultiplier,
   effectiveBurnRate,
   effectiveMultiplierOf,
+  roundedEffectiveMultiplier,
   scaleTalentMultiplier,
   skillFactor,
+  talentCostFactor,
   talentCostFactorOf,
   talentMixFromEmployees,
   talentMultiplierOf,
@@ -258,6 +261,31 @@ describe('burn rate', () => {
     expect(effectiveMultiplierOf(legacy)).toBeCloseTo(1.12);
     expect(effectiveBurnRate({ ...legacy, taxRate: 0 })).toBe(2240);
     expect(effectiveBurnRate({ ...legacy, taxRate: 0.25 })).toBe(2464);
+  });
+
+  test('rounds both factors to 4 decimals, and a zero talent cost burns 0', () => {
+    expect(talentCostFactor(4480, 4000)).toBe(1.12);
+    expect(talentCostFactor(4121.6, 4000)).toBe(1.0304);
+    expect(talentCostFactor(4000, 4000)).toBe(1);
+    expect(talentCostFactor(0, 4000)).toBe(0);
+    expect(talentCostFactor(-1, 4000)).toBe(0);
+    expect(talentCostFactor(100, 0)).toBe(1);
+    expect(talentCostFactor(100, null)).toBe(1);
+    expect(roundedEffectiveMultiplier(1.75, 1.12)).toBe(1.96);
+    expect(roundedEffectiveMultiplier(1, 0)).toBe(0);
+    expect(burnFromStoredBase(2000, 1.12)).toBe(2240);
+    expect(burnFromStoredBase(2000, 0)).toBe(0);
+
+    const zeroed = {
+      dataSource: 'local',
+      taxRate: 0.25,
+      employees: [],
+      company: { talentCost: 0 },
+      baselines: { talentCost: 4000 },
+    };
+    expect(talentCostFactorOf(zeroed)).toBe(0);
+    expect(effectiveMultiplierOf(zeroed)).toBe(0);
+    expect(effectiveBurnRate(zeroed)).toBe(0);
   });
 });
 

@@ -177,6 +177,10 @@ describe('sample data fallback', () => {
 
     const mockCall = calls.find((call) => call.path.endsWith('/api/triggers/mock'));
     expect(JSON.parse(mockCall.options.body)).toEqual({ scenario: 'policy_change' });
+    const companyReads = calls.filter((call) => String(call.path).endsWith('/api/companies'));
+    expect(companyReads.length).toBeGreaterThanOrEqual(2);
+    expect(calls.findIndex((call) => String(call.path).endsWith('/api/triggers/mock')))
+      .toBeLessThan(calls.findLastIndex((call) => String(call.path).endsWith('/api/companies')));
     expect(mockCall.options.body).not.toContain('appliedAtIndex');
 
     await user.click(screen.getByRole('button', { name: /advance month/i }));
@@ -274,9 +278,9 @@ describe('sample data fallback', () => {
     );
     expect(screen.getByRole('heading', { name: 'World events' })).toHaveFocus();
     expect(screen.queryByRole('region', { name: 'World event effect' })).not.toBeInTheDocument();
-    const metrics = screen.getByText(/Cash: \$/).textContent;
+    const metrics = screen.getByTestId('cash-value').textContent;
     expect(metrics.match(/Cash: \$\d+/)[0]).toBe(cashAfterTick.match(/Cash: \$\d+/)[0]);
-    expect(metrics).toContain('Burn/mo: $2,200');
+    expect(screen.getByTestId('burn-value')).toHaveTextContent('Burn/mo: $2,200');
     expect(screen.getByRole('main')).toContainElement(screen.getByRole('heading', { name: 'Cash & Burn Rate' }));
   });
 
@@ -846,6 +850,14 @@ describe('0.5.0 and 0.6.0 company payloads', () => {
     expect(talent).toHaveTextContent(
       'Burn $4,312 (base $2,200 · talent ×1.7500 · talent cost ×1.12)'
     );
+    expect(screen.getByTestId('burn-value')).toHaveTextContent('Burn/mo: $4,312');
+    expect(screen.getByTestId('base-burn-value')).toHaveTextContent('Base burn: $2,200');
+    expect(screen.getByTestId('talent-multiplier-value')).toHaveTextContent('Talent multiplier: 1.7500');
+    expect(screen.getByTestId('talent-cost-factor-value')).toHaveTextContent('Talent cost factor: 1.12');
+    expect(screen.getByTestId('effective-multiplier-value')).toHaveTextContent('Effective multiplier: 1.96');
+    expect(screen.getByRole('group', {
+      name: 'Talent multiplier 1.75 times cost factor 1.12 equals 1.96',
+    })).toBeInTheDocument();
     expect(screen.getByText(/Burn\/mo: \$4,312/)).toBeInTheDocument();
     expect(within(talent).getByRole('cell', { name: 'tech' })).toBeInTheDocument();
 

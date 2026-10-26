@@ -1,6 +1,7 @@
 import {
   baseBurnRate,
   effectiveBurnRate,
+  effectiveMultiplierOf,
   formatTalentCostFactor,
   formatTalentReadout,
   talentCostFactorOf,
@@ -288,9 +289,33 @@ export function formatTriggerDate(timestamp) {
   return `${months[date.getUTCMonth()]} ${date.getUTCDate()}, ${date.getUTCFullYear()}`;
 }
 
-export function formatBurnBreakdown(state) {
+function pricedState(state) {
   const taxRate = Number.isFinite(state?.taxRate) ? state.taxRate : 0.25;
-  const priced = { ...state, taxRate };
+  return { state: { ...state, taxRate }, taxRate };
+}
+
+function equationNumber(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return '0';
+  return roundTo(numeric, 4).toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
+}
+
+export function talentEquation(state) {
+  const { state: priced } = pricedState(state);
+  const employee = talentMultiplierOf(priced);
+  const factor = talentCostFactorOf(priced);
+  const effective = effectiveMultiplierOf(priced);
+  return {
+    employee,
+    factor,
+    effective,
+    visible: `Talent ×${formatTalentReadout(employee)} × cost factor ${formatTalentCostFactor(factor)} = ${formatTalentCostFactor(effective)}`,
+    name: `Talent multiplier ${equationNumber(employee)} times cost factor ${equationNumber(factor)} equals ${equationNumber(effective)}`,
+  };
+}
+
+export function formatBurnBreakdown(state) {
+  const { state: priced, taxRate } = pricedState(state);
   return `Burn ${formatCurrency(effectiveBurnRate(priced))} (base ${formatCurrency(baseBurnRate(taxRate))} · talent ×${formatTalentReadout(talentMultiplierOf(priced))} · talent cost ×${formatTalentCostFactor(talentCostFactorOf(priced))})`;
 }
 
@@ -319,15 +344,24 @@ export function triggerDiagramOverlay(state) {
     ? 'no employees'
     : mix.map((group) => `${group.department ?? 'unassigned'} ${group.headcount}`).join(', ');
   const taxRate = Number.isFinite(state.taxRate) ? state.taxRate : 0.25;
+  const priced = { ...state, taxRate };
+  const equation = talentEquation(priced);
+  const burn = effectiveBurnRate(priced);
+  const base = baseBurnRate(taxRate);
+  const hypeLabel = `Hype: ${formatHypePercent(state.company?.hype)}`;
   nodeLabels[3] = `Hire Staff\n(Tech / Marketing / Sales)\nTalent ×${formatTalentReadout(multiplier)}\n${headcounts}`;
-  nodeLabels[7] = `Launch / Market / Sell\nTrack Runway & Hype\n${formatBurnBreakdown({ ...state, taxRate })}`;
+  nodeLabels[7] = `Launch / Market / Sell\nTrack Runway & Hype\nBurn ${formatCurrency(burn)} (base ${formatCurrency(base)})\n${equation.visible}\n${hypeLabel}`;
+  const nodeAriaLabels = {
+    3: `Hire Staff. Talent multiplier ${formatTalentReadout(multiplier)}. ${headcounts}.`,
+    7: `Launch / Market / Sell. Burn ${formatCurrency(burn)}. Base burn ${formatCurrency(base)}. ${equation.name}. ${hypeLabel}.`,
+  };
 
   if (active.length === 0) {
     if (multiplierText) {
       nodeLabels['civic-infra'] = `${ORIGINAL_INFRA_LABEL}\n${multiplierText}`;
       edgeLabels['einfra-7'] = multiplierText;
     }
-    return { nodeLabels, edgeLabels, hypeNode: null };
+    return { nodeLabels, edgeLabels, nodeAriaLabels, hypeNode: null };
   }
 
   nodeLabels[5] = `${ORIGINAL_TRIGGER_LABEL}\n${active.map((trigger) => trigger.label).join(', ')}`;
@@ -345,7 +379,7 @@ export function triggerDiagramOverlay(state) {
   }
 
   if (Math.abs(hypeDelta) < 0.0005) {
-    return { nodeLabels, edgeLabels, hypeNode: null };
+    return { nodeLabels, edgeLabels, nodeAriaLabels, hypeNode: null };
   }
 
   const arrow = hypeDelta > 0 ? '▲' : '▼';
@@ -353,6 +387,7 @@ export function triggerDiagramOverlay(state) {
   return {
     nodeLabels,
     edgeLabels,
+    nodeAriaLabels,
     hypeNode: {
       id: 'hype',
       label: `Hype\n${arrow} hype ${signed}`,

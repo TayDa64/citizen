@@ -76,8 +76,15 @@ describe('world event trigger', () => {
     expect(talent).toHaveTextContent('No employees. Talent multiplier is 1.0000.');
     expect(document.querySelector('[data-id="3"]').textContent).toContain('Talent ×1.0000');
     expect(document.querySelector('[data-id="7"]').textContent).toContain(
-      'Burn $2,464 (base $2,200 · talent ×1.0000 · talent cost ×1.12)'
+      'Burn $2,464 (base $2,200)'
     );
+    expect(document.querySelector('[data-id="7"]').textContent).toContain(
+      'Talent ×1.0000 × cost factor 1.12 = 1.12'
+    );
+    expect(document.querySelector('[data-id="7"]').textContent).toContain('Hype: 30%');
+    expect(screen.getByRole('group', {
+      name: 'Talent multiplier 1 times cost factor 1.12 equals 1.12',
+    })).toBeInTheDocument();
     expect(screen.getByText(/Burn\/mo: \$2,464/)).toBeInTheDocument();
     expect(screen.getByText(/Active world event: Policy change: talent cost \+12%/)).toBeInTheDocument();
   });

@@ -32,9 +32,16 @@ function applyOverlayToNodes(nodes, taxRate, overlay) {
       continue;
     }
     const label = overlay.nodeLabels[node.id];
-    if (label && label !== node.data.label) {
+    const ariaLabel = overlay.nodeAriaLabels?.[node.id];
+    const labelChanged = Boolean(label) && label !== node.data.label;
+    const ariaChanged = ariaLabel !== undefined && ariaLabel !== node.ariaLabel;
+    if (labelChanged || ariaChanged) {
       changed = true;
-      next.push({ ...node, data: { ...node.data, label } });
+      next.push({
+        ...node,
+        ariaLabel: ariaLabel ?? node.ariaLabel,
+        data: { ...node.data, label: label ?? node.data.label },
+      });
       continue;
     }
     next.push(node);

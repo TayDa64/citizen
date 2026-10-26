@@ -32,6 +32,7 @@ test('applying, clearing, and toggling a world event removes the chart marker', 
   await expect(page.locator('.metrics-chart .highcharts-plot-band')).toHaveCount(0);
 
   const policy = page.getByRole('button', { name: /^Policy change / });
+  await expect(policy).toBeEnabled();
   await policy.click();
   await expect(page.locator('.metrics-chart .highcharts-plot-line-label')).toContainText(POLICY);
   let state = await chartMarkup(page);
@@ -97,7 +98,9 @@ test('event buttons expose a name that starts with the visible label', async ({ 
     .analyze();
   expect(idle.violations).toEqual([]);
 
-  await page.getByRole('button', { name: /^Policy change / }).click();
+  const policy = page.getByRole('button', { name: /^Policy change / });
+  await expect(policy).toBeEnabled();
+  await policy.click();
   const pressed = await new AxeBuilder({ page })
     .include('.trigger-panel')
     .include('.data-source')
