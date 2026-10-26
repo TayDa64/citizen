@@ -10,8 +10,91 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import CivicLeverNode from './nodes/CivicLeverNode';
+import { triggerDiagramOverlay } from './triggers';
 
 const nodeTypes = { civicLever: CivicLeverNode };
+const HYPE_NODE_STYLE = {
+  background: '#1e293b',
+  color: '#f8fafc',
+  border: '2px solid #fde68a',
+};
+
+function applyOverlayToNodes(nodes, taxRate, overlay) {
+  const existingHype = nodes.find((node) => node.id === 'hype');
+  let changed = false;
+  const next = [];
+
+  for (const node of nodes) {
+    if (node.id === 'hype') continue;
+    if (node.id === 'civic-tax' && node.data.value !== taxRate) {
+      changed = true;
+      next.push({ ...node, data: { ...node.data, value: taxRate } });
+      continue;
+    }
+    const label = overlay.nodeLabels[node.id];
+    if (label && label !== node.data.label) {
+      changed = true;
+      next.push({ ...node, data: { ...node.data, label } });
+      continue;
+    }
+    next.push(node);
+  }
+
+  if (overlay.hypeNode) {
+    const label = overlay.hypeNode.label;
+    if (!existingHype || existingHype.data.label !== label) changed = true;
+    next.push(
+      existingHype
+        ? { ...existingHype, data: { ...existingHype.data, label }, style: HYPE_NODE_STYLE }
+        : {
+            id: 'hype',
+            data: { label },
+            position: { x: 640, y: 70 },
+            style: HYPE_NODE_STYLE,
+          }
+    );
+  } else if (existingHype) {
+    changed = true;
+  }
+
+  return changed ? next : nodes;
+}
+
+function applyOverlayToEdges(edges, overlay) {
+  const existingHype = edges.find((edge) => edge.id === 'e5-hype');
+  let changed = false;
+  const next = [];
+
+  for (const edge of edges) {
+    if (edge.id === 'e5-hype') continue;
+    const label = overlay.edgeLabels[edge.id];
+    if (label !== undefined && label !== edge.label) {
+      changed = true;
+      next.push({ ...edge, label });
+      continue;
+    }
+    next.push(edge);
+  }
+
+  if (overlay.hypeNode) {
+    const label = overlay.hypeNode.edgeLabel;
+    if (!existingHype || existingHype.label !== label) changed = true;
+    next.push(
+      existingHype
+        ? { ...existingHype, label }
+        : {
+            id: 'e5-hype',
+            source: '5',
+            target: 'hype',
+            label,
+          }
+    );
+  } else if (existingHype) {
+    changed = true;
+  }
+
+  return changed ? next : edges;
+}
 
 export default function WorkflowDiagram({ state, setState, onTick }) {
   const initialNodes = [
@@ -25,6 +108,8 @@ export default function WorkflowDiagram({ state, setState, onTick }) {
     {
       id: 'civic-tax',
       type: 'civicLever',
+      initialWidth: 200,
+      initialHeight: 120,
       data: {
         label: 'Civic Lever:\nTax Policy',
         value: state.taxRate,
@@ -60,16 +145,19 @@ export default function WorkflowDiagram({ state, setState, onTick }) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
-  // Keep civic-tax node value in sync with state
+  // Keep the tax lever and any world-event labels in sync with simulation state.
   useEffect(() => {
-    setNodes((nds) =>
-      nds.map((n) =>
-        n.id === 'civic-tax'
-          ? { ...n, data: { ...n.data, value: state.taxRate } }
-          : n
-      )
-    );
-  }, [state.taxRate, setNodes]);
+    const overlay = triggerDiagramOverlay(state);
+    setNodes((nds) => applyOverlayToNodes(nds, state.taxRate, overlay));
+    setEdges((eds) => applyOverlayToEdges(eds, overlay));
+  }, [
+    state.taxRate,
+    state.company.hype,
+    state.company.talentCost,
+    state.activeTriggers,
+    setNodes,
+    setEdges,
+  ]);
 
   const onConnect = useCallback(
     (params) => setEdges((eds) => addEdge({ ...params, animated: true }, eds)),
