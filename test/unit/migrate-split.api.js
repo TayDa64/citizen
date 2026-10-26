@@ -65,12 +65,18 @@ test('migration 003 is additive and reversible in source', () => {
   ]);
 });
 
-test('api suite filenames stay outside the vitest default include', () => {
-  const files = fs.readdirSync('test/api');
+test('node:test filenames stay outside the vitest default include', () => {
   const vitestDefault = /\.(test|spec)\.(c|m)?[jt]sx?$/;
-  assert.ok(files.length > 0);
-  for (const file of files) {
-    assert.equal(vitestDefault.test(file), false, file);
-    assert.equal(file.endsWith('.api.js') || file === 'throwaway-db.js', true, file);
+  for (const dir of ['test/unit', 'test/api']) {
+    const files = fs.readdirSync(dir);
+    assert.ok(files.length > 0, dir);
+    for (const file of files) {
+      assert.equal(vitestDefault.test(file), false, `${dir}/${file}`);
+      assert.equal(
+        file.endsWith('.api.js') || file === 'throwaway-db.js',
+        true,
+        `${dir}/${file}`
+      );
+    }
   }
 });

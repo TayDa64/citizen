@@ -1,77 +1,273 @@
+import { useEffect, useState } from 'react';
 import { Chart, Title } from '@highcharts/react';
 import { LineSeries } from '@highcharts/react/series/Line';
+import { talentCostShowsDollars } from '../dataSource';
+import { BASE_TALENT_COST, previewBurnRate } from '../simulation';
+import {
+  baseBurnRate,
+  effectiveMultiplierOf,
+  formatTalentCostFactor,
+  formatTalentReadout,
+  talentCostFactorClampOf,
+  talentCostFactorOf,
+  talentMixOf,
+  talentMultiplierOf,
+} from '../talentMultiplier';
+import {
+  deltaPhrase,
+  describeTrigger,
+  clampHype,
+  clampTalentCost,
+  formatBurnBreakdown,
+  formatCurrency,
+  formatHypePercent,
+  formatTalentDollars,
+  formatTalentMultiplier,
+  talentCostFactorClampNote,
+  talentEquation,
+} from '../triggers';
+import { loadChartAccessibility } from './loadChartAccessibility';
+import {
+  axisGuideOptions,
+  metricsChartDescription,
+  seriesDataWithTriggerNotes,
+  simulatedMonthLabel,
+  triggerChartMarkers,
+} from './chartModel';
 
-import { describeTrigger, formatTalentDollars } from '../triggerContract';
+const LIGHT_LABEL = { color: '#e2e8f0', fontSize: '12px' };
 
-export default function Dashboard({ state }) {
-  const { cash, burnRate, hype, talentCost } = state.history;
-  const categories = cash.map((_, i) => `T${i}`);
-  const triggerCategories = (hype || []).map((_, i) => `E${i}`);
+function ReadoutRow({ label, value }) {
+  return (
+    <div>
+      <dt>{label}</dt>
+      <dd>{value}</dd>
+    </div>
+  );
+}
+
+function shownHype(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? clampHype(numeric) : 0;
+}
+
+function shownTalent(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? clampTalentCost(numeric) : 0;
+}
+
+function formatTalentValue(value, dataSource, baseline) {
+  if (talentCostShowsDollars(dataSource)) return formatTalentDollars(value);
+  const numeric = Number(value);
+  const base = Number(baseline);
+  const ratio = Number.isFinite(numeric) && Number.isFinite(base) && base > 0 ? numeric / base : numeric;
+  return formatTalentMultiplier(Number.isFinite(ratio) ? ratio : 0);
+}
+
+function TalentMixTable({ rows }) {
+  return (
+    <table className="talent-mix">
+      <caption>Talent mix</caption>
+      <thead>
+        <tr>
+          <th scope="col">Department</th>
+          <th scope="col">Headcount</th>
+          <th scope="col">Average skill</th>
+          <th scope="col">Weight</th>
+          <th scope="col">Contribution</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => (
+          <tr key={`${row.department ?? 'unknown'}-${row.headcount}-${row.avgSkill}`}>
+            <td>{row.department ?? 'Unassigned'}</td>
+            <td>{String(row.headcount)}</td>
+            <td>{formatTalentReadout(row.avgSkill)}</td>
+            <td>{formatTalentReadout(row.weight)}</td>
+            <td>{formatTalentReadout(row.contribution)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function TalentBurnSummary({ state }) {
+  const mix = talentMixOf(state);
+  const equation = talentEquation(state);
 
   return (
-    <div style={{ padding: '1rem', background: '#12121f', color: '#e0e0e0' }}>
-      <h3 style={{ margin: '0 0 0.5rem' }}>Company Metrics</h3>
-      <p>
-        Cash: <span data-testid="cash-value">${state.company.cash.toFixed(0)}</span>
-        {' '}| Burn/mo: <span data-testid="burn-value">${state.company.burnRate}</span>
-        {' '}| Tax: {(state.taxRate * 100).toFixed(0)}%
-        {' '}| Hype: <span data-testid="hype-value">{Math.round(state.company.hype * 100)}%</span>
-        {' '}| Talent cost: <span data-testid="talent-cost-value">{formatTalentDollars(state.company.talentCost)}</span>
+    <section className="talent-burn" aria-labelledby="talent-burn-heading">
+      <h3 id="talent-burn-heading">Talent and burn</h3>
+      <p>{formatBurnBreakdown(state)}</p>
+      <p data-testid="talent-equation" role="group" aria-label={equation.name}>
+        {equation.visible}
       </p>
-      <Chart
-        options={{
-          chart: { backgroundColor: 'transparent', height: 220 },
-          title: { text: null },
-          xAxis: { categories },
-          yAxis: { title: { text: null } },
-          legend: { enabled: true },
-          credits: { enabled: false }
-        }}
-      >
-        <Title>Cash & Burn Rate</Title>
-        <LineSeries name="Cash" data={cash} color="#4ade80" />
-        <LineSeries name="Burn Rate" data={burnRate} color="#f87171" />
-      </Chart>
-      <Chart
-        options={{
-          chart: { backgroundColor: 'transparent', height: 160 },
-          title: { text: null },
-          xAxis: { categories: triggerCategories },
-          yAxis: { title: { text: null }, min: 0, max: 1 },
-          legend: { enabled: true },
-          credits: { enabled: false }
-        }}
-      >
-        <Title>Hype</Title>
-        <LineSeries name="Hype" data={hype} color="#60a5fa" />
-      </Chart>
-      <Chart
-        options={{
-          chart: { backgroundColor: 'transparent', height: 160 },
-          title: { text: null },
-          xAxis: { categories: triggerCategories },
-          yAxis: { title: { text: null } },
-          legend: { enabled: true },
-          credits: { enabled: false }
-        }}
-      >
-        <Title>Talent Cost</Title>
-        <LineSeries name="Talent cost" data={talentCost} color="#fbbf24" />
-      </Chart>
-      <div data-testid="trigger-list">
-        <h4 style={{ margin: '0.5rem 0' }}>Real-world triggers</h4>
-        {state.triggers.length === 0 ? (
-          <p data-testid="trigger-empty">No real-world triggers yet.</p>
+      {mix.length > 0 ? (
+        <TalentMixTable rows={mix} />
+      ) : (
+        <p>No employees. Talent multiplier is 1.0000.</p>
+      )}
+    </section>
+  );
+}
+
+function WorldEventEffect({ state }) {
+  const active = state.activeTriggers ?? [];
+  if (active.length === 0) return null;
+
+  const dataSource = state.dataSource === 'api' ? 'api' : 'local';
+  const rawBefore = state.baselines ?? { hype: state.company.hype, talentCost: BASE_TALENT_COST };
+  const before = { hype: shownHype(rawBefore.hype), talentCost: shownTalent(rawBefore.talentCost) };
+  const after = {
+    hype: shownHype(state.company.hype),
+    talentCost: shownTalent(state.company.talentCost ?? before.talentCost),
+  };
+
+  return (
+    <section className="trigger-readout" aria-labelledby="world-event-effect-heading">
+      <h3 id="world-event-effect-heading">World event effect</h3>
+      <p>{state.lastTriggerChange?.announcement ?? describeTrigger(active[active.length - 1])}</p>
+      <ul className="trigger-readout__list">
+        {active.map((trigger) => (
+          <li key={trigger.id}>{describeTrigger(trigger)}</li>
+        ))}
+      </ul>
+      <dl className="trigger-readout__stats">
+        <ReadoutRow label="Hype before" value={formatHypePercent(before.hype)} />
+        <ReadoutRow
+          label="Hype after"
+          value={`${formatHypePercent(after.hype)} (${deltaPhrase(after.hype - before.hype)})`}
+        />
+        <ReadoutRow label="Talent cost before" value={formatTalentValue(before.talentCost, dataSource, before.talentCost)} />
+        <ReadoutRow
+          label="Talent cost after"
+          value={`${formatTalentValue(after.talentCost, dataSource, before.talentCost)} (${deltaPhrase((after.talentCost - before.talentCost) / (before.talentCost || 1))})`}
+        />
+      </dl>
+    </section>
+  );
+}
+
+export default function Dashboard({ state }) {
+  const factorClampNote = talentCostFactorClampNote(talentCostFactorClampOf(state));
+  const { cash, burnRate } = state.history;
+  const categories = cash.map((_, i) => simulatedMonthLabel(i));
+  const markers = triggerChartMarkers(state);
+  const guides = axisGuideOptions(markers);
+  const description = metricsChartDescription(state);
+  const [ChartAccessibility, setChartAccessibility] = useState(undefined);
+  const xAxis = {
+    categories,
+    labels: { style: LIGHT_LABEL },
+    lineColor: '#64748b',
+    tickColor: '#64748b',
+    plotBands: guides.plotBands,
+    plotLines: guides.plotLines,
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    loadChartAccessibility()
+      .then((module) => {
+        if (!cancelled) setChartAccessibility(() => module.Accessibility);
+      })
+      .catch(() => {
+        if (!cancelled) setChartAccessibility(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <div className="dashboard" style={{ padding: '1rem', background: '#12121f', color: '#e0e0e0' }}>
+      <h3 style={{ margin: '0 0 0.5rem' }}>Company Metrics (Slice 1)</h3>
+      <p>
+        <span data-testid="cash-value">Cash: ${state.company.cash.toFixed(0)}</span>
+        {' | '}
+        <span id="burn-value" data-testid="burn-value">Burn/mo: {formatCurrency(previewBurnRate(state))}</span>
+        {' | '}
+        <span id="base-burn-value" data-testid="base-burn-value">Base burn: {formatCurrency(baseBurnRate(state.taxRate))}</span>
+        {' | '}
+        <span id="talent-multiplier-value" data-testid="talent-multiplier-value">Talent multiplier: {formatTalentReadout(talentMultiplierOf(state))}</span>
+        {' | '}
+        <span
+          id="talent-cost-factor-value"
+          data-testid="talent-cost-factor-value"
+          role="group"
+          aria-label={`Talent cost factor ${formatTalentCostFactor(talentCostFactorOf(state))}${factorClampNote ? `, ${factorClampNote}` : ''}`}
+        >
+          Talent cost factor: {formatTalentCostFactor(talentCostFactorOf(state))}
+        </span>
+        {factorClampNote ? (
+          <>
+            {' '}
+            <span data-testid="talent-cost-factor-clamp">{factorClampNote}</span>
+          </>
+        ) : null}
+        {' | '}
+        <span id="effective-multiplier-value" data-testid="effective-multiplier-value">Effective multiplier: {formatTalentCostFactor(effectiveMultiplierOf(state))}</span>
+        {' | '}
+        Tax: {(state.taxRate * 100).toFixed(0)}%
+      </p>
+      <TalentBurnSummary state={state} />
+      <WorldEventEffect state={state} />
+      <figure className="metrics-chart" aria-busy={ChartAccessibility === undefined}>
+        <figcaption id="metrics-chart-description" className="chart-caption">
+          {description}
+        </figcaption>
+        {ChartAccessibility === undefined ? (
+          <div className="metrics-chart__pending" style={{ minHeight: 220 }} />
         ) : (
-          <ul style={{ margin: 0, paddingLeft: '1.2rem' }}>
-            {state.triggers.map((trigger) => (
-              <li key={trigger.id} data-testid="trigger-row">
-                {describeTrigger(trigger)} — {trigger.source}
-              </li>
-            ))}
-          </ul>
+          <Chart
+            options={{
+              chart: { backgroundColor: 'transparent', height: markers.length > 0 ? 260 : 220 },
+              title: { text: null },
+              xAxis,
+              yAxis: {
+                title: { text: null },
+                labels: { style: LIGHT_LABEL },
+                gridLineColor: '#334155',
+              },
+              legend: {
+                enabled: true,
+                itemStyle: { color: '#f8fafc' },
+                itemHoverStyle: { color: '#ffffff' },
+              },
+              credits: { enabled: false },
+            }}
+          >
+            <Title style={{ color: '#f8fafc', fontSize: '16px', fontWeight: '600' }}>Cash & Burn Rate</Title>
+            {ChartAccessibility ? (
+              <ChartAccessibility
+                linkedDescription="metrics-chart-description"
+                series={{ describeSingleSeries: true }}
+              />
+            ) : null}
+            <LineSeries
+              name="Cash"
+              data={seriesDataWithTriggerNotes(cash, state.activeTriggers, 'Cash')}
+              color="#4ade80"
+              options={{
+                accessibility: {
+                  description: 'Company cash balance in dollars at each simulated month.',
+                },
+              }}
+            />
+            <LineSeries
+              name="Burn Rate"
+              data={seriesDataWithTriggerNotes(burnRate, state.activeTriggers, 'Burn rate', 'next-month')}
+              color="#f87171"
+              options={{
+                accessibility: {
+                  description: 'Monthly burn rate in dollars after tax, the employee talent multiplier, and the talent-cost factor. The talent-cost factor is limited to 0.10× through 3.00×. A talent-cost event is included in this series on the following month.',
+                },
+              }}
+            />
+          </Chart>
         )}
-      </div>
+      </figure>
     </div>
   );
 }

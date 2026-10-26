@@ -10,18 +10,100 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import CivicLeverNode from './nodes/CivicLeverNode';
-import { describeTrigger, formatTalentDollars } from './triggerContract';
+import { triggerDiagramOverlay } from './triggers';
 
 const nodeTypes = { civicLever: CivicLeverNode };
+const HYPE_NODE_STYLE = {
+  background: '#1e293b',
+  color: '#f8fafc',
+  border: '2px solid #fde68a',
+};
 
-export default function WorkflowDiagram({
-  state,
-  setState,
-  onTick,
-  onMockTrigger,
-  triggerError,
-  triggerPending
-}) {
+function applyOverlayToNodes(nodes, taxRate, overlay) {
+  const existingHype = nodes.find((node) => node.id === 'hype');
+  let changed = false;
+  const next = [];
+
+  for (const node of nodes) {
+    if (node.id === 'hype') continue;
+    if (node.id === 'civic-tax' && node.data.value !== taxRate) {
+      changed = true;
+      next.push({ ...node, data: { ...node.data, value: taxRate } });
+      continue;
+    }
+    const label = overlay.nodeLabels[node.id];
+    const ariaLabel = overlay.nodeAriaLabels?.[node.id];
+    const labelChanged = Boolean(label) && label !== node.data.label;
+    const ariaChanged = ariaLabel !== undefined && ariaLabel !== node.ariaLabel;
+    if (labelChanged || ariaChanged) {
+      changed = true;
+      next.push({
+        ...node,
+        ariaLabel: ariaLabel ?? node.ariaLabel,
+        data: { ...node.data, label: label ?? node.data.label },
+      });
+      continue;
+    }
+    next.push(node);
+  }
+
+  if (overlay.hypeNode) {
+    const label = overlay.hypeNode.label;
+    if (!existingHype || existingHype.data.label !== label) changed = true;
+    next.push(
+      existingHype
+        ? { ...existingHype, data: { ...existingHype.data, label }, style: HYPE_NODE_STYLE }
+        : {
+            id: 'hype',
+            data: { label },
+            position: { x: 640, y: 70 },
+            style: HYPE_NODE_STYLE,
+          }
+    );
+  } else if (existingHype) {
+    changed = true;
+  }
+
+  return changed ? next : nodes;
+}
+
+function applyOverlayToEdges(edges, overlay) {
+  const existingHype = edges.find((edge) => edge.id === 'e5-hype');
+  let changed = false;
+  const next = [];
+
+  for (const edge of edges) {
+    if (edge.id === 'e5-hype') continue;
+    const label = overlay.edgeLabels[edge.id];
+    if (label !== undefined && label !== edge.label) {
+      changed = true;
+      next.push({ ...edge, label });
+      continue;
+    }
+    next.push(edge);
+  }
+
+  if (overlay.hypeNode) {
+    const label = overlay.hypeNode.edgeLabel;
+    if (!existingHype || existingHype.label !== label) changed = true;
+    next.push(
+      existingHype
+        ? { ...existingHype, label }
+        : {
+            id: 'e5-hype',
+            source: '5',
+            target: 'hype',
+            label,
+          }
+    );
+  } else if (existingHype) {
+    changed = true;
+  }
+
+  return changed ? next : edges;
+}
+
+export default function WorkflowDiagram({ state, setState, onTick }) {
   const initialNodes = [
     { id: '1', type: 'input', data: { label: 'Found Startup\n(Citizen)' }, position: { x: 300, y: 0 } },
     { id: '2', data: { label: 'Choose Idea\n+ Target Market' }, position: { x: 300, y: 100 } },
@@ -33,6 +115,8 @@ export default function WorkflowDiagram({
     {
       id: 'civic-tax',
       type: 'civicLever',
+      initialWidth: 200,
+      initialHeight: 120,
       data: {
         label: 'Civic Lever:\nTax Policy',
         value: state.taxRate,
@@ -68,46 +152,25 @@ export default function WorkflowDiagram({
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
-  // Keep lever readouts in sync. civic-tax stays the tax control.
+  // Keep the tax lever and any world-event labels in sync with simulation state.
   useEffect(() => {
-    const latest = state.triggers[0];
-    setNodes((nds) =>
-      nds.map((n) => {
-        if (n.id === 'civic-tax') {
-          return { ...n, data: { ...n.data, value: state.taxRate } };
-        }
-        if (n.id === '5') {
-          const detail = latest ? `\n${describeTrigger(latest)}` : '';
-          return {
-            ...n,
-            data: {
-              ...n.data,
-              label: `Real-World Triggers\n(Firecrawl + Events)${detail}`
-            }
-          };
-        }
-        if (n.id === 'civic-infra') {
-          return {
-            ...n,
-            data: {
-              ...n.data,
-              label: `Civic Lever:\nInfrastructure / Talent\nTalent cost: ${formatTalentDollars(state.company.talentCost)}`
-            }
-          };
-        }
-        if (n.id === '7') {
-          return {
-            ...n,
-            data: {
-              ...n.data,
-              label: `Launch / Market / Sell\nTrack Runway & Hype\nHype: ${Math.round(state.company.hype * 100)}%`
-            }
-          };
-        }
-        return n;
-      })
-    );
-  }, [state, setNodes]);
+    const overlay = triggerDiagramOverlay(state);
+    setNodes((nds) => applyOverlayToNodes(nds, state.taxRate, overlay));
+    setEdges((eds) => applyOverlayToEdges(eds, overlay));
+  }, [
+    state.taxRate,
+    state.company.hype,
+    state.company.talentCost,
+    state.talentMultiplier,
+    state.talentMix,
+    state.talentCostFactor,
+    state.effectiveMultiplier,
+    state.employees,
+    state.dataSource,
+    state.activeTriggers,
+    setNodes,
+    setEdges,
+  ]);
 
   const onConnect = useCallback(
     (params) => setEdges((eds) => addEdge({ ...params, animated: true }, eds)),
@@ -115,11 +178,10 @@ export default function WorkflowDiagram({
   );
 
   return (
-    <div>
+    <div style={{ width: '100%', height: '60vh' }}>
       <h2 style={{ textAlign: 'center', margin: '8px 0', color: '#e0e0e0' }}>
         Citizen — Startup + Civic Workflow
       </h2>
-      <div style={{ width: '100%', height: '60vh' }}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -133,41 +195,10 @@ export default function WorkflowDiagram({
         <Controls />
         <MiniMap />
       </ReactFlow>
-      </div>
-      <div style={{ textAlign: 'center', margin: '8px 0 12px' }}>
-        <button type="button" onClick={onTick} style={{ padding: '6px 16px' }}>
+      <div style={{ textAlign: 'center', marginTop: 8 }}>
+        <button onClick={onTick} style={{ padding: '6px 16px' }}>
           Advance Month (apply effects)
         </button>
-        <button
-          type="button"
-          data-testid="mock-hype-trigger"
-          onClick={() => onMockTrigger?.('news_spike')}
-          disabled={triggerPending}
-          style={{ padding: '6px 16px', marginLeft: 8 }}
-        >
-          Apply news spike
-        </button>
-        <button
-          type="button"
-          data-testid="mock-talent-trigger"
-          onClick={() => onMockTrigger?.('policy_change')}
-          disabled={triggerPending}
-          style={{ padding: '6px 16px', marginLeft: 8 }}
-        >
-          Apply policy change
-        </button>
-        <button
-          type="button"
-          data-testid="mock-market-trigger"
-          onClick={() => onMockTrigger?.('market_shift')}
-          disabled={triggerPending}
-          style={{ padding: '6px 16px', marginLeft: 8 }}
-        >
-          Apply market shift
-        </button>
-        {triggerError ? (
-          <p data-testid="trigger-error" style={{ color: '#f87171' }}>{triggerError}</p>
-        ) : null}
       </div>
     </div>
   );

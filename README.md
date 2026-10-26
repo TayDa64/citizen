@@ -18,6 +18,8 @@ Forked conceptually from civic-brief ideas and expanded into a full game backend
 4. `npm run dev`
 5. Extend the WorkflowDiagram.jsx and add backend schema from previous design.
 
+`npm run dev` proxies `/api` to `http://127.0.0.1:8787`. The API listens on port 8787 unless `PORT` is set. A non-default `PORT` needs the same change in the Vite proxy `target` in `vite.config.js`. `changeOrigin` rewrites `Host` to that target, and the API accepts only `localhost`, `127.0.0.1`, and `[::1]` on the bound port.
+
 See the React Flow component in `src/WorkflowDiagram.jsx` for the core gameplay loop visualization.
 
 ## Local Postgres
@@ -28,6 +30,14 @@ The API binds to loopback and refuses a `DATABASE_URL` whose host, after `pg-con
 
 A company inserted while v1 triggers are already active keeps its own hype and talent cost until the next trigger create, replace, delete, or clear. That write recomputes every company. A row that does not yet have a baseline is captured as it stands, so it does not inherit effects applied before it existed.
 
+## Browser tests against the API
+
+`npm run test:browser` skips the live API check unless `CITIZEN_API_E2E=1`. Playwright runs `npm run build` and then `vite preview`, so the API base is fixed at build time. Set `VITE_CITIZEN_API=/api` in that build. The preview server proxies `/api` to `http://127.0.0.1:8787`, which keeps the Host header on an address the API allows. When `CITIZEN_API_E2E` is set, every browser test calls `DELETE /api/triggers` before it starts and after it finishes.
+
 ## Tests
 
-`npm test` runs the API suite (`npm run test:api`). Those files live in `test/api` and are named `*.api.js`, which is outside Vitest's default include (`**/*.{test,spec}.?(c|m)[jt]s?(x)`). The frontend Vitest config should set `include` to `src/**` so it does not collect this suite.
+`npm test` runs the database-free backend suite in `test/unit`, then the UI suite (`vitest run`). Neither needs Postgres. CI's `npm run test --if-present` uses this script.
+
+`npm run test:api` runs the Postgres suite in `test/api`. That suite creates and drops `citizen_slice2_test_*` databases on the local socket and does not read `DATABASE_URL`.
+
+Both backend suites use `*.api.js` names, which sit outside Vitest's include (`src/**/*.{test,spec}.{js,jsx}`).
