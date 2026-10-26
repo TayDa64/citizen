@@ -115,7 +115,7 @@ export default function WorkflowDiagram({
             ...n,
             data: {
               ...n.data,
-              label: `Launch / Market / Sell\nTrack Runway & Hype\nBurn: $${state.company.burnRate} (base $${state.company.baseBurnRate ?? state.company.burnRate})\nTalent ×${(state.company.talentMultiplier ?? 1).toFixed(4)}\nHype: ${Math.round(state.company.hype * 100)}%`
+              label: `Launch / Market / Sell\nTrack Runway & Hype\nBurn: $${state.company.burnRate} (base $${state.company.baseBurnRate ?? state.company.burnRate})\nTalent ×${(state.company.talentMultiplier ?? 1).toFixed(4)} × cost ${(state.company.talentCostFactor ?? 1).toFixed(4)} = ${(state.company.effectiveMultiplier ?? 1).toFixed(4)}\nHype: ${Math.round(state.company.hype * 100)}%`
             }
           };
         }

@@ -5,13 +5,15 @@ import {
   stackTriggerEffects,
   validateTriggerRecord
 } from './triggerContract.js';
-import { burnFromTax, composeTalentMultiplier } from './talentBurn.js';
+import { burnFromTax, composeTalentMultiplier, talentCostFactor } from './talentBurn.js';
 
-// Tax → burn is Slice 1, then one employee talent multiplier.
-// burnRate = round(2000 * (1 + taxRate * 0.4) * talentMultiplier), rounded once.
+// Tax → burn is Slice 1, then the employee talent multiplier and the talent-cost factor.
+// burnRate = round(2000 * (1 + taxRate * 0.4) * talentMultiplier * talentCostFactor), once.
 // baseBurnRate = round(2000 * (1 + taxRate * 0.4)).
-// No employees keeps talentMultiplier at 1, so the Slice 1 integers stay put.
-// Trigger talentCost does not enter this formula.
+// talentMultiplier is the employee mean (exactly 1 with no employees).
+// talentCostFactor is talentCost / baselines.talentCost (exactly 1 with no trigger).
+// effectiveMultiplier is that product. A second tick recomputes this product;
+// it does not multiply the previous burnRate again.
 
 export const initialState = {
   taxRate: 0.25,
@@ -20,6 +22,8 @@ export const initialState = {
     burnRate: 2000,
     baseBurnRate: 2000,
     talentMultiplier: 1,
+    talentCostFactor: 1,
+    effectiveMultiplier: 1,
     talentMix: [],
     hype: 0.3,
     productQuality: 0.4,
@@ -39,16 +43,23 @@ export const initialState = {
   triggers: []
 };
 
-export function applyEffects(state) {
-  const next = structuredClone(state);
+function assignBurn(next) {
   const { talentMultiplier, talentMix } = composeTalentMultiplier({
     employees: next.employees
   });
-  const burn = burnFromTax(next.taxRate, talentMultiplier);
+  const factor = talentCostFactor(next.company.talentCost, next.baselines?.talentCost);
+  const burn = burnFromTax(next.taxRate, talentMultiplier, factor);
   next.company.talentMultiplier = talentMultiplier;
   next.company.talentMix = talentMix;
+  next.company.talentCostFactor = burn.talentCostFactor;
+  next.company.effectiveMultiplier = burn.effectiveMultiplier;
   next.company.baseBurnRate = burn.baseBurnRate;
   next.company.burnRate = burn.burnRate;
+}
+
+export function applyEffects(state) {
+  const next = structuredClone(state);
+  assignBurn(next);
   // Simple tick: cash decreases by burn
   next.company.cash = Math.max(0, next.company.cash - next.company.burnRate / 12);
   next.history.cash.push(Math.round(next.company.cash));
@@ -88,5 +99,6 @@ export function applyTriggerEffect(state, trigger) {
   next.triggers = triggers;
   next.history.hype = appendHistory(next.history.hype, next.company.hype);
   next.history.talentCost = appendHistory(next.history.talentCost, next.company.talentCost);
+  assignBurn(next);
   return next;
 }

@@ -19,15 +19,17 @@ import { roundTo } from './triggerContract.js';
 // talentMix groups that mean by department. contribution is the group's share
 // of the multiplier. Shares are rounded to 4 decimal places, and the last
 // group in display order absorbs the residual so the shares sum to
-// talentMultiplier. Display order is tech, marketing, sales, then other
-// names A-Z, then NULL.
+// talentMultiplier when the mix is non-empty. An empty mix means
+// talentMultiplier is exactly 1. Display order is tech, marketing, sales,
+// then other names A-Z, then NULL.
 //
-// effect.talentCost does not feed this multiplier. APPLY_TALENT_COST_TO_BURN
-// is the single switch for a later product decision: when it is true,
-// composeTalentMultiplier multiplies by triggerFactor (for example
-// talentCost / baselines.talentCost). It is false.
+// talentMultiplier stays that employee mean. Trigger talent cost does not
+// scale it or the mix. talentCostFactor is talentCost / baselines.talentCost.
+// It is 1 when there is no movement from the baseline, the baseline is
+// missing, or the baseline is 0. A stacked talent cost of 0 (the -5 delta
+// floors the dollar cost at 0) makes the factor 0, and burn becomes 0.
+// effectiveMultiplier is the product. Both factors are finite and >= 0.
 
-export const APPLY_TALENT_COST_TO_BURN = false;
 export const BASE_MONTHLY_BURN = 2000;
 
 const DEPARTMENT_WEIGHTS = Object.freeze({
@@ -173,40 +175,67 @@ function profileFromEmployees(employees) {
   return { talentMultiplier, talentMix };
 }
 
-export function scaleTalentMultiplier(profile, triggerFactor) {
-  if (!Number.isFinite(triggerFactor) || triggerFactor < 0) {
-    throw new Error('triggerFactor must be a finite number >= 0');
-  }
-  const talentMultiplier = roundTo(profile.talentMultiplier * triggerFactor, 4);
-  const talentMix = absorbContributions(
-    profile.talentMix.map((group) => ({
-      ...group,
-      contribution: group.contribution * triggerFactor
-    })),
-    talentMultiplier
-  );
-  return { talentMultiplier, talentMix };
+export function composeTalentMultiplier({ employees } = {}) {
+  return profileFromEmployees(employees);
 }
 
-export function composeTalentMultiplier({ employees, triggerFactor = 1 } = {}) {
-  const profile = profileFromEmployees(employees);
-  if (!APPLY_TALENT_COST_TO_BURN) return profile;
-  return scaleTalentMultiplier(profile, triggerFactor);
+function nonNegativeFinite(value, fallback) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric < 0) return fallback;
+  return numeric;
 }
 
-export function burnFromTax(taxRate, talentMultiplier) {
-  const taxTerm = BASE_MONTHLY_BURN * (1 + taxRate * 0.4);
+export function talentCostFactor(talentCost, baselineTalentCost) {
+  const baseline = Number(baselineTalentCost);
+  if (baselineTalentCost == null || baselineTalentCost === '') return 1;
+  if (!Number.isFinite(baseline) || baseline <= 0) return 1;
+  if (talentCost == null || talentCost === '') return 1;
+  const cost = Number(talentCost);
+  if (!Number.isFinite(cost)) return 1;
+  if (cost <= 0) return 0;
+  const factor = cost / baseline;
+  if (!Number.isFinite(factor) || factor < 0) return 0;
+  return roundTo(factor, 4);
+}
+
+export function effectiveMultiplier(talentMultiplier, costFactor) {
+  const employee = nonNegativeFinite(talentMultiplier, 1);
+  const factor = nonNegativeFinite(costFactor, 1);
+  const product = employee * factor;
+  if (!Number.isFinite(product) || product < 0) return 0;
+  return roundTo(product, 4);
+}
+
+function publishedFactor(costFactor) {
+  const factor = nonNegativeFinite(costFactor, 1);
+  if (factor === 0) return 0;
+  return roundTo(factor, 4);
+}
+
+export function burnFromTax(taxRate, talentMultiplier, costFactor = 1) {
+  const rate = Number(taxRate);
+  const safeRate = Number.isFinite(rate) ? rate : 0;
+  const taxTerm = BASE_MONTHLY_BURN * (1 + safeRate * 0.4);
+  const employee = nonNegativeFinite(talentMultiplier, 1);
+  const factor = publishedFactor(costFactor);
   return {
     baseBurnRate: Math.round(taxTerm),
-    burnRate: Math.round(taxTerm * talentMultiplier)
+    burnRate: Math.round(taxTerm * employee * factor),
+    talentCostFactor: factor,
+    effectiveMultiplier: effectiveMultiplier(employee, factor)
   };
 }
 
-export function burnFromBase(baseBurnRate, talentMultiplier) {
+export function burnFromBase(baseBurnRate, talentMultiplier, costFactor = 1) {
   const base = Number(baseBurnRate);
   const safeBase = Number.isFinite(base) ? base : 0;
+  const employee = nonNegativeFinite(talentMultiplier, 1);
+  const factor = publishedFactor(costFactor);
+  const effective = effectiveMultiplier(employee, factor);
   return {
     baseBurnRate: safeBase,
-    burnRate: Math.round(safeBase * talentMultiplier)
+    burnRate: Math.round(safeBase * effective),
+    talentCostFactor: factor,
+    effectiveMultiplier: effective
   };
 }

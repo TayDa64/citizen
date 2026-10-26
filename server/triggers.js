@@ -9,7 +9,7 @@ import {
   validateTriggerPayload,
   validateTriggerRecord
 } from '../src/triggerContract.js';
-import { burnFromBase, composeTalentMultiplier } from '../src/talentBurn.js';
+import { burnFromBase, composeTalentMultiplier, talentCostFactor } from '../src/talentBurn.js';
 
 const METRICS = {
   hype: { objectName: 'hype', bounds: HYPE_BOUNDS, op: 'add' },
@@ -324,7 +324,23 @@ export async function listCompanies(pool) {
       employees: employeesByCompany.get(row.id) ?? []
     });
     const talentMultiplier = finiteRounded(profile.talentMultiplier, 4) ?? 1;
-    const burn = burnFromBase(finiteRounded(row.burn_rate, 2) ?? 0, talentMultiplier);
+    const talentCost = firstFinite(
+      2,
+      row.talent_cost,
+      row.talent_cost_baseline,
+      TALENT_COST_BOUNDS.fallback
+    );
+    const baselines = {
+      hype: baselineNumber(row.hype_baseline, row.hype, HYPE_BOUNDS.fallback, 4),
+      talentCost: baselineNumber(
+        row.talent_cost_baseline,
+        row.talent_cost,
+        TALENT_COST_BOUNDS.fallback,
+        2
+      )
+    };
+    const factor = talentCostFactor(talentCost, baselines.talentCost);
+    const burn = burnFromBase(finiteRounded(row.burn_rate, 2) ?? 0, talentMultiplier, factor);
     const talentMix = (profile.talentMix ?? []).map((group) => ({
       department: group.department == null || group.department === '' ? null : String(group.department),
       headcount: finiteRounded(group.headcount, 0) ?? 0,
@@ -339,23 +355,12 @@ export async function listCompanies(pool) {
       baseBurnRate: burn.baseBurnRate,
       burnRate: burn.burnRate,
       talentMultiplier,
+      talentCostFactor: burn.talentCostFactor,
+      effectiveMultiplier: burn.effectiveMultiplier,
       talentMix,
       hype: firstFinite(4, row.hype, row.hype_baseline, HYPE_BOUNDS.fallback),
-      talentCost: firstFinite(
-        2,
-        row.talent_cost,
-        row.talent_cost_baseline,
-        TALENT_COST_BOUNDS.fallback
-      ),
-      baselines: {
-        hype: baselineNumber(row.hype_baseline, row.hype, HYPE_BOUNDS.fallback, 4),
-        talentCost: baselineNumber(
-          row.talent_cost_baseline,
-          row.talent_cost,
-          TALENT_COST_BOUNDS.fallback,
-          2
-        )
-      }
+      talentCost,
+      baselines
     };
   });
 }

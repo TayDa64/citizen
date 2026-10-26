@@ -61,6 +61,8 @@ describe('trigger effects on simulation state', () => {
     assert.equal(next.company.hype, 0.4);
     assert.equal(next.company.talentCost, taxed.company.talentCost);
     assert.equal(next.company.burnRate, taxed.company.burnRate);
+    assert.equal(next.company.talentCostFactor, 1);
+    assert.equal(next.company.effectiveMultiplier, taxed.company.talentMultiplier);
     assert.equal(next.company.cash, taxed.company.cash);
     assert.equal(next.triggers.length, 1);
     assert.deepEqual(next.triggers[0].effect, { hype: 0.1 });
@@ -90,7 +92,8 @@ describe('trigger effects on simulation state', () => {
     assert.equal(stacked.triggers[0].id, MARKET.id);
     assert.equal(stacked.company.talentCost, 4416);
     assert.equal(stacked.company.hype, 0.25);
-    assert.equal(stacked.company.burnRate, initialState.company.burnRate);
+    assert.equal(stacked.company.talentCostFactor, 1.104);
+    assert.equal(stacked.company.burnRate, Math.round(2200 * 1.104));
 
     const news = applyTriggerEffect(stacked, NEWS);
     assert.equal(news.company.hype, 0.35);
@@ -109,6 +112,9 @@ describe('trigger effects on simulation state', () => {
       effect: { talentCost: -5 }
     });
     assert.equal(floored.company.talentCost, 0);
+    assert.equal(floored.company.talentCostFactor, 0);
+    assert.equal(floored.company.burnRate, 0);
+    assert.equal(floored.company.hype, newsAgain.company.hype);
 
     const recovered = applyTriggerEffect(floored, {
       id: 'evt-shock',

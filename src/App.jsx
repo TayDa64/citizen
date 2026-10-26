@@ -23,6 +23,8 @@ function App() {
             burnRate: company.burnRate ?? prev.company.burnRate,
             baseBurnRate: company.baseBurnRate ?? prev.company.baseBurnRate,
             talentMultiplier: company.talentMultiplier ?? prev.company.talentMultiplier,
+            talentCostFactor: company.talentCostFactor ?? prev.company.talentCostFactor,
+            effectiveMultiplier: company.effectiveMultiplier ?? prev.company.effectiveMultiplier,
             talentMix: company.talentMix ?? prev.company.talentMix
           },
           baselines: company.baselines ?? prev.baselines,
@@ -71,7 +73,7 @@ function App() {
     <div className="App" style={{ background: '#0f0f1a', minHeight: '100vh', color: 'white' }}>
       <header style={{ padding: '1rem', background: '#1a1a2e', textAlign: 'center' }}>
         <h1>Citizen</h1>
-        <p>Civic + Startup Simulation — Tax and employees → burn, triggers → hype and talent cost</p>
+        <p>Civic + Startup Simulation — Tax, employees, and talent cost → burn. Triggers → hype and talent cost.</p>
       </header>
       <WorkflowDiagram
         state={state}

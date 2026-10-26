@@ -30,6 +30,8 @@ The API binds to loopback and refuses a `DATABASE_URL` whose host, after `pg-con
 
 A company inserted while v1 triggers are already active keeps its own hype and talent cost until the next trigger create, replace, delete, or clear. That write recomputes every company. A row that does not yet have a baseline is captured as it stands, so it does not inherit effects applied before it existed.
 
+`talentMultiplier` is the employee mean and is exactly 1 when the mix is empty. Contributions sum to that multiplier only when the mix is non-empty. A null, blank, NaN, or Infinity skill counts as 0.5. `talentCostFactor` is stacked talent cost divided by `baselines.talentCost`: 1 when there is no trigger, the baseline is missing, or the baseline is 0, and 0 when the stacked talent cost is 0. `effectiveMultiplier` is the product. GET `/api/companies` returns `burnRate` as round(`baseBurnRate` * `effectiveMultiplier`) and does not write `companies.burn_rate` or `companies.cash`. The client simulation uses round(2000 * (1 + taxRate * 0.4) * talentMultiplier * talentCostFactor), rounded once.
+
 ## Tests
 
 `npm test` runs the database-free unit and simulation suite in `test/unit`. It does not need Postgres. CI's `npm run test --if-present` uses this script.

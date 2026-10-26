@@ -226,7 +226,13 @@ describe('migration 003', { concurrency: 1, timeout: 120_000 }, () => {
       assert.equal(company.hype, 0.4);
       assert.equal(company.talentCost, 4480);
       assert.equal(company.cash, 15000);
-      assert.equal(company.burnRate, 2000);
+      assert.equal(company.talentCostFactor, 1.12);
+      assert.equal(company.burnRate, 2240);
+      const storedBurn = await db.pool.query(
+        'SELECT burn_rate FROM companies WHERE name = $1',
+        ['Citizen']
+      );
+      assert.equal(Number(storedBurn.rows[0].burn_rate), 2000);
 
       await applyMigration(db.pool, MIGRATION_003, 'down');
       const restored = await db.pool.query(

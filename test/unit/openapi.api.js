@@ -5,7 +5,7 @@ import { test } from 'node:test';
 test('OpenAPI document publishes TRIGGER_CONTRACT v1', () => {
   const spec = JSON.parse(fs.readFileSync('openapi.json', 'utf8'));
   assert.equal(spec.openapi, '3.0.3');
-  assert.equal(spec.info.version, '0.5.0');
+  assert.equal(spec.info.version, '0.6.0');
   const methods = ['get', 'post', 'put', 'patch', 'delete', 'options', 'head'];
   for (const [path, item] of Object.entries(spec.paths)) {
     for (const method of methods) {
@@ -15,6 +15,14 @@ test('OpenAPI document publishes TRIGGER_CONTRACT v1', () => {
         '#/components/responses/ForbiddenHost',
         `${method} ${path}`
       );
+      const hostResponse = item[method].responses['400'];
+      assert.ok(hostResponse, `${method} ${path} documents 400`);
+      const resolved = hostResponse.$ref
+        ? spec.components.responses[hostResponse.$ref.split('/').pop()]
+        : hostResponse;
+      const examples = resolved.content['application/json'].examples;
+      assert.deepEqual(examples.hostRequired.value, { error: 'Host required' }, `${method} ${path}`);
+      assert.deepEqual(examples.duplicateHost.value, { error: 'Duplicate host' }, `${method} ${path}`);
     }
   }
   assert.equal(
@@ -23,11 +31,20 @@ test('OpenAPI document publishes TRIGGER_CONTRACT v1', () => {
   );
   const company = spec.components.schemas.Company;
   assert.equal(company.properties.talentMultiplier.multipleOf, 0.0001);
+  assert.equal(company.properties.talentCostFactor.multipleOf, 0.0001);
+  assert.equal(company.properties.talentCostFactor.minimum, 0);
+  assert.equal(company.properties.effectiveMultiplier.multipleOf, 0.0001);
+  assert.equal(company.properties.effectiveMultiplier.minimum, 0);
   assert.equal(company.properties.baseBurnRate.type, 'number');
   assert.equal(company.properties.baselines.properties.talentMultiplier, undefined);
   assert.ok(company.required.includes('talentMultiplier'));
+  assert.ok(company.required.includes('talentCostFactor'));
+  assert.ok(company.required.includes('effectiveMultiplier'));
   assert.ok(company.required.includes('talentMix'));
   assert.ok(company.required.includes('baseBurnRate'));
+  assert.match(company.properties.talentMultiplier.description, /0\.5/);
+  assert.match(company.properties.talentMix.description, /empty/);
+  assert.match(spec.info.description, /NaN/);
   assert.equal(spec.paths['/api/triggers'].delete.responses['204'].description.length > 0, true);
   assert.equal(spec.paths['/api/triggers/{id}'].delete.responses['204'].description.length > 0, true);
   assert.equal(spec.paths['/api/triggers/{id}'].delete.responses['404'].description.length > 0, true);
