@@ -12,7 +12,12 @@ import {
   removeTrigger,
   setTaxRate,
 } from './simulation';
-import { burnFromStoredBase, talentCostFactorOf, effectiveMultiplierOf } from './talentMultiplier';
+import {
+  burnFromStoredBase,
+  effectiveMultiplierOf,
+  talentCostFactorClampedOf,
+  talentCostFactorOf,
+} from './talentMultiplier';
 import { SAMPLE_TRIGGERS } from './triggers';
 
 const policy = SAMPLE_TRIGGERS.find((trigger) => trigger.type === 'policy_change');
@@ -125,9 +130,59 @@ describe('applyTrigger', () => {
       effect: { talentCost: -5 },
     });
     expect(crash.company.talentCost).toBe(0);
-    expect(talentCostFactorOf(crash)).toBe(0);
-    expect(effectiveMultiplierOf(crash)).toBe(0);
-    expect(previewBurnRate(crash)).toBe(0);
+    expect(talentCostFactorOf(crash)).toBe(0.1);
+    expect(effectiveMultiplierOf(crash)).toBe(0.1);
+    expect(previewBurnRate(crash)).toBe(220);
+  });
+
+  test('a -100% talent-cost trigger floors the factor at 0.1 and keeps burn at $220', () => {
+    const wiped = applyTrigger(initialState, {
+      ...policy,
+      id: 'talent-wipe',
+      effect: { talentCost: -1 },
+    });
+    expect(wiped.company.talentCost).toBe(0);
+    expect(talentCostFactorOf(wiped)).toBe(0.1);
+    expect(talentCostFactorClampedOf(wiped)).toBe(true);
+    expect(previewBurnRate(wiped)).toBe(220);
+    expect(previewBurnRate(wiped)).toBeGreaterThan(0);
+    expect(wiped.lastTriggerChange.announcement).toBe(
+      'Policy change: talent cost -100%, floored at 0.1×, burn $220'
+    );
+  });
+
+  test('three stacked +100 talent-cost triggers cap the factor at exactly 3', () => {
+    const plus100 = (id) => ({
+      ...policy,
+      id,
+      effect: { talentCost: 100 },
+    });
+    const stacked = ['stack-a', 'stack-b', 'stack-c'].reduce(
+      (state, id) => applyTrigger(state, plus100(id)),
+      initialState,
+    );
+    expect(stacked.company.talentCost).toBeGreaterThan(3);
+    expect(talentCostFactorOf(stacked)).toBe(3);
+    expect(talentCostFactorClampedOf(stacked)).toBe(true);
+    expect(effectiveMultiplierOf(stacked)).toBe(3);
+    expect(previewBurnRate(stacked)).toBe(6600);
+    expect(stacked.lastTriggerChange.announcement).toBe(
+      'Policy change: talent cost +10000%, capped at 3×, burn $6,600'
+    );
+  });
+
+  test('a +250% talent-cost trigger announces the 3× cap', () => {
+    const next = applyTrigger(initialState, {
+      ...policy,
+      id: 'big-policy',
+      effect: { talentCost: 2.5 },
+    });
+    expect(next.company.talentCost).toBeCloseTo(3.5);
+    expect(talentCostFactorOf(next)).toBe(3);
+    expect(previewBurnRate(next)).toBe(6600);
+    expect(next.lastTriggerChange.announcement).toBe(
+      'Policy change: talent cost +250%, capped at 3×, burn $6,600'
+    );
   });
 
   test('rejects an invalid trigger', () => {
@@ -633,8 +688,10 @@ describe('company payload shapes', () => {
       },
       triggers: [],
     });
-    expect(previewBurnRate(disagreed)).toBe(5600);
+    expect(effectiveMultiplierOf(disagreed)).toBe(1.96);
+    expect(previewBurnRate(disagreed)).toBe(5488);
     expect(applyEffects(disagreed).effectiveMultiplier).toBe(2);
     expect(applyEffects(disagreed).talentCostFactor).toBe(1.12);
+    expect(talentCostFactorOf(applyEffects(disagreed))).toBe(1.12);
   });
 });

@@ -20,10 +20,13 @@ import {
   scaleTalentMultiplier,
   skillFactor,
   talentCostFactor,
+  talentCostFactorClampedOf,
+  talentCostFactorClampOf,
   talentCostFactorOf,
   talentMixFromEmployees,
   talentMultiplierOf,
 } from './talentMultiplier';
+import { applyTrigger, initialState } from './simulation';
 
 describe('department weights and skill', () => {
   test('uses tech 1.25, marketing 1.05, sales 0.95, and 1 for unknown or null', () => {
@@ -234,8 +237,42 @@ describe('burn rate', () => {
     };
     expect(talentMultiplierOf(staffed)).toBe(1.75);
     expect(talentCostFactorOf(staffed)).toBeCloseTo(1.12);
+    expect(talentCostFactorClampedOf(staffed)).toBe(false);
     expect(effectiveMultiplierOf(staffed)).toBeCloseTo(1.96);
     expect(effectiveBurnRate(staffed)).toBe(5488);
+
+    const cappedStaff = {
+      ...staffed,
+      company: { talentCost: 9 },
+    };
+    expect(talentMultiplierOf(cappedStaff)).toBe(1.75);
+    expect(talentCostFactorOf(cappedStaff)).toBe(3);
+    expect(talentCostFactorClampedOf(cappedStaff)).toBe(true);
+    expect(effectiveBurnRate(cappedStaff)).toBe(14700);
+
+    const flooredStaff = {
+      ...staffed,
+      company: { talentCost: 0 },
+    };
+    expect(talentMultiplierOf(flooredStaff)).toBe(1.75);
+    expect(talentCostFactorOf(flooredStaff)).toBe(0.1);
+    expect(talentCostFactorClampedOf(flooredStaff)).toBe(true);
+    expect(effectiveBurnRate(flooredStaff)).toBe(490);
+
+    const apiStaff = {
+      dataSource: 'api',
+      taxRate: 1,
+      talentMultiplier: 1.75,
+      company: { talentCost: 12000 },
+      baselines: { talentCost: 4000 },
+    };
+    expect(effectiveBurnRate({ ...apiStaff, talentCostFactor: 3, talentCostFactorClamped: true })).toBe(14700);
+    expect(talentCostFactorClampedOf({ ...apiStaff, talentCostFactor: 3, talentCostFactorClamped: true })).toBe(true);
+    expect(effectiveBurnRate({ ...apiStaff, talentCostFactor: 0.1, talentCostFactorClamped: true })).toBe(490);
+    expect(talentCostFactorOf({ ...apiStaff, talentCostFactor: 0 })).toBe(0.1);
+    expect(talentCostFactorClampedOf({ ...apiStaff, talentCostFactor: 0 })).toBe(true);
+    expect(talentCostFactorClampedOf({ ...apiStaff, talentCostFactor: 1.12 })).toBe(false);
+    expect(effectiveBurnRate({ ...apiStaff, talentCostFactor: 1.12 })).toBe(5488);
 
     const server = {
       dataSource: 'api',
@@ -249,7 +286,8 @@ describe('burn rate', () => {
     expect(talentCostFactorOf(server)).toBe(1.12);
     expect(effectiveMultiplierOf(server)).toBe(1.96);
     expect(effectiveBurnRate(server)).toBe(5488);
-    expect(effectiveBurnRate({ ...server, effectiveMultiplier: 2 })).toBe(5600);
+    expect(effectiveMultiplierOf({ ...server, effectiveMultiplier: 2 })).toBe(1.96);
+    expect(effectiveBurnRate({ ...server, effectiveMultiplier: 2 })).toBe(5488);
 
     const legacy = {
       dataSource: 'api',
@@ -263,14 +301,18 @@ describe('burn rate', () => {
     expect(effectiveBurnRate({ ...legacy, taxRate: 0.25 })).toBe(2464);
   });
 
-  test('rounds both factors to 4 decimals, and a zero talent cost burns 0', () => {
+  test('rounds both factors to 4 decimals, and a zero talent cost floors the factor at 0.1', () => {
     expect(talentCostFactor(4480, 4000)).toBe(1.12);
     expect(talentCostFactor(4121.6, 4000)).toBe(1.0304);
     expect(talentCostFactor(4000, 4000)).toBe(1);
-    expect(talentCostFactor(0, 4000)).toBe(0);
-    expect(talentCostFactor(-1, 4000)).toBe(0);
+    expect(talentCostFactor(0, 4000)).toBe(0.1);
+    expect(talentCostFactor(-1, 4000)).toBe(0.1);
     expect(talentCostFactor(100, 0)).toBe(1);
     expect(talentCostFactor(100, null)).toBe(1);
+    expect(talentCostFactor(100, -4)).toBe(1);
+    expect(talentCostFactor(100, Number.NaN)).toBe(1);
+    expect(talentCostFactor(100, Number.POSITIVE_INFINITY)).toBe(1);
+    expect(talentCostFactor(100, '')).toBe(1);
     expect(roundedEffectiveMultiplier(1.75, 1.12)).toBe(1.96);
     expect(roundedEffectiveMultiplier(1, 0)).toBe(0);
     expect(burnFromStoredBase(2000, 1.12)).toBe(2240);
@@ -283,9 +325,203 @@ describe('burn rate', () => {
       company: { talentCost: 0 },
       baselines: { talentCost: 4000 },
     };
-    expect(talentCostFactorOf(zeroed)).toBe(0);
-    expect(effectiveMultiplierOf(zeroed)).toBe(0);
-    expect(effectiveBurnRate(zeroed)).toBe(0);
+    expect(talentCostFactorOf(zeroed)).toBe(0.1);
+    expect(effectiveMultiplierOf(zeroed)).toBe(0.1);
+    expect(effectiveBurnRate(zeroed)).toBe(220);
+  });
+
+  test('clamps the talent-cost factor to 0.1 and 3 after rounding', () => {
+    expect(talentCostFactor(0.0999, 1)).toBe(0.1);
+    expect(talentCostFactor(0.1, 1)).toBe(0.1);
+    expect(talentCostFactor(3, 1)).toBe(3);
+    expect(talentCostFactor(3.0001, 1)).toBe(3);
+    expect(talentCostFactor(1e12, 4000)).toBe(3);
+    expect(talentCostFactorClampOf({
+      dataSource: 'local',
+      company: { talentCost: 0.0999 },
+      baselines: { talentCost: 1 },
+    })).toBe('floor');
+    expect(talentCostFactorClampOf({
+      dataSource: 'local',
+      company: { talentCost: 0.1 },
+      baselines: { talentCost: 1 },
+    })).toBeNull();
+    expect(talentCostFactorClampOf({
+      dataSource: 'local',
+      company: { talentCost: 3 },
+      baselines: { talentCost: 1 },
+    })).toBeNull();
+    expect(talentCostFactorClampOf({
+      dataSource: 'local',
+      company: { talentCost: 3.0001 },
+      baselines: { talentCost: 1 },
+    })).toBe('cap');
+
+    const hot = {
+      dataSource: 'api',
+      taxRate: 1,
+      talentMultiplier: 5,
+      talentCostFactor: 9,
+      company: { talentCost: 1 },
+      baselines: { talentCost: 1 },
+    };
+    expect(talentMultiplierOf(hot)).toBe(5);
+    expect(talentCostFactorOf(hot)).toBe(3);
+    expect(effectiveMultiplierOf(hot)).toBe(15);
+    expect(effectiveBurnRate(hot)).toBe(Math.round(2800 * 5 * 3));
+
+    const flagged = {
+      dataSource: 'api',
+      talentMultiplier: 1,
+      talentCostFactor: 0.1,
+      talentCostFactorClamped: true,
+      company: { talentCost: 400 },
+      baselines: { talentCost: 4000 },
+    };
+    expect(talentCostFactorOf(flagged)).toBe(0.1);
+    expect(talentCostFactorClampOf(flagged)).toBe('floor');
+
+    const preferred = {
+      dataSource: 'api',
+      taxRate: 0.25,
+      talentMultiplier: 1,
+      talentCostFactor: 1.5,
+      company: { talentCost: 40000 },
+      baselines: { talentCost: 4000 },
+    };
+    expect(talentCostFactorOf(preferred)).toBe(1.5);
+    expect(talentCostFactorClampOf(preferred)).toBeNull();
+    expect(effectiveBurnRate(preferred)).toBe(Math.round(2200 * 1.5));
+  });
+
+  test('matches a reference talent-cost burn across random inputs in both modes', () => {
+    function referenceRound(value, places) {
+      const scale = 10 ** places;
+      return Math.round((value + Math.sign(value) * 1e-10) * scale) / scale;
+    }
+
+    function referenceFactor(talentCost, baselineTalentCost) {
+      if (baselineTalentCost == null || baselineTalentCost === '') return 1;
+      const baseline = Number(baselineTalentCost);
+      if (!Number.isFinite(baseline) || baseline <= 0) return 1;
+      if (talentCost == null || talentCost === '') return 1;
+      const cost = Number(talentCost);
+      if (!Number.isFinite(cost)) return 1;
+      const ratio = cost / baseline;
+      if (!Number.isFinite(ratio)) return 1;
+      return referenceRound(Math.min(3, Math.max(0.1, ratio)), 4);
+    }
+
+    function referenceEffective(employee, factor) {
+      const product = employee * factor;
+      if (!Number.isFinite(product) || product < 0) return 0;
+      return referenceRound(product, 4);
+    }
+
+    function referenceBurn(taxRate, employee, factor) {
+      const tax = Number.isFinite(taxRate) ? taxRate : 0;
+      const base = Math.round(2000 * (1 + tax * 0.4));
+      return Math.round(base * employee * factor);
+    }
+
+    function mulberry32(seed) {
+      let state = seed >>> 0;
+      return () => {
+        state = (state + 0x6d2b79f5) | 0;
+        let t = Math.imul(state ^ (state >>> 15), 1 | state);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    const random = mulberry32(0x5c50);
+    const baselines = [null, 0, -4, Number.NaN, Number.POSITIVE_INFINITY, '', 1, 4000];
+    for (let index = 0; index < 5000; index += 1) {
+      const tax = random();
+      const employee = referenceRound(random() * 5, 4);
+      const baseline = baselines[Math.floor(random() * baselines.length)];
+      const costRoll = random();
+      const cost = costRoll < 0.05
+        ? 0
+        : costRoll < 0.1
+          ? -random() * 1000
+          : (random() * 20000) * (random() < 0.1 ? 1000 : 1);
+      const factor = referenceFactor(cost, baseline);
+      const local = {
+        dataSource: 'local',
+        taxRate: tax,
+        employees: [],
+        company: { talentCost: cost },
+        baselines: { talentCost: baseline },
+      };
+      const api = {
+        dataSource: 'api',
+        taxRate: tax,
+        talentMultiplier: employee,
+        company: { talentCost: cost },
+        baselines: { talentCost: baseline },
+      };
+      expect(talentCostFactor(cost, baseline)).toBe(factor);
+      expect(talentCostFactorOf(local)).toBe(factor);
+      expect(talentCostFactorOf(api)).toBe(factor);
+      expect(effectiveMultiplierOf(local)).toBe(referenceEffective(1, factor));
+      expect(effectiveMultiplierOf(api)).toBe(referenceEffective(employee, factor));
+      expect(effectiveBurnRate(local)).toBe(referenceBurn(tax, 1, factor));
+      expect(effectiveBurnRate(api)).toBe(referenceBurn(tax, employee, factor));
+
+      if (typeof baseline === 'number' && Number.isFinite(baseline) && baseline > 0 && Number.isFinite(cost)) {
+        const published = {
+          ...api,
+          talentCostFactor: cost / baseline,
+        };
+        expect(talentCostFactorOf(published)).toBe(factor);
+        expect(effectiveBurnRate(published)).toBe(referenceBurn(tax, employee, factor));
+      }
+    }
+  });
+});
+
+describe('clamped talent-cost factor in the local readout', () => {
+  function trigger(id, talentCost) {
+    return {
+      id,
+      type: 'policy_change',
+      label: 'Policy change',
+      source: 'mock:local',
+      timestamp: '2026-04-02T15:00:00.000Z',
+      effect: { talentCost },
+    };
+  }
+
+  test('a -100% talent-cost trigger shows 0.10 and burn $220', () => {
+    const wiped = applyTrigger(initialState, trigger('wipe', -1));
+    expect(talentCostFactorOf(wiped)).toBe(0.1);
+    expect(effectiveBurnRate(wiped)).toBe(220);
+    render(<Dashboard state={wiped} />);
+    expect(screen.getByTestId('talent-cost-factor-value')).toHaveTextContent('Talent cost factor: 0.10');
+    expect(screen.getByTestId('talent-cost-factor-clamp')).toHaveTextContent('floored at 0.1×');
+    expect(screen.getByTestId('talent-cost-factor-value')).toHaveAccessibleName(
+      'Talent cost factor 0.10, floored at 0.1×'
+    );
+    expect(screen.getByTestId('burn-value')).toHaveTextContent('Burn/mo: $220');
+    expect(screen.getByTestId('effective-multiplier-value')).toHaveTextContent('Effective multiplier: 0.10');
+  });
+
+  test('three stacked +100 triggers show the factor capped at 3.00', () => {
+    let stacked = initialState;
+    for (const id of ['stack-a', 'stack-b', 'stack-c']) {
+      stacked = applyTrigger(stacked, trigger(id, 100));
+    }
+    expect(talentCostFactorOf(stacked)).toBe(3);
+    expect(stacked.company.talentCost).toBeGreaterThan(3);
+    render(<Dashboard state={stacked} />);
+    expect(screen.getByTestId('talent-cost-factor-value')).toHaveTextContent('Talent cost factor: 3.00');
+    expect(screen.getByTestId('talent-cost-factor-clamp')).toHaveTextContent('capped at 3×');
+    expect(screen.getByTestId('talent-cost-factor-value')).toHaveAccessibleName(
+      'Talent cost factor 3.00, capped at 3×'
+    );
+    expect(screen.getByTestId('effective-multiplier-value')).toHaveTextContent('Effective multiplier: 3.00');
+    expect(screen.getByTestId('talent-equation')).toHaveTextContent('cost factor 3.00 = 3.00');
   });
 });
 

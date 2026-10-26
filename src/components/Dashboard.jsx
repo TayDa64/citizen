@@ -8,6 +8,7 @@ import {
   effectiveMultiplierOf,
   formatTalentCostFactor,
   formatTalentReadout,
+  talentCostFactorClampOf,
   talentCostFactorOf,
   talentMixOf,
   talentMultiplierOf,
@@ -22,6 +23,7 @@ import {
   formatHypePercent,
   formatTalentDollars,
   formatTalentMultiplier,
+  talentCostFactorClampNote,
   talentEquation,
 } from '../triggers';
 import { loadChartAccessibility } from './loadChartAccessibility';
@@ -144,6 +146,7 @@ function WorldEventEffect({ state }) {
 }
 
 export default function Dashboard({ state }) {
+  const factorClampNote = talentCostFactorClampNote(talentCostFactorClampOf(state));
   const { cash, burnRate } = state.history;
   const categories = cash.map((_, i) => `T${i}`);
   const markers = triggerChartMarkers(state);
@@ -185,7 +188,20 @@ export default function Dashboard({ state }) {
         {' | '}
         <span id="talent-multiplier-value" data-testid="talent-multiplier-value">Talent multiplier: {formatTalentReadout(talentMultiplierOf(state))}</span>
         {' | '}
-        <span id="talent-cost-factor-value" data-testid="talent-cost-factor-value">Talent cost factor: {formatTalentCostFactor(talentCostFactorOf(state))}</span>
+        <span
+          id="talent-cost-factor-value"
+          data-testid="talent-cost-factor-value"
+          role="group"
+          aria-label={`Talent cost factor ${formatTalentCostFactor(talentCostFactorOf(state))}${factorClampNote ? `, ${factorClampNote}` : ''}`}
+        >
+          Talent cost factor: {formatTalentCostFactor(talentCostFactorOf(state))}
+        </span>
+        {factorClampNote ? (
+          <>
+            {' '}
+            <span data-testid="talent-cost-factor-clamp">{factorClampNote}</span>
+          </>
+        ) : null}
         {' | '}
         <span id="effective-multiplier-value" data-testid="effective-multiplier-value">Effective multiplier: {formatTalentCostFactor(effectiveMultiplierOf(state))}</span>
         {' | '}
@@ -241,7 +257,7 @@ export default function Dashboard({ state }) {
               color="#f87171"
               options={{
                 accessibility: {
-                  description: 'Monthly burn rate in dollars after tax, the employee talent multiplier, and the talent-cost factor. A talent-cost event is included in this series on the following month.',
+                  description: 'Monthly burn rate in dollars after tax, the employee talent multiplier, and the talent-cost factor. The talent-cost factor is limited to 0.10× through 3.00×. A talent-cost event is included in this series on the following month.',
                 },
               }}
             />

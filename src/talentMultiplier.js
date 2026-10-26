@@ -22,21 +22,28 @@
  * is missing. That field stays employee-only. It does not absorb talent cost.
  * There is no baselines.talentMultiplier.
  *
- * talentCostFactor = talentCost / baselines.talentCost, rounded to 4 decimals.
- * It is 1 when there is no trigger, or when the baseline is missing or 0.
- * A stacked talent cost of 0 makes the factor 0, and burn is 0.
- * effectiveMultiplier is talentMultiplier × talentCostFactor, rounded to 4
- * decimals. The simulation burn is
- * round(2000 * (1 + taxRate * 0.4) * effectiveMultiplier), rounded once.
- * The API's own burnRate is round(stored baseBurnRate * effectiveMultiplier).
+ * talentCostFactor = round4(clamp(talentCost / baselines.talentCost, 0.1, 3)).
+ * Clamp the ratio first, then round to 4 decimals. It is 1 when there is no
+ * trigger, or when the baseline is missing, 0, negative, or non-finite.
+ * A talent cost of 0 floors the factor at 0.1. A ratio above 3 caps at 3.
+ * talentMultiplier is the employee mean and is not clamped.
+ * effectiveMultiplier is round4(talentMultiplier × talentCostFactor).
  * baseBurnRate for the tax slider is round(2000 * (1 + taxRate * 0.4)).
+ * Simulation burn is round(baseBurnRate * talentMultiplier * talentCostFactor),
+ * rounded once. It does not multiply the rounded effectiveMultiplier again.
+ * The API burnRate uses that same product with the stored base.
  *
- * APPLY_TALENT_COST_TO_BURN is on. A 0.6.0 company may send talentCostFactor
- * and effectiveMultiplier. A 0.5.0 company omits them and the client computes
- * both. Server values, when present, stay put across ticks and tax changes.
+ * APPLY_TALENT_COST_TO_BURN is on. A 0.6.0 company may send talentCostFactor.
+ * The client uses that value and still clamps it to 0.1–3. A 0.5.0 company
+ * omits it and the client computes it from talent cost and the baseline.
+ * effectiveMultiplier is always the rounded product of the employee multiplier
+ * and that factor. Server talentMultiplier and talentCostFactor stay put
+ * across ticks and tax changes.
  */
 
 export const APPLY_TALENT_COST_TO_BURN = true;
+export const TALENT_COST_FACTOR_MIN = 0.1;
+export const TALENT_COST_FACTOR_MAX = 3;
 
 export const DEPARTMENT_WEIGHTS = Object.freeze({
   tech: 1.25,
@@ -290,17 +297,38 @@ export function burnMultiplier({ talentMultiplier = 1, talentCostFactor: factor 
   return talentMultiplier * factor;
 }
 
-export function talentCostFactor(talentCost, baselineTalentCost) {
-  if (baselineTalentCost == null || baselineTalentCost === '') return 1;
+function unusableBaseline(baselineTalentCost) {
+  if (baselineTalentCost == null || baselineTalentCost === '') return true;
   const baseline = Number(baselineTalentCost);
-  if (!Number.isFinite(baseline) || baseline <= 0) return 1;
-  if (talentCost == null || talentCost === '') return 1;
+  return !Number.isFinite(baseline) || baseline <= 0;
+}
+
+export function talentCostRatio(talentCost, baselineTalentCost) {
+  if (unusableBaseline(baselineTalentCost)) return null;
+  if (talentCost == null || talentCost === '') return null;
   const cost = Number(talentCost);
-  if (!Number.isFinite(cost)) return 1;
-  if (cost <= 0) return 0;
-  const factor = cost / baseline;
-  if (!Number.isFinite(factor) || factor < 0) return 0;
-  return roundTo(factor, 4);
+  const baseline = Number(baselineTalentCost);
+  if (!Number.isFinite(cost) || !Number.isFinite(baseline) || baseline <= 0) return null;
+  const ratio = cost / baseline;
+  return Number.isFinite(ratio) ? ratio : null;
+}
+
+export function clampTalentCostFactor(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return { factor: 1, clamp: null };
+  if (numeric < TALENT_COST_FACTOR_MIN) {
+    return { factor: roundTo(TALENT_COST_FACTOR_MIN, 4), clamp: 'floor' };
+  }
+  if (numeric > TALENT_COST_FACTOR_MAX) {
+    return { factor: roundTo(TALENT_COST_FACTOR_MAX, 4), clamp: 'cap' };
+  }
+  return { factor: roundTo(numeric, 4), clamp: null };
+}
+
+export function talentCostFactor(talentCost, baselineTalentCost) {
+  const ratio = talentCostRatio(talentCost, baselineTalentCost);
+  if (ratio == null) return 1;
+  return clampTalentCostFactor(ratio).factor;
 }
 
 export function roundedEffectiveMultiplier(talentMultiplier, costFactor) {
@@ -345,10 +373,39 @@ export function formatTalentCostFactor(factor) {
 
 export function readOptionalFactor(value, label) {
   if (value == null) return null;
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
-    throw new TypeError(`${label} must be a finite number >= 0`);
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new TypeError(`${label} must be a finite number`);
   }
-  return roundTo(value, 4);
+  return value;
+}
+
+function explicitFactorClamp(state) {
+  if (state?.talentCostFactorClamped === true) return true;
+  if (state?.talentCostFactorClamped === false) return false;
+  return null;
+}
+
+export function resolveTalentCostFactor(state) {
+  if (!APPLY_TALENT_COST_TO_BURN) return { factor: 1, clamp: null };
+
+  const serverValue = state?.dataSource === 'api' ? state?.talentCostFactor : null;
+  const fromServer = serverValue != null;
+  const ratio = talentCostRatio(state?.company?.talentCost, state?.baselines?.talentCost);
+  const resolved = fromServer
+    ? clampTalentCostFactor(serverValue)
+    : ratio == null
+      ? { factor: 1, clamp: null }
+      : clampTalentCostFactor(ratio);
+  const explicit = explicitFactorClamp(state);
+
+  if (explicit === true) {
+    if (resolved.factor <= TALENT_COST_FACTOR_MIN) return { factor: resolved.factor, clamp: 'floor' };
+    if (resolved.factor >= TALENT_COST_FACTOR_MAX) return { factor: resolved.factor, clamp: 'cap' };
+    return { factor: resolved.factor, clamp: null };
+  }
+  if (explicit === false) return { factor: resolved.factor, clamp: resolved.clamp };
+  if (resolved.clamp) return resolved;
+  return { factor: resolved.factor, clamp: null };
 }
 
 export function talentMultiplierOf(state) {
@@ -362,19 +419,27 @@ export function talentMixOf(state) {
 }
 
 export function talentCostFactorOf(state) {
-  if (!APPLY_TALENT_COST_TO_BURN) return 1;
-  if (state?.dataSource === 'api' && state.talentCostFactor != null) return state.talentCostFactor;
-  return talentCostFactor(state?.company?.talentCost, state?.baselines?.talentCost);
+  return resolveTalentCostFactor(state).factor;
+}
+
+export function talentCostFactorClampOf(state) {
+  return resolveTalentCostFactor(state).clamp;
+}
+
+export function talentCostFactorClampedOf(state) {
+  return talentCostFactorClampOf(state) != null;
 }
 
 export function effectiveMultiplierOf(state) {
   const employee = talentMultiplierOf(state);
   if (!APPLY_TALENT_COST_TO_BURN) return employee;
-  if (state?.dataSource === 'api' && state.effectiveMultiplier != null) return state.effectiveMultiplier;
   return roundedEffectiveMultiplier(employee, talentCostFactorOf(state));
 }
 
 export function effectiveBurnRate(state) {
   const taxRate = Number.isFinite(state?.taxRate) ? state.taxRate : 0;
-  return Math.round(2000 * (1 + taxRate * 0.4) * effectiveMultiplierOf(state));
+  const employee = talentMultiplierOf(state);
+  const factor = talentCostFactorOf(state);
+  const base = Math.round(2000 * (1 + taxRate * 0.4));
+  return Math.round(base * employee * factor);
 }

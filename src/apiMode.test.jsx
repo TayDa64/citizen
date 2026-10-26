@@ -4,7 +4,8 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import App from './App';
 import Dashboard from './components/Dashboard';
 import TriggerPanel from './components/TriggerPanel';
-import { applyTrigger, hydrateFromApi, initialState } from './simulation';
+import { applyTrigger, hydrateFromApi, initialState, previewBurnRate } from './simulation';
+import { talentCostFactorClampedOf, talentCostFactorOf } from './talentMultiplier';
 import { SAMPLE_TRIGGERS } from './triggers';
 
 const policy = SAMPLE_TRIGGERS.find((trigger) => trigger.type === 'policy_change');
@@ -867,5 +868,86 @@ describe('0.5.0 and 0.6.0 company payloads', () => {
     );
     expect(screen.getByText(/Burn\/mo: \$5,488/)).toBeInTheDocument();
     expect(talent).not.toHaveTextContent('talent ×1.9600');
+  });
+});
+
+describe('API talent-cost factor clamp', () => {
+  function trigger(id, talentCost) {
+    return {
+      id,
+      type: 'policy_change',
+      label: 'Policy change',
+      source: 'mock:local',
+      timestamp: '2026-04-02T15:00:00.000Z',
+      effect: { talentCost },
+    };
+  }
+
+  test('a -100% talent-cost trigger floors the factor at 0.1 and burn stays at $220', () => {
+    const loaded = hydrateFromApi(initialState, {
+      company: {
+        ...apiCompany,
+        talentCost: 0,
+        talentMultiplier: 1,
+        talentCostFactor: 0,
+        effectiveMultiplier: 0,
+      },
+      triggers: [trigger('wipe', -1)],
+    });
+    expect(loaded.company.talentCost).toBe(0);
+    expect(talentCostFactorOf(loaded)).toBe(0.1);
+    expect(previewBurnRate(loaded)).toBe(220);
+    const computed = hydrateFromApi(initialState, {
+      company: { ...apiCompany, talentCost: 0, talentMultiplier: 1 },
+      triggers: [trigger('wipe', -1)],
+    });
+    expect(computed.talentCostFactor).toBeNull();
+    expect(talentCostFactorOf(computed)).toBe(0.1);
+    expect(previewBurnRate(computed)).toBe(220);
+    render(<Dashboard state={loaded} />);
+    expect(screen.getByTestId('talent-cost-factor-value')).toHaveTextContent('Talent cost factor: 0.10');
+    expect(talentCostFactorClampedOf(loaded)).toBe(true);
+    expect(screen.getByTestId('talent-cost-factor-clamp')).toHaveTextContent('floored at 0.1×');
+    expect(screen.getByTestId('talent-cost-factor-value')).toHaveAccessibleName(
+      'Talent cost factor 0.10, floored at 0.1×'
+    );
+    expect(screen.getByTestId('burn-value')).toHaveTextContent('Burn/mo: $220');
+    expect(screen.getByTestId('effective-multiplier-value')).toHaveTextContent('Effective multiplier: 0.10');
+    expect(screen.getByText('$0 (down -100%)')).toBeInTheDocument();
+  });
+
+  test('three stacked +100 triggers cap the factor at exactly 3', () => {
+    const triggers = ['stack-a', 'stack-b', 'stack-c'].map((id) => trigger(id, 100));
+    const rawCost = 4000 * (101 ** 3);
+    const loaded = hydrateFromApi(initialState, {
+      company: {
+        ...apiCompany,
+        talentCost: rawCost,
+        talentMultiplier: 1,
+        talentCostFactor: 101 ** 3,
+        effectiveMultiplier: 101 ** 3,
+      },
+      triggers,
+    });
+    expect(loaded.company.talentCost).toBe(rawCost);
+    expect(talentCostFactorOf(loaded)).toBe(3);
+    expect(previewBurnRate(loaded)).toBe(6600);
+    const computed = hydrateFromApi(initialState, {
+      company: { ...apiCompany, talentCost: rawCost, talentMultiplier: 1 },
+      triggers,
+    });
+    expect(computed.talentCostFactor).toBeNull();
+    expect(talentCostFactorOf(computed)).toBe(3);
+    expect(previewBurnRate(computed)).toBe(6600);
+    render(<Dashboard state={loaded} />);
+    expect(screen.getByTestId('talent-cost-factor-value')).toHaveTextContent('Talent cost factor: 3.00');
+    expect(talentCostFactorClampedOf(loaded)).toBe(true);
+    expect(screen.getByTestId('talent-cost-factor-clamp')).toHaveTextContent('capped at 3×');
+    expect(screen.getByTestId('talent-cost-factor-value')).toHaveAccessibleName(
+      'Talent cost factor 3.00, capped at 3×'
+    );
+    expect(screen.getByTestId('effective-multiplier-value')).toHaveTextContent('Effective multiplier: 3.00');
+    expect(screen.getByTestId('burn-value')).toHaveTextContent('Burn/mo: $6,600');
+    expect(screen.getByText(/\$4,121,204,000/)).toBeInTheDocument();
   });
 });

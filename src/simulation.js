@@ -2,9 +2,10 @@
 // Slice 1: taxRate increases burn, then cash falls on each tick.
 // Slice 2: real-world triggers move hype and talent cost. With no active
 // trigger, talent cost stays 1 and burn matches the Slice 1 formula.
-// Burn is round(2000 * (1 + taxRate * 0.4) * effectiveMultiplier), once.
-// talentMultiplier is employee-only. effectiveMultiplier multiplies it by
-// talentCost / baselines.talentCost when APPLY_TALENT_COST_TO_BURN is on.
+// baseBurnRate = round(2000 * (1 + taxRate * 0.4)).
+// Burn is round(baseBurnRate * talentMultiplier * talentCostFactor), once.
+// talentMultiplier is employee-only and is not clamped. talentCostFactor is
+// round4(clamp(talentCost / baselines.talentCost, 0.1, 3)).
 // The service is the source of truth for hype, talentCost, baselines, and
 // talentMultiplier. Cash and burn stay on the client simulation.
 // `appliedAtIndex` on an active trigger is client runtime for the chart, not
@@ -24,6 +25,7 @@ import {
   composeTalentMultiplier,
   effectiveBurnRate,
   readOptionalFactor,
+  talentCostFactorClampOf,
   readTalentMix,
   readTalentMultiplier,
   baseBurnRate as taxOnlyBurnRate,
@@ -205,6 +207,9 @@ export function readApiSnapshot(prev, snapshot) {
   const talentMix = readTalentMix(company.talentMix);
   const talentCostFactor = readOptionalFactor(company.talentCostFactor, 'talentCostFactor');
   const effectiveMultiplier = readOptionalFactor(company.effectiveMultiplier, 'effectiveMultiplier');
+  const talentCostFactorClamped = typeof company.talentCostFactorClamped === 'boolean'
+    ? company.talentCostFactorClamped
+    : null;
   const resolvedHype = hype ?? baselineHypeReading.value;
   const resolvedTalent = talentCost ?? baselineTalentReading.value;
   return {
@@ -217,6 +222,7 @@ export function readApiSnapshot(prev, snapshot) {
       talentMultiplier,
       talentMix,
       talentCostFactor,
+      talentCostFactorClamped,
       effectiveMultiplier,
       company: {
         ...prev.company,
@@ -288,6 +294,7 @@ export function applyTrigger(state, trigger) {
     trigger,
     'apply',
     effectiveBurnRate(applied),
+    talentCostFactorClampOf(applied),
   );
   return applied;
 }

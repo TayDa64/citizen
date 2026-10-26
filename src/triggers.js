@@ -55,13 +55,15 @@ export function talentCostOutOfRange(value) {
  *   appliedAtIndex before POST. The API trims label and source and stores
  *   timestamp with Date#toISOString().
  *
- * Announcement grammar (talent cost first, then hype, then the effective burn):
- *   "{label}: talent cost ±N%, hype ±N%, burn $N"
+ * Announcement grammar (talent cost first, then hype, then a factor bound, then burn):
+ *   "{label}: talent cost ±N%, hype ±N%, capped at 3× or floored at 0.1×, burn $N"
  *   Example: "Policy change: talent cost +12%, burn $2,464"
+ *   Example when the factor hits the cap: "Policy change: talent cost +250%, capped at 3×, burn $6,600"
  *
  * Stacking, applied by the simulation from company baselines:
  * - hype deltas add, then clamp to 0..1
- * - talent-cost deltas multiply as (1 + delta), then floor at 0
+ * - talent-cost deltas multiply as (1 + delta), then floor the dollar cost at 0
+ * - the burn factor is that cost divided by the baseline, clamped to 0.10×–3.00×, then rounded to 4 decimals
  * - the same id does not stack a second copy
  *
  * `appliedAtIndex` is client runtime for the chart marker. It is not part of
@@ -78,7 +80,7 @@ export const TRIGGER_CONTRACT = Object.freeze({
   }),
   stacking: Object.freeze({
     hype: 'Add deltas to the baseline, then clamp to the range 0 through 1.',
-    talentCost: 'Multiply the baseline by (1 + delta) for each active trigger, then floor at 0.',
+    talentCost: 'Multiply the baseline by (1 + delta) for each active trigger, then floor the dollar cost at 0. The burn factor clamps that ratio to 0.10× through 3.00×.',
     sameId: 'Re-applying an id replaces that trigger instead of stacking a second copy.',
   }),
   announcement: '{label}: talent cost ±N% if present, then hype ±N% if present.',
@@ -224,16 +226,39 @@ export function describeTrigger(trigger) {
   return `${trigger.label}: ${parts.join(', ')}`;
 }
 
-export function announceTrigger(trigger, mode, burn) {
+export function talentCostFactorClampNote(clamp) {
+  switch (clamp) {
+    case 'cap':
+      return 'capped at 3×';
+    case 'floor':
+      return 'floored at 0.1×';
+    case null:
+    case undefined:
+      return '';
+    default: {
+      const neverClamp = clamp;
+      throw new Error(`Unknown talent-cost factor clamp: ${String(neverClamp)}`);
+    }
+  }
+}
+
+export function announceTrigger(trigger, mode, burn, clamp = null) {
   const description = describeTrigger(trigger);
-  const burnText = Number.isFinite(burn) ? `, burn ${formatCurrency(burn)}` : '';
+  const clampText = talentCostFactorClampNote(clamp);
+  const burnText = Number.isFinite(burn) ? formatCurrency(burn) : '';
   switch (mode) {
-    case 'apply':
-      return `${description}${burnText}`;
+    case 'apply': {
+      const extras = [];
+      if (clampText) extras.push(clampText);
+      if (burnText) extras.push(`burn ${burnText}`);
+      const suffix = extras.length > 0 ? `, ${extras.join(', ')}` : '';
+      return `${description}${suffix}`;
+    }
     case 'remove': {
       const detail = description.slice(trigger.label.length + 2);
-      const restored = Number.isFinite(burn) ? ` Burn ${formatCurrency(burn)}.` : '';
-      return `${trigger.label} removed: ${detail}.${restored}`;
+      const clampSuffix = clampText ? `, ${clampText}` : '';
+      const restored = burnText ? ` Burn ${burnText}.` : '';
+      return `${trigger.label} removed: ${detail}${clampSuffix}.${restored}`;
     }
     default: {
       const neverMode = mode;
