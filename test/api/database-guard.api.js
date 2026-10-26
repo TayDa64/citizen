@@ -61,6 +61,98 @@ test('refuses duplicate host params and a remote host in last position', () => {
   assert.ok(Date.now() - started < 200);
 });
 
+test('allows a loopback URL host with one absolute socket host param', () => {
+  const started = Date.now();
+  for (const authority of ['localhost', '127.0.0.1', '[::1]', 'LOCALHOST']) {
+    assert.doesNotThrow(() =>
+      assertLocalDatabase(`postgres://${authority}/x?host=/var/run/postgresql`)
+    );
+  }
+  assert.throws(
+    () => assertLocalDatabase('postgres://localhost/x?host=db.internal.example'),
+    /repeated host/
+  );
+  assert.throws(
+    () => assertLocalDatabase('postgres://localhost/x?host=127.0.0.1'),
+    /repeated host/
+  );
+  assert.throws(
+    () =>
+      assertLocalDatabase(
+        'postgres://localhost/x?host=/var/run/postgresql&host=/tmp/pg.sock'
+      ),
+    /repeated host/
+  );
+  assert.throws(
+    () => assertLocalDatabase('postgres://db.internal.example/x?host=/var/run/postgresql'),
+    /repeated host/
+  );
+  assert.throws(
+    () =>
+      assertLocalDatabase(
+        'postgres://localhost/x?host=/var/run/postgresql&hostaddr=127.0.0.1&hostaddr=::1'
+      ),
+    /repeated host/
+  );
+  assert.throws(
+    () =>
+      assertLocalDatabase(
+        'postgres://localhost/x?host=/var/run/postgresql&hostaddr=10.1.2.3'
+      ),
+    /non-local/
+  );
+  assert.ok(Date.now() - started < 200);
+});
+
+test('rejects surrounding whitespace on the host pg would use', () => {
+  const started = Date.now();
+  assert.throws(
+    () => assertLocalDatabase('postgresql:///citizen?host=%20/var/run/postgresql'),
+    /whitespace/
+  );
+  assert.throws(
+    () => assertLocalDatabase('postgresql:///citizen?host=/var/run/postgresql%20'),
+    /whitespace/
+  );
+  assert.throws(
+    () => assertLocalDatabase('postgresql:///citizen?host=%20localhost'),
+    /whitespace/
+  );
+  assert.throws(
+    () => assertLocalDatabase('postgresql://%20localhost/citizen'),
+    /whitespace/
+  );
+  assert.throws(
+    () => assertLocalDatabase('postgresql://localhost%20/citizen'),
+    /whitespace/
+  );
+  assert.throws(
+    () => assertLocalDatabase('postgresql:// localhost/citizen'),
+    /whitespace/
+  );
+  assert.throws(
+    () => assertLocalDatabase('postgresql://localhost/citizen?hostaddr=%20127.0.0.1'),
+    /whitespace/
+  );
+  withEnv('PGHOST', ' localhost', () => {
+    assert.throws(() => assertLocalDatabase('postgresql:///citizen'), /whitespace/);
+    assert.doesNotThrow(() => assertLocalDatabase('postgres://127.0.0.1/citizen'));
+  });
+  withEnv('PGHOST', 'localhost ', () => {
+    assert.throws(() => assertLocalDatabase('postgresql:///citizen'), /whitespace/);
+  });
+  withEnv('PGHOSTADDR', ' 127.0.0.1', () => {
+    assert.throws(() => assertLocalDatabase('postgres://localhost/citizen'), /whitespace/);
+  });
+  assert.doesNotThrow(() =>
+    assertLocalDatabase('postgresql:///citizen?host=/var/run/postgresql')
+  );
+  withEnv('PGHOST', 'localhost', () => {
+    assert.doesNotThrow(() => assertLocalDatabase('postgresql:///citizen'));
+  });
+  assert.ok(Date.now() - started < 200);
+});
+
 test('allows loopback hosts, bracketed IPv6, and the local postgres socket', () => {
   assert.doesNotThrow(() => assertLocalDatabase('postgres://localhost/citizen_slice2_test'));
   assert.doesNotThrow(() =>

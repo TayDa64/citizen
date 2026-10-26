@@ -18,6 +18,15 @@ import {
 
 const MAX_BODY_BYTES = 16 * 1024;
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
+const HOST_HEADER_NAMES = ['localhost', '127.0.0.1', '[::1]'];
+
+export function isAllowedHostHeader(hostHeader, port) {
+  if (typeof hostHeader !== 'string' || hostHeader.length === 0) return false;
+  if (hostHeader !== hostHeader.trim()) return false;
+  if (!Number.isInteger(port) || port <= 0) return false;
+  const value = hostHeader.toLowerCase();
+  return HOST_HEADER_NAMES.some((name) => value === `${name}:${port}`);
+}
 
 function sendEmpty(res, status, origin) {
   const headers = { 'Cache-Control': 'no-store' };
@@ -158,7 +167,13 @@ async function handleRequest(req, res, pool) {
 }
 
 export function createServer(pool) {
-  return http.createServer(async (req, res) => {
+  const server = http.createServer(async (req, res) => {
+    const address = server.address();
+    const port = address && typeof address === 'object' ? address.port : 0;
+    if (!isAllowedHostHeader(req.headers.host, port)) {
+      sendJson(res, 403, { error: 'Forbidden host' });
+      return;
+    }
     try {
       await handleRequest(req, res, pool);
     } catch (error) {
@@ -168,6 +183,7 @@ export function createServer(pool) {
       sendJson(res, status, { error: message, issues: error.issues || [] }, allowedOrigin(req));
     }
   });
+  return server;
 }
 
 export function startServer({ pool, port = 8787, host = '127.0.0.1' }) {

@@ -12,9 +12,14 @@ const LOOPBACK_NAMES = new Set(['localhost', '127.0.0.1', '::1']);
 
 function unwrapHost(value) {
   if (typeof value !== 'string') return '';
-  const trimmed = value.trim();
-  const bracketed = trimmed.match(/^\[(.+)]$/);
-  return bracketed ? bracketed[1] : trimmed;
+  const bracketed = value.match(/^\[(.+)]$/);
+  return bracketed ? bracketed[1] : value;
+}
+
+function rejectEdgeWhitespace(value) {
+  if (typeof value === 'string' && value.length > 0 && value !== value.trim()) {
+    throw new Error('Refusing database host with surrounding whitespace');
+  }
 }
 
 function isLocalHost(value) {
@@ -34,9 +39,27 @@ function assertNoRepeatedHost(connectionString) {
   }
   const queryHosts = url.searchParams.getAll('host');
   const queryAddrs = url.searchParams.getAll('hostaddr');
-  if (queryHosts.length > 1 || queryAddrs.length > 1 || (url.hostname && queryHosts.length > 0)) {
+  for (const value of [...queryHosts, ...queryAddrs]) {
+    rejectEdgeWhitespace(value);
+  }
+  if (queryHosts.length > 1 || queryAddrs.length > 1) {
     throw new Error('Refusing repeated host parameter in database connection string');
   }
+  // pg-connection-string lets ?host= replace the authority. A loopback
+  // authority plus one absolute socket path is still that socket. Any other
+  // second host is a repeat, including a remote value in either position.
+  const socketOverride = queryHosts.length === 1
+    && queryHosts[0].startsWith('/')
+    && !queryHosts[0].includes('\0')
+    && isLoopbackAuthority(url.hostname);
+  if (url.hostname && queryHosts.length > 0 && !socketOverride) {
+    throw new Error('Refusing repeated host parameter in database connection string');
+  }
+}
+
+function isLoopbackAuthority(hostname) {
+  const bare = hostname.replace(/^\[(.+)]$/, '$1');
+  return LOOPBACK_NAMES.has(bare.toLowerCase());
 }
 
 function refuse(host) {
@@ -59,6 +82,8 @@ export function assertLocalDatabase(connectionString) {
     throw new Error('DATABASE_URL is not a valid URL');
   }
 
+  rejectEdgeWhitespace(config.host);
+  rejectEdgeWhitespace(config.hostaddr);
   const parsedHost = unwrapHost(config.host || '');
   const parsedAddr = unwrapHost(config.hostaddr || '');
   if (parsedHost.includes(',') || parsedAddr.includes(',')) {
@@ -66,12 +91,16 @@ export function assertLocalDatabase(connectionString) {
   }
   if (parsedAddr && !isLocalHost(parsedAddr)) refuse(parsedAddr);
 
-  const envAddr = unwrapHost(process.env.PGHOSTADDR || '');
+  const envAddrRaw = process.env.PGHOSTADDR || '';
+  rejectEdgeWhitespace(envAddrRaw);
+  const envAddr = unwrapHost(envAddrRaw);
   if (envAddr && !isLocalHost(envAddr)) refuse(envAddr);
 
   let effective = parsedHost;
   if (!effective) {
-    effective = unwrapHost(process.env.PGHOST || 'localhost');
+    const envHost = process.env.PGHOST || 'localhost';
+    rejectEdgeWhitespace(envHost);
+    effective = unwrapHost(envHost);
   }
   if (!isLocalHost(effective)) refuse(effective || '(empty)');
 }
