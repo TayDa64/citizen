@@ -27,6 +27,7 @@ function mentionsPolicy(state) {
 test('applying, clearing, and toggling a world event removes the chart marker', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Cash & Burn Rate' })).toBeVisible();
+  await expect(page.getByRole('main').locator('#metrics-chart-description')).toBeVisible();
   await expect(page.locator('.metrics-chart .highcharts-plot-line')).toHaveCount(0);
   await expect(page.locator('.metrics-chart .highcharts-plot-band')).toHaveCount(0);
 
@@ -91,6 +92,7 @@ test('event buttons expose a name that starts with the visible label', async ({ 
 
   const idle = await new AxeBuilder({ page })
     .include('.trigger-panel')
+    .include('.data-source')
     .withRules(['label-content-name-mismatch'])
     .analyze();
   expect(idle.violations).toEqual([]);
@@ -98,6 +100,7 @@ test('event buttons expose a name that starts with the visible label', async ({ 
   await page.getByRole('button', { name: /^Policy change / }).click();
   const pressed = await new AxeBuilder({ page })
     .include('.trigger-panel')
+    .include('.data-source')
     .withRules(['label-content-name-mismatch'])
     .analyze();
   expect(pressed.violations).toEqual([]);

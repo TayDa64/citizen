@@ -2,9 +2,12 @@
 // Slice 1: taxRate increases burn, then cash falls on each tick.
 // Slice 2: real-world triggers move hype and talent cost. With no active
 // trigger, talent cost stays 1 and burn matches the Slice 1 formula.
+// API mode uses dollar talent cost and does not multiply burn. That choice
+// lives only in talentCostMultipliesBurn (src/dataSource.js). OPEN DECISION.
 // `appliedAtIndex` on an active trigger is client runtime for the chart, not
 // part of the RealWorldTrigger payload in triggers.js.
 
+import { talentCostMultipliesBurn } from './dataSource';
 import { assertValidTrigger, describeTrigger } from './triggers';
 
 export const BASE_BURN = 2000;
@@ -28,6 +31,7 @@ export const initialState = {
     hype: BASE_HYPE,
     talentCost: BASE_TALENT_COST,
   },
+  dataSource: 'local',
   activeTriggers: [],
   lastTriggerChange: null,
 };
@@ -51,25 +55,39 @@ function evalFormula(formula, context) {
   }
 }
 
-export function computeBurnRate(taxRate, talentCost = BASE_TALENT_COST) {
-  const formula = '{baseBurn} * (1 + {taxRate} * 0.4) * {talentCost}';
+function dataSourceOf(state) {
+  return state?.dataSource === 'api' ? 'api' : 'local';
+}
+
+export function computeBurnRate(taxRate, talentCost = BASE_TALENT_COST, dataSource = 'local') {
+  const talentFactor = talentCostMultipliesBurn(dataSource) ? (talentCost ?? BASE_TALENT_COST) : 1;
+  const formula = '{baseBurn} * (1 + {taxRate} * 0.4) * {talentFactor}';
   return Math.round(
     evalFormula(formula, {
       baseBurn: BASE_BURN,
       taxRate,
-      talentCost: talentCost ?? BASE_TALENT_COST,
+      talentFactor,
     })
   );
 }
 
 export function previewBurnRate(state) {
-  return computeBurnRate(state.taxRate, state.company.talentCost ?? BASE_TALENT_COST);
+  return computeBurnRate(
+    state.taxRate,
+    state.company.talentCost ?? BASE_TALENT_COST,
+    dataSourceOf(state)
+  );
+}
+
+export function baselineBurnRate(state) {
+  const talent = state.baselines?.talentCost ?? state.company?.talentCost ?? BASE_TALENT_COST;
+  return computeBurnRate(state.taxRate, talent, dataSourceOf(state));
 }
 
 export function applyEffects(state) {
   const next = structuredClone(state);
   const talentCost = next.company.talentCost ?? BASE_TALENT_COST;
-  next.company.burnRate = computeBurnRate(next.taxRate, talentCost);
+  next.company.burnRate = computeBurnRate(next.taxRate, talentCost, dataSourceOf(next));
   next.company.cash = Math.max(0, next.company.cash - next.company.burnRate / 12);
   next.history.cash.push(Math.round(next.company.cash));
   next.history.burnRate.push(next.company.burnRate);
@@ -119,14 +137,59 @@ function combinedEffects(baselines, activeTriggers) {
 }
 
 function storeTrigger(trigger, appliedAtIndex) {
+  const effect = {};
+  if (typeof trigger.effect?.hype === 'number') effect.hype = trigger.effect.hype;
+  if (typeof trigger.effect?.talentCost === 'number') effect.talentCost = trigger.effect.talentCost;
   return {
     id: trigger.id,
     type: trigger.type,
     label: trigger.label,
     source: trigger.source,
     timestamp: trigger.timestamp,
-    effect: { ...trigger.effect },
+    effect,
     appliedAtIndex,
+  };
+}
+
+export function hydrateFromApi(prev, snapshot) {
+  const company = snapshot?.company;
+  const baselines = company?.baselines;
+  if (baselines == null) throw new TypeError('Company baselines are required');
+  const nextBaselines = {
+    hype: Number(baselines.hype),
+    talentCost: Number(baselines.talentCost),
+  };
+  if (!Number.isFinite(nextBaselines.hype) || !Number.isFinite(nextBaselines.talentCost)) {
+    throw new TypeError('Company baselines must be finite numbers');
+  }
+  const triggers = Array.isArray(snapshot.triggers) ? snapshot.triggers : [];
+  for (const trigger of triggers) assertValidTrigger(trigger);
+  const index = Math.max(0, (prev.history?.cash?.length ?? 1) - 1);
+  const previousById = new Map((prev.activeTriggers ?? []).map((item) => [item.id, item]));
+  const activeTriggers = triggers.map((trigger) => {
+    const prior = previousById.get(trigger.id);
+    return storeTrigger(trigger, prior?.appliedAtIndex ?? index);
+  });
+  const chartStarted = (prev.history?.cash?.length ?? 1) > 1;
+  const cash = Number(company.cash);
+  const burnRate = Number(company.burnRate);
+  return {
+    ...prev,
+    dataSource: 'api',
+    baselines: nextBaselines,
+    activeTriggers,
+    company: {
+      ...prev.company,
+      hype: Number(company.hype),
+      talentCost: Number(company.talentCost),
+      ...(chartStarted ? {} : { cash, burnRate }),
+    },
+    history: chartStarted
+      ? prev.history
+      : {
+          cash: [Math.round(cash)],
+          burnRate: [burnRate],
+        },
   };
 }
 

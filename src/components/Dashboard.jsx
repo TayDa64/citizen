@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Chart, Title } from '@highcharts/react';
 import { LineSeries } from '@highcharts/react/series/Line';
-import { computeBurnRate, previewBurnRate } from '../simulation';
+import { talentCostShowsDollars } from '../dataSource';
+import { baselineBurnRate, previewBurnRate } from '../simulation';
 import {
   deltaPhrase,
   describeTrigger,
   formatDollars,
   formatHypePercent,
+  formatTalentDollars,
   formatTalentMultiplier,
 } from '../triggers';
 import { loadChartAccessibility } from './loadChartAccessibility';
@@ -49,14 +51,20 @@ function ReadoutRow({ label, value }) {
   );
 }
 
+function formatTalentValue(value, dataSource) {
+  if (talentCostShowsDollars(dataSource)) return formatTalentDollars(value);
+  return formatTalentMultiplier(value);
+}
+
 function WorldEventEffect({ state }) {
   const active = state.activeTriggers ?? [];
   if (active.length === 0) return null;
 
+  const dataSource = state.dataSource === 'api' ? 'api' : 'local';
   const before = state.baselines ?? { hype: state.company.hype, talentCost: 1 };
   const after = { hype: state.company.hype, talentCost: state.company.talentCost ?? 1 };
   const nextBurn = previewBurnRate(state);
-  const baselineBurn = computeBurnRate(state.taxRate, before.talentCost ?? 1);
+  const baselineBurn = baselineBurnRate(state);
   const burnDelta = baselineBurn === 0 ? 0 : nextBurn / baselineBurn - 1;
   const burnDirection = burnDirectionOf(burnDelta);
   const burnArrow = directionArrow(burnDirection);
@@ -76,10 +84,10 @@ function WorldEventEffect({ state }) {
           label="Hype after"
           value={`${formatHypePercent(after.hype)} (${deltaPhrase(after.hype - before.hype)})`}
         />
-        <ReadoutRow label="Talent cost before" value={formatTalentMultiplier(before.talentCost)} />
+        <ReadoutRow label="Talent cost before" value={formatTalentValue(before.talentCost, dataSource)} />
         <ReadoutRow
           label="Talent cost after"
-          value={`${formatTalentMultiplier(after.talentCost)} (${deltaPhrase((after.talentCost - before.talentCost) / (before.talentCost || 1))})`}
+          value={`${formatTalentValue(after.talentCost, dataSource)} (${deltaPhrase((after.talentCost - before.talentCost) / (before.talentCost || 1))})`}
         />
       </dl>
       <p className={`delta delta--${burnDirection}`}>

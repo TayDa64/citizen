@@ -18,6 +18,22 @@ button:focus-visible {
   outline-offset: 2px;
 }
 
+.data-source {
+  margin: 0.75rem 1rem 0;
+  padding: 0.65rem 0.9rem;
+  background: #1e293b;
+  color: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  line-height: 1.45;
+}
+
+.data-source--alert {
+  background: #3f1d1d;
+  color: #fee2e2;
+  border-color: #fecaca;
+}
+
 .trigger-panel {
   margin: 0.75rem 1rem 0;
   padding: 1rem;
@@ -81,6 +97,14 @@ button:focus-visible {
 
 .trigger-button:hover {
   background: #273549;
+}
+
+.trigger-button:disabled,
+.trigger-clear:disabled {
+  cursor: not-allowed;
+  color: #f8fafc;
+  background: #1e293b;
+  border-style: dashed;
 }
 
 .trigger-button--active {

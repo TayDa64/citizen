@@ -2,7 +2,10 @@ import { describe, expect, test } from 'vitest';
 import {
   applyEffects,
   applyTrigger,
+  baselineBurnRate,
   clearTriggers,
+  computeBurnRate,
+  hydrateFromApi,
   initialState,
   previewBurnRate,
   removeTrigger,
@@ -105,8 +108,11 @@ describe('applyTrigger', () => {
   test('news spike adds hype and a huge spike clamps at 1', () => {
     expect(applyTrigger(initialState, news).company.hype).toBeCloseTo(0.4);
     expect(
-      applyTrigger(initialState, { ...news, id: 'huge-news', effect: { hype: 5 } }).company.hype
+      applyTrigger(initialState, { ...news, id: 'huge-news', effect: { hype: 0.8 } }).company.hype
     ).toBe(1);
+    expect(() =>
+      applyTrigger(initialState, { ...news, id: 'illegal-news', effect: { hype: 5 } })
+    ).toThrow(TypeError);
   });
 
   test('a negative talent shock cannot drive talent cost below zero', () => {
@@ -163,6 +169,41 @@ describe('removeTrigger and clearTriggers', () => {
     expect(remaining.company.hype).toBeCloseTo(0.4);
     expect(remaining.company.talentCost).toBeCloseTo(1);
     expect(remaining.company.cash).toBe(stacked.company.cash);
+  });
+
+  test('api mode keeps the Slice 1 burn formula and the dollar baseline', () => {
+    const apiState = hydrateFromApi(initialState, {
+      company: {
+        id: 'company-1',
+        name: 'Northwind',
+        cash: 15000,
+        burnRate: 2000,
+        hype: 0.3,
+        talentCost: 4480,
+        baselines: { hype: 0.3, talentCost: 4000 },
+      },
+      triggers: [policy],
+    });
+
+    expect(apiState.dataSource).toBe('api');
+    expect(apiState.baselines).toEqual({ hype: 0.3, talentCost: 4000 });
+    expect(apiState.company.talentCost).toBe(4480);
+    expect(apiState.company.cash).toBe(15000);
+    expect(apiState.company.burnRate).toBe(2000);
+    expect(apiState.activeTriggers[0].appliedAtIndex).toBe(0);
+    expect(apiState.activeTriggers[0].appliedAtIndex).not.toBeUndefined();
+    expect(Object.keys(apiState.activeTriggers[0])).not.toContain('chartNote');
+    expect(previewBurnRate(apiState)).toBe(2200);
+    expect(baselineBurnRate(apiState)).toBe(2200);
+    expect(applyEffects(apiState).company.burnRate).toBe(2200);
+    expect(applyEffects(apiState).history.burnRate).toEqual([2000, 2200]);
+    expect(computeBurnRate(0.25, 4480, 'api')).toBe(2200);
+    expect(computeBurnRate(0.25, 1.12, 'local')).toBe(2464);
+
+    const stacked = applyTrigger(apiState, market);
+    expect(stacked.baselines.talentCost).toBe(4000);
+    expect(stacked.company.talentCost).toBeCloseTo(4480 * 0.92, 5);
+    expect(previewBurnRate(stacked)).toBe(2200);
   });
 
   test('clearTriggers restores the Slice 1 hype and talent baseline without ticking', () => {

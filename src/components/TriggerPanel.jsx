@@ -1,5 +1,11 @@
 import { useRef } from 'react';
-import { SAMPLE_TRIGGERS, formatSignedPercent, formatTriggerDate } from '../triggers';
+import {
+  SAMPLE_TRIGGERS,
+  formatSignedPercent,
+  formatTalentDollars,
+  formatTriggerDate,
+  projectedTalentDollars,
+} from '../triggers';
 
 function TriggerGlyph({ type }) {
   const common = {
@@ -35,13 +41,18 @@ function TriggerGlyph({ type }) {
   }
 }
 
-function effectParts(trigger) {
+function effectParts(trigger, state) {
   const parts = [];
   if (typeof trigger.effect.talentCost === 'number' && trigger.effect.talentCost !== 0) {
+    let text = `talent cost ${formatSignedPercent(trigger.effect.talentCost)}`;
+    if (state.dataSource === 'api' && Number.isFinite(state.baselines?.talentCost)) {
+      const dollars = projectedTalentDollars(state.baselines.talentCost, trigger.effect.talentCost);
+      if (dollars != null) text = `${text} (${formatTalentDollars(dollars)})`;
+    }
     parts.push({
       key: 'talentCost',
       direction: trigger.effect.talentCost > 0 ? 'up' : 'down',
-      text: `talent cost ${formatSignedPercent(trigger.effect.talentCost)}`,
+      text,
     });
   }
   if (typeof trigger.effect.hype === 'number' && trigger.effect.hype !== 0) {
@@ -54,12 +65,12 @@ function effectParts(trigger) {
   return parts;
 }
 
-export default function TriggerPanel({ state, announcement, onToggleTrigger, onClearTriggers }) {
+export default function TriggerPanel({ state, announcement, busy = false, onToggleTrigger, onClearTriggers }) {
   const activeIds = new Set((state.activeTriggers ?? []).map((trigger) => trigger.id));
   const headingRef = useRef(null);
 
-  const handleClear = () => {
-    onClearTriggers();
+  const handleClear = async () => {
+    await onClearTriggers();
     const heading = headingRef.current;
     if (!heading) return;
     try {
@@ -76,8 +87,9 @@ export default function TriggerPanel({ state, announcement, onToggleTrigger, onC
           World events
         </h2>
         <p className="trigger-panel__lede">
-          Sample events stored on this device. A policy change, news spike, or market shift
-          moves hype and talent cost. No live feed is connected.
+          {state.dataSource === 'api'
+            ? 'Events stored by the Citizen service. Talent cost is shown in dollars from the company baseline.'
+            : 'Sample events stored on this device. A policy change, news spike, or market shift moves hype and talent cost. No live feed is connected.'}
         </p>
       </div>
       <div role="status" aria-live="polite" aria-atomic="true" className="trigger-live">
@@ -88,7 +100,7 @@ export default function TriggerPanel({ state, announcement, onToggleTrigger, onC
           const active = activeIds.has(trigger.id);
           const labelId = `${trigger.id}-label`;
           const sourceId = `${trigger.id}-source`;
-          const parts = effectParts(trigger);
+          const parts = effectParts(trigger, state);
           const labelledBy = [labelId, ...parts.map((part) => `${trigger.id}-${part.key}`), sourceId].join(' ');
           return (
             <button
@@ -97,6 +109,7 @@ export default function TriggerPanel({ state, announcement, onToggleTrigger, onC
               className={active ? 'trigger-button trigger-button--active' : 'trigger-button'}
               aria-pressed={active}
               aria-labelledby={labelledBy}
+              disabled={busy}
               onClick={() => onToggleTrigger(trigger)}
             >
               <span className="trigger-button__title">
@@ -124,7 +137,7 @@ export default function TriggerPanel({ state, announcement, onToggleTrigger, onC
         })}
       </div>
       {activeIds.size > 0 && (
-        <button type="button" className="trigger-clear" onClick={handleClear}>
+        <button type="button" className="trigger-clear" onClick={handleClear} disabled={busy}>
           Clear world events
         </button>
       )}
