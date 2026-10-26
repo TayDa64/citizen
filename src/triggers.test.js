@@ -182,7 +182,9 @@ describe('triggerDiagramOverlay', () => {
   test('matches the Slice 1 labels when no trigger is active', () => {
     expect(triggerDiagramOverlay(quiet)).toEqual({
       nodeLabels: {
+        3: 'Hire Staff\n(Tech / Marketing / Sales)\nTalent ×1.0000\nno employees',
         5: 'Real-World Triggers\n(Firecrawl + Events)',
+        7: 'Launch / Market / Sell\nTrack Runway & Hype\nBurn: $2,200 (base $2,200)',
         'civic-infra': 'Civic Lever:\nInfrastructure / Talent',
       },
       edgeLabels: {
@@ -216,8 +218,13 @@ describe('triggerDiagramOverlay', () => {
       baselines: { hype: 0.3, talentCost: 4000 },
       activeTriggers: [],
     });
-    expect(overlay.edgeLabels['einfra-7']).toBe('×1.28 talent');
-    expect(overlay.nodeLabels['civic-infra']).toContain('×1.28 talent');
+    expect(overlay.edgeLabels['einfra-7']).toBe('×1.2800 talent');
+    expect(overlay.nodeLabels['civic-infra']).toContain('×1.2800 talent');
+    expect(overlay.nodeLabels[3]).toContain('Talent ×1.2800');
+    expect(overlay.nodeLabels[3]).toContain('no employees');
+    expect(overlay.nodeLabels[7]).toBe(
+      'Launch / Market / Sell\nTrack Runway & Hype\nBurn: $2,816 (base $2,200)'
+    );
   });
 
   test('adds a hype node only when hype moved', () => {

@@ -1,4 +1,10 @@
-import { formatTalentReadout, talentMultiplierOf } from './talentMultiplier';
+import {
+  baseBurnRate,
+  effectiveBurnRate,
+  formatTalentReadout,
+  talentMixOf,
+  talentMultiplierOf,
+} from './talentMultiplier';
 
 /**
  * RealWorldTrigger API contract (v1).
@@ -269,6 +275,15 @@ export function triggerDiagramOverlay(state) {
   const multiplierText = Math.abs(multiplier - 1) < 0.00005
     ? ''
     : `×${formatTalentReadout(multiplier)} talent`;
+  const mix = talentMixOf(state);
+  const headcounts = mix.length === 0
+    ? 'no employees'
+    : mix.map((group) => `${group.department ?? 'unassigned'} ${group.headcount}`).join(', ');
+  const taxRate = Number.isFinite(state.taxRate) ? state.taxRate : 0.25;
+  const effective = effectiveBurnRate({ ...state, taxRate });
+  const base = baseBurnRate(taxRate);
+  nodeLabels[3] = `Hire Staff\n(Tech / Marketing / Sales)\nTalent ×${formatTalentReadout(multiplier)}\n${headcounts}`;
+  nodeLabels[7] = `Launch / Market / Sell\nTrack Runway & Hype\nBurn: ${formatCurrency(effective)} (base ${formatCurrency(base)})`;
 
   if (active.length === 0) {
     if (multiplierText) {

@@ -155,6 +155,7 @@ export default function WorkflowDiagram({ state, setState, onTick }) {
     state.company.hype,
     state.company.talentCost,
     state.talentMultiplier,
+    state.talentMix,
     state.employees,
     state.dataSource,
     state.activeTriggers,

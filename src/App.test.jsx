@@ -68,7 +68,10 @@ describe('world event trigger', () => {
     expect(within(effect).getByText('Talent cost before')).toBeInTheDocument();
     expect(within(effect).getByText('Talent cost after')).toBeInTheDocument();
     const talent = screen.getByRole('region', { name: 'Talent and burn' });
-    expect(talent).toHaveTextContent('×1.00 talent');
+    expect(talent).toHaveTextContent('×1.0000 talent');
+    expect(talent).toHaveTextContent('No employees. Talent multiplier is 1.0000.');
+    expect(document.querySelector('[data-id="3"]').textContent).toContain('Talent ×1.0000');
+    expect(document.querySelector('[data-id="7"]').textContent).toContain('Burn: $2,200 (base $2,200)');
     expect(talent).toHaveTextContent(/base burn \$2,200/i);
     expect(screen.queryByText(/\$2,464/)).not.toBeInTheDocument();
     expect(screen.getByText(/Active world event: Policy change: talent cost \+12%/)).toBeInTheDocument();

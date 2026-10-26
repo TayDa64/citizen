@@ -11,6 +11,7 @@ import {
   UNREADABLE_COMPANY_NOTE,
   createCitizenApi,
   loadCitizenWorld,
+  hostHeaderAlert,
   readCitizenApiBase,
   skippedTriggerAlert,
 } from './citizenApi';
@@ -25,6 +26,8 @@ import {
 import { CLEARED_ANNOUNCEMENT, announceTrigger } from './triggers';
 
 function removalBlockedMessage(error, label) {
+  const hostAlert = hostHeaderAlert(error);
+  if (hostAlert) return `Could not remove ${label}. ${hostAlert}`;
   const status = error?.status;
   if (status === 404 || status === 405) {
     return `Could not remove ${label}. The service has not enabled that action yet (${status}). Nothing on this screen was changed.`;
@@ -42,9 +45,8 @@ function removalBlockedMessage(error, label) {
 }
 
 function saveBlockedMessage(error, label) {
-  if (error?.status === 403) {
-    return `Could not save ${label}. The Citizen service refused this page (403). Use the local /api address on this machine. Nothing on this screen was changed.`;
-  }
+  const hostAlert = hostHeaderAlert(error);
+  if (hostAlert) return `Could not save ${label}. ${hostAlert}`;
   return `Could not save ${label}. ${error.message}`;
 }
 
@@ -161,6 +163,12 @@ function App() {
       try {
         reading = await refreshApi(apiBase);
       } catch (error) {
+        const hostAlert = hostHeaderAlert(error);
+        if (hostAlert) {
+          setActionError(hostAlert);
+          setAnnouncement('');
+          return;
+        }
         if (error?.code === 'unreadable-company') {
           showSampleData(UNREADABLE_COMPANY_NOTE);
           setAnnouncement('');
@@ -229,6 +237,12 @@ function App() {
         }
         setActionError(alerts.join(' '));
       } catch (error) {
+        const hostAlert = hostHeaderAlert(error);
+        if (hostAlert) {
+          setActionError(hostAlert);
+          setAnnouncement('');
+          return;
+        }
         if (error?.code === 'unreadable-company') {
           showSampleData(UNREADABLE_COMPANY_NOTE);
           setAnnouncement('');

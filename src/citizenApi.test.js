@@ -2,6 +2,8 @@ import { describe, expect, test, vi } from 'vitest';
 import { SAMPLE_TRIGGERS } from './triggers';
 import {
   CONNECTED_NOTE,
+  DUPLICATE_HOST_ALERT,
+  HOST_REQUIRED_ALERT,
   SAMPLE_DATA_NOTE,
   UNREADABLE_COMPANY_NOTE,
   createCitizenApi,
@@ -289,7 +291,25 @@ describe('loadCitizenWorld', () => {
     expect(result.snapshot).toBeNull();
     expect(result.note).toBe(SAMPLE_DATA_NOTE);
     expect(result.alert).toMatch(/403/);
+    expect(result.alert).toMatch(/Forbidden host/);
     expect(result.alert).toMatch(/\/api/);
+  });
+
+  test('a missing Host and a duplicate Host stay on sample data', async () => {
+    const missing = await loadCitizenWorld({
+      env: { VITE_CITIZEN_API: 'http://127.0.0.1:8787' },
+      fetchImpl: vi.fn(async () => jsonResponse({ error: 'Host required' }, 400)),
+    });
+    expect(missing.mode).toBe('local');
+    expect(missing.snapshot).toBeNull();
+    expect(missing.alert).toBe(HOST_REQUIRED_ALERT);
+
+    const duplicate = await loadCitizenWorld({
+      env: { VITE_CITIZEN_API: 'http://127.0.0.1:8787' },
+      fetchImpl: vi.fn(async () => jsonResponse({ error: 'Duplicate host' }, 400)),
+    });
+    expect(duplicate.mode).toBe('local');
+    expect(duplicate.alert).toBe(DUPLICATE_HOST_ALERT);
   });
 
   test('falls back to sample data when the service cannot be reached', async () => {

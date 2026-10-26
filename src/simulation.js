@@ -4,8 +4,8 @@
 // trigger, talent cost stays 1 and burn matches the Slice 1 formula.
 // Burn is round(2000 * (1 + taxRate * 0.4) * talentMultiplier). The multiplier
 // comes from employees locally and from company.talentMultiplier on the API.
-// OPEN DECISION: triggerTalentCostAffectsBurn (src/talentMultiplier.js) is
-// false in both modes, matching the backend: effect.talentCost does not scale burn.
+// OPEN DECISION: APPLY_TALENT_COST_TO_BURN in src/talentMultiplier.js is
+// false, matching the backend: effect.talentCost does not scale burn.
 // The service is the source of truth for hype, talentCost, baselines, and
 // talentMultiplier. Cash and burn stay on the client simulation.
 // `appliedAtIndex` on an active trigger is client runtime for the chart, not
@@ -14,9 +14,11 @@
 import { assertValidTrigger, describeTrigger } from './triggers';
 import {
   burnRateFromMultiplier,
+  composeTalentMultiplier,
   effectiveBurnRate,
   readTalentMix,
   readTalentMultiplier,
+  talentCostFactor,
   baseBurnRate as taxOnlyBurnRate,
 } from './talentMultiplier';
 
@@ -63,6 +65,17 @@ export function baselineBurnRate(state) {
 
 export function applyEffects(state) {
   const next = structuredClone(state);
+  if (next.dataSource !== 'api') {
+    const profile = composeTalentMultiplier({
+      employees: next.employees,
+      triggerFactor: talentCostFactor(next.company?.talentCost, next.baselines?.talentCost),
+    });
+    next.talentMultiplier = profile.talentMultiplier;
+    next.talentMix = profile.talentMix;
+  }
+  next.company.talentMultiplier = next.talentMultiplier;
+  next.company.talentMix = next.talentMix;
+  next.company.baseBurnRate = baselineBurnRate(next);
   next.company.burnRate = previewBurnRate(next);
   next.company.cash = Math.max(0, next.company.cash - next.company.burnRate / 12);
   next.history.cash.push(Math.round(next.company.cash));

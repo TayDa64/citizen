@@ -273,6 +273,31 @@ describe('removeTrigger and clearTriggers', () => {
     })).toThrow(/4 decimal places/);
   });
 
+  test('four tech employees at skill 1 burn 4900 at tax 1 and a second tick does not compound', () => {
+    const staffed = setTaxRate({
+      ...initialState,
+      employees: [
+        { department: 'tech', skillTech: 1 },
+        { department: 'tech', skillTech: 1 },
+        { department: 'tech', skillTech: 1 },
+        { department: 'tech', skillTech: 1 },
+      ],
+    }, 1);
+    const taxed = applyEffects(staffed);
+    expect(taxed.company.talentMultiplier).toBe(1.75);
+    expect(taxed.company.baseBurnRate).toBe(2800);
+    expect(taxed.company.burnRate).toBe(4900);
+    expect(taxed.company.cash).toBe(15000 - 4900 / 12);
+    const second = applyEffects(taxed);
+    expect(second.company.burnRate).toBe(4900);
+    expect(second.company.talentMultiplier).toBe(1.75);
+    expect(second.company.cash).toBe(15000 - 4900 / 12 - 4900 / 12);
+    const triggered = applyTrigger(taxed, policy);
+    expect(triggered.company.talentCost).toBeCloseTo(1.12, 5);
+    expect(triggered.company.burnRate).toBe(4900);
+    expect(previewBurnRate(triggered)).toBe(4900);
+  });
+
   test('clearTriggers restores the Slice 1 hype and talent baseline without ticking', () => {
     const stacked = applyTrigger(applyTrigger(initialState, policy), market);
     const cleared = clearTriggers(stacked);

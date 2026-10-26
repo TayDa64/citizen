@@ -66,7 +66,7 @@ describe('API talent cost display', () => {
     const effect = screen.getByRole('region', { name: 'World event effect' });
     expect(within(effect).getByText('$4,000')).toBeInTheDocument();
     expect(within(effect).getByText('$4,480 (up +12%)')).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Talent and burn' })).toHaveTextContent('×1.00 talent');
+    expect(screen.getByRole('region', { name: 'Talent and burn' })).toHaveTextContent('×1.0000 talent');
     expect(screen.getByRole('region', { name: 'Talent and burn' })).toHaveTextContent(/base burn \$2,200/i);
     expect(screen.queryByText(/\$2,464/)).not.toBeInTheDocument();
     expect(within(effect).queryByText(/1\.12×/)).not.toBeInTheDocument();
@@ -90,7 +90,7 @@ describe('sample data fallback', () => {
     expect(policyButton).not.toHaveAccessibleName(/\$4,480/);
     await user.click(policyButton);
 
-    expect(screen.getByRole('region', { name: 'Talent and burn' })).toHaveTextContent('×1.00 talent');
+    expect(screen.getByRole('region', { name: 'Talent and burn' })).toHaveTextContent('×1.0000 talent');
     expect(screen.queryByText(/\$2,464/)).not.toBeInTheDocument();
     expect(screen.getByText(/1\.12×/)).toBeInTheDocument();
     vi.unstubAllEnvs();
@@ -404,6 +404,44 @@ describe('sample data fallback', () => {
     expect(screen.queryByText(/\$2,464/)).not.toBeInTheDocument();
   });
 
+  test('a missing Host shows an alert and keeps the sample numbers', async () => {
+    vi.stubEnv('VITE_CITIZEN_API', 'http://127.0.0.1:8787');
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ error: 'Host required' }, 400)));
+    render(<App />);
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/400/);
+    expect(alert).toHaveTextContent(/Host required/);
+    expect(alert).toHaveTextContent(/nothing on this screen was changed/i);
+    expect(screen.getByRole('status', { name: /using sample data on this device/i })).toBeInTheDocument();
+    expect(screen.getByText(/Cash: \$15000/)).toBeInTheDocument();
+    expect(screen.getByText(/Burn\/mo: \$2000/)).toBeInTheDocument();
+  });
+
+  test('a duplicate Host on delete keeps the current numbers', async () => {
+    vi.stubEnv('VITE_CITIZEN_API', '/api');
+    vi.stubGlobal('fetch', vi.fn(async (url, options = {}) => {
+      const path = String(url);
+      const method = options.method || 'GET';
+      if (method === 'DELETE') return jsonResponse({ error: 'Duplicate host' }, 400);
+      if (path.endsWith('/api/companies')) {
+        return jsonResponse([{ ...apiCompany, talentCost: 4480, baselines: { hype: 0.3, talentCost: 4000 } }]);
+      }
+      if (path.endsWith('/api/triggers')) return jsonResponse([policy]);
+      return jsonResponse({ error: 'Not found' }, 404);
+    }));
+
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole('button', { name: /^Policy change /, pressed: true }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/Duplicate host/);
+    expect(alert).toHaveTextContent(/nothing on this screen was changed/i);
+    expect(screen.getByRole('button', { name: /^Policy change / })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('region', { name: 'World event effect' })).toHaveTextContent('$4,480');
+  });
+
   test('a 403 shows an alert and stays on sample data', async () => {
     vi.stubEnv('VITE_CITIZEN_API', 'http://example.test');
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ error: 'Forbidden', issues: [] }, 403)));
@@ -464,10 +502,10 @@ describe('API talent multiplier', () => {
     }));
 
     render(<App />);
-    expect(await screen.findByText(/×1\.28 talent/)).toBeInTheDocument();
+    expect(await screen.findByText(/×1\.2800 talent/)).toBeInTheDocument();
     const talent = screen.getByRole('region', { name: 'Talent and burn' });
     expect(talent).toHaveTextContent('Effective burn $2,816');
-    expect(talent).toHaveTextContent('×1.28 talent');
+    expect(talent).toHaveTextContent('×1.2800 talent');
     expect(talent).toHaveTextContent(/base burn \$2,200/i);
     expect(screen.getByText(/Cash: \$15000/)).toBeInTheDocument();
     expect(screen.getByText(/Burn\/mo: \$2000/)).toBeInTheDocument();

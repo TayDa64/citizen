@@ -48,7 +48,7 @@ function TalentMixTable({ rows }) {
         <tr>
           <th scope="col">Department</th>
           <th scope="col">Headcount</th>
-          <th scope="col">Avg skill</th>
+          <th scope="col">Average skill</th>
           <th scope="col">Weight</th>
           <th scope="col">Contribution</th>
         </tr>
@@ -56,9 +56,9 @@ function TalentMixTable({ rows }) {
       <tbody>
         {rows.map((row) => (
           <tr key={`${row.department ?? 'unknown'}-${row.headcount}-${row.avgSkill}`}>
-            <td>{row.department ?? 'Unknown'}</td>
+            <td>{row.department ?? 'Unassigned'}</td>
             <td>{String(row.headcount)}</td>
-            <td>{Number(row.avgSkill).toFixed(2)}</td>
+            <td>{formatTalentReadout(row.avgSkill)}</td>
             <td>{formatTalentReadout(row.weight)}</td>
             <td>{formatTalentReadout(row.contribution)}</td>
           </tr>
@@ -83,7 +83,11 @@ function TalentBurnSummary({ state }) {
         <span>×{formatTalentReadout(multiplier)} talent</span>
         {`, ${direction} from base burn ${formatCurrency(base)}.`}
       </p>
-      {mix.length > 0 ? <TalentMixTable rows={mix} /> : null}
+      {mix.length > 0 ? (
+        <TalentMixTable rows={mix} />
+      ) : (
+        <p>No employees. Talent multiplier is 1.0000.</p>
+      )}
     </section>
   );
 }

@@ -2,18 +2,20 @@ import { describe, expect, test } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import Dashboard from './components/Dashboard';
 import {
+  APPLY_TALENT_COST_TO_BURN,
   SAMPLE_EMPLOYEES,
   baseBurnRate,
   burnMultiplier,
   burnRateFromMultiplier,
+  composeTalentMultiplier,
   computeTalentMultiplier,
   departmentWeight,
-  employeeTalentFactor,
   formatTalentReadout,
   readTalentMix,
   readTalentMultiplier,
+  scaleTalentMultiplier,
+  skillFactor,
   talentMixFromEmployees,
-  triggerTalentCostAffectsBurn,
 } from './talentMultiplier';
 
 describe('department weights and skill', () => {
@@ -27,16 +29,14 @@ describe('department weights and skill', () => {
     expect(departmentWeight(undefined)).toBe(1);
   });
 
-  test('clamps skill to 0..1 before the 0.8 slope', () => {
-    expect(employeeTalentFactor({ department: 'tech', skill: 0.5 })).toBeCloseTo(1.25, 10);
-    expect(employeeTalentFactor({ department: 'tech', skill: 2 })).toBeCloseTo(1.25 * 1.4, 10);
-    expect(employeeTalentFactor({ department: 'tech', skill: -1 })).toBeCloseTo(1.25 * 0.6, 10);
-    expect(employeeTalentFactor({ department: null, skill: 0 })).toBeCloseTo(0.6, 10);
-    expect(employeeTalentFactor({ department: 'Finance', skill: 1 })).toBeCloseTo(1.4, 10);
-  });
-
-  test('rejects a non-finite skill', () => {
-    expect(() => employeeTalentFactor({ department: 'tech', skill: Number.NaN })).toThrow(TypeError);
+  test('skill 0 is 0.6x, skill 0.5 is 1x, and skill 1 is 1.4x', () => {
+    expect(skillFactor(0)).toBe(0.6);
+    expect(skillFactor(0.5)).toBe(1);
+    expect(skillFactor(1)).toBe(1.4);
+    expect(skillFactor(-1)).toBe(0.6);
+    expect(skillFactor(2)).toBe(1.4);
+    expect(skillFactor(null)).toBe(1);
+    expect(skillFactor(Number.NaN)).toBe(1);
   });
 });
 
@@ -46,22 +46,81 @@ describe('computeTalentMultiplier', () => {
     expect(computeTalentMultiplier({ employees: undefined, dataSource: 'local' })).toBe(1);
   });
 
-  test('is the mean of employee factors', () => {
-    const employees = [
-      { department: 'tech', skill: 0.5 },
-      { department: 'sales', skill: 0.5 },
-    ];
-    expect(computeTalentMultiplier({ employees, dataSource: 'local' })).toBeCloseTo((1.25 + 0.95) / 2, 10);
+  test('four tech employees at skill 1 are 1.75, and other departments use their own skills', () => {
+    const tech = composeTalentMultiplier({
+      employees: [
+        { department: 'tech', skillTech: 1 },
+        { department: 'Tech', skill_tech: 1 },
+        { department: 'tech', skillTech: 1 },
+        { department: 'tech', skillTech: 1 },
+      ],
+    });
+    expect(tech.talentMultiplier).toBe(1.75);
+    expect(tech.talentMix).toEqual([
+      { department: 'tech', headcount: 4, avgSkill: 1, weight: 1.25, contribution: 1.75 },
+    ]);
+    expect(composeTalentMultiplier({
+      employees: [{ department: 'marketing', skillMarketing: 0.5 }],
+    }).talentMultiplier).toBe(1.05);
+    expect(composeTalentMultiplier({
+      employees: [{ department: 'sales', skillSales: 0.5 }],
+    }).talentMultiplier).toBe(0.95);
+    expect(composeTalentMultiplier({
+      employees: [{ department: 'tech', skillTech: -3 }],
+    }).talentMultiplier).toBe(0.75);
+    expect(composeTalentMultiplier({
+      employees: [{ department: null, skillTech: 0, skillMarketing: 0, skillSales: 0 }],
+    }).talentMultiplier).toBe(0.6);
   });
 
-  test('sample employees are the local mock roster', () => {
+  test('a null skill is 0.5, a blank department is null, and inactive employees are left out', () => {
+    const missing = composeTalentMultiplier({
+      employees: [{ department: '  ', skillTech: null, skillMarketing: null, skillSales: null }],
+    });
+    expect(missing.talentMultiplier).toBe(1);
+    expect(missing.talentMix[0]).toMatchObject({ department: null, weight: 1, avgSkill: 0.5, headcount: 1 });
+
+    const inactive = composeTalentMultiplier({
+      employees: [
+        { department: 'tech', skillTech: 1, isActive: true },
+        { department: 'sales', skillSales: 1, is_active: false },
+      ],
+    });
+    expect(inactive.talentMultiplier).toBe(1.75);
+    expect(inactive.talentMix).toHaveLength(1);
+  });
+
+  test('other departments use the mean of the three skills, and the last share absorbs the residual', () => {
+    const other = composeTalentMultiplier({
+      employees: [{ department: 'ops', skillTech: 1, skillMarketing: 1, skillSales: 0 }],
+    });
+    expect(other.talentMultiplier).toBe(1.1333);
+    expect(other.talentMix[0].department).toBe('ops');
+    expect(other.talentMix[0].weight).toBe(1);
+
+    const thirds = composeTalentMultiplier({
+      employees: [
+        { department: 'c', skillTech: 0.5, skillMarketing: 0.5, skillSales: 0.5 },
+        { department: 'a', skillTech: 0.5, skillMarketing: 0.5, skillSales: 0.5 },
+        { department: 'b', skillTech: 0.5, skillMarketing: 0.5, skillSales: 0.5 },
+      ],
+    });
+    expect(thirds.talentMultiplier).toBe(1);
+    expect(thirds.talentMix.map((group) => group.department)).toEqual(['a', 'b', 'c']);
+    expect(thirds.talentMix.map((group) => group.contribution)).toEqual([0.3333, 0.3333, 0.3334]);
+    const sum = thirds.talentMix.reduce((total, group) => total + group.contribution, 0);
+    expect(Math.round(sum * 10000) / 10000).toBe(thirds.talentMultiplier);
+  });
+
+  test('sample employees use department skills and their contributions sum to the multiplier', () => {
     expect(SAMPLE_EMPLOYEES.length).toBeGreaterThan(0);
-    const multiplier = computeTalentMultiplier({ employees: SAMPLE_EMPLOYEES, dataSource: 'local' });
-    expect(multiplier).toBeGreaterThan(0);
+    const profile = composeTalentMultiplier({ employees: SAMPLE_EMPLOYEES });
+    expect(profile.talentMultiplier).toBe(1.0833);
     const mix = talentMixFromEmployees(SAMPLE_EMPLOYEES);
+    expect(mix.map((row) => row.department)).toEqual(['tech', 'marketing', 'sales']);
+    expect(mix.map((row) => row.contribution)).toEqual([0.4167, 0.35, 0.3166]);
     const contributionSum = mix.reduce((sum, row) => sum + row.contribution, 0);
-    expect(contributionSum).toBeCloseTo(multiplier, 10);
-    expect(mix.map((row) => row.department)).toEqual(expect.arrayContaining(['tech', 'marketing', 'sales']));
+    expect(Math.round(contributionSum * 10000) / 10000).toBe(profile.talentMultiplier);
   });
 
   test('API mode uses talentMultiplier and does not derive it from talent cost', () => {
@@ -106,15 +165,21 @@ describe('burn rate', () => {
     expect(baseBurnRate(taxRate)).toBe(Math.round(2000 * (1 + taxRate * 0.4)));
   });
 
-  test('trigger talent cost stays off in both modes and can be turned on', () => {
-    expect(triggerTalentCostAffectsBurn('local')).toBe(false);
-    expect(triggerTalentCostAffectsBurn('api')).toBe(false);
-    expect(() => triggerTalentCostAffectsBurn('remote')).toThrow(/unknown data source/i);
+  test('trigger talent cost stays off and can be turned on', () => {
+    expect(APPLY_TALENT_COST_TO_BURN).toBe(false);
+    const tech = composeTalentMultiplier({
+      employees: [{ department: 'tech', skillTech: 1 }],
+      triggerFactor: 2,
+    });
+    expect(tech.talentMultiplier).toBe(1.75);
+    const scaled = scaleTalentMultiplier(tech, 1.12);
+    expect(scaled.talentMultiplier).toBe(1.96);
+    expect(scaled.talentMix[0].contribution).toBe(1.96);
 
     const off = burnRateFromMultiplier(0.25, burnMultiplier({
       talentMultiplier: 1,
       talentCostFactor: 1.12,
-      affectsBurn: triggerTalentCostAffectsBurn('local'),
+      affectsBurn: APPLY_TALENT_COST_TO_BURN,
     }));
     const on = burnRateFromMultiplier(0.25, burnMultiplier({
       talentMultiplier: 1,
@@ -133,7 +198,7 @@ describe('burn rate', () => {
 
 describe('talent burn readout', () => {
   test('shows effective burn, the talent factor, base burn, and the mix table', () => {
-    const employees = [{ department: 'tech', skill: 0.53 }];
+    const employees = [{ department: 'tech', skillTech: 0.53 }];
     render(
       <Dashboard
         state={{
@@ -151,17 +216,39 @@ describe('talent burn readout', () => {
 
     const section = screen.getByRole('region', { name: 'Talent and burn' });
     expect(section).toHaveTextContent('Effective burn $2,816');
-    expect(section).toHaveTextContent(`×${formatTalentReadout(1.28)} talent`);
+    expect(section).toHaveTextContent('×1.2800 talent');
     expect(section).toHaveTextContent(/base burn \$2,200/i);
-    expect(formatTalentReadout(1.28)).toBe('1.28');
+    expect(formatTalentReadout(1)).toBe('1.0000');
+    expect(formatTalentReadout(1.28)).toBe('1.2800');
+    expect(formatTalentReadout(1.75)).toBe('1.7500');
 
     const table = within(section).getByRole('table', { name: 'Talent mix' });
     expect(within(table).getByRole('columnheader', { name: 'Department' })).toBeInTheDocument();
     expect(within(table).getByRole('columnheader', { name: 'Headcount' })).toBeInTheDocument();
-    expect(within(table).getByRole('columnheader', { name: 'Avg skill' })).toBeInTheDocument();
+    expect(within(table).getByRole('columnheader', { name: 'Average skill' })).toBeInTheDocument();
     expect(within(table).getByRole('columnheader', { name: 'Weight' })).toBeInTheDocument();
     expect(within(table).getByRole('columnheader', { name: 'Contribution' })).toBeInTheDocument();
     expect(within(table).getByRole('cell', { name: 'tech' })).toBeInTheDocument();
     expect(within(table).getByRole('cell', { name: '1' })).toBeInTheDocument();
+  });
+
+  test('with no employees says the multiplier is 1.0000', () => {
+    render(
+      <Dashboard
+        state={{
+          taxRate: 0.25,
+          dataSource: 'local',
+          employees: [],
+          company: { cash: 15000, burnRate: 2000, hype: 0.3, talentCost: 1, productQuality: 0.4 },
+          baselines: { hype: 0.3, talentCost: 1 },
+          history: { cash: [15000], burnRate: [2000] },
+          activeTriggers: [],
+        }}
+      />
+    );
+    expect(screen.getByRole('region', { name: 'Talent and burn' })).toHaveTextContent(
+      'No employees. Talent multiplier is 1.0000.'
+    );
+    expect(screen.getByRole('region', { name: 'Talent and burn' })).toHaveTextContent('×1.0000 talent');
   });
 });

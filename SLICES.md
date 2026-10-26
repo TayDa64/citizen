@@ -55,6 +55,6 @@ Live company and world-event data comes from Citizen API OpenAPI 0.4.0 on PR #2 
 
 ### OPEN DECISION
 
-`triggerTalentCostAffectsBurn` in `src/talentMultiplier.js` is the only switch for whether `effect.talentCost` also scales burn. It is false in both local sample mode and API mode, matching the backend boundary. Turning it on multiplies burn by `talentCost / baselineTalentCost` (1.12 for the policy sample, preview `$2,464` at tax 0.25 when the employee multiplier is 1). The product has not decided which behavior ships.
+`APPLY_TALENT_COST_TO_BURN` in `src/talentMultiplier.js` is the only switch for whether `effect.talentCost` also scales burn. It is false, matching `APPLY_TALENT_COST_TO_BURN` in PR #6. Turning it on multiplies by `talentCost / baselines.talentCost` (1.12 for the policy sample, preview `$2,464` at tax 0.25 when the employee multiplier is 1). The product has not decided which behavior ships.
 
-OpenAPI 0.5.0 is not pushed yet. `GET /api/companies` is expected to add `talentMultiplier`, `talentMix` (`department`, `headcount`, `avgSkill`, `weight`, `contribution`), `baseBurnRate`, and `burnRate`. Parsing stays in `src/talentMultiplier.js`.
+OpenAPI 0.5.0 is PR #6 (`8a25139c`). `GET /api/companies` adds `talentMultiplier`, `talentMix` (`department`, `headcount`, `avgSkill`, `weight`, `contribution`), and `baseBurnRate`. The multiplier is the mean employee factor, rounded to 4 decimals, and exactly 1 with no employees. Each department uses its own skill column. A null skill is 0.5. Contributions sum to `talentMultiplier`. Parsing stays in `src/talentMultiplier.js`. A missing Host is 400 `Host required`, two Host headers are 400 `Duplicate host`, and any other host is 403 `Forbidden host`. Those alerts keep the current numbers.

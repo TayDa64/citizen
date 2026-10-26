@@ -1,25 +1,36 @@
 /**
- * Talent multiplier for monthly burn.
+ * Employee talent multiplier for burn. Matches OpenAPI 0.5.0 on PR #6.
  *
- * OpenAPI 0.5.0 is not pushed yet. This module is the client reading of that
- * draft, kept in one place so the shape can change.
+ * Per employee: departmentWeight * skillFactor.
+ * skillFactor = 1 + 0.8 * (clamp(skill, 0, 1) - 0.5).
+ * Skill 0.5 is 1x, skill 1 is 1.4x, and skill 0 is 0.6x.
+ * A null or non-finite skill uses 0.5 before that clamp.
  *
- * talentMultiplier is the mean over employees of
- *   deptWeight * (1 + 0.8 * (clamp(skill, 0, 1) - 0.5)).
- * Department weights: tech 1.25, marketing 1.05, sales 0.95.
- * Unknown or null departments use 1. With no employees the multiplier is 1.
+ * Weights: tech 1.25, marketing 1.05, sales 0.95, and 1 for any other
+ * department, including null or blank. Tech reads skill_tech, marketing
+ * reads skill_marketing, and sales reads skill_sales. Another department
+ * uses the mean of those three skills.
  *
- * burnRate = round(2000 * (1 + taxRate * 0.4) * talentMultiplier), rounded
- * once at the end. baseBurnRate = round(2000 * (1 + taxRate * 0.4)).
- * The draft that applied tax twice is not used.
+ * The company multiplier is the mean of the active employees, rounded to
+ * 4 decimal places. No employees is exactly 1. Inactive employees are left
+ * out. talentMix groups that mean. contribution is the group's share,
+ * rounded to 4 decimal places, and the last group absorbs the residual so
+ * the shares sum to talentMultiplier. Order is tech, marketing, sales,
+ * then other names A–Z, then null.
  *
- * API mode uses the company's talentMultiplier when it is present and 1 when
- * it is missing. It does not derive the multiplier from talentCost.
+ * API mode uses company.talentMultiplier when it is present and 1 when it
+ * is missing. It does not derive the multiplier from talent cost.
  * There is no baselines.talentMultiplier.
  *
- * OPEN DECISION: triggerTalentCostAffectsBurn. The backend does not let
- * effect.talentCost scale burn. The flag is false for local and API mode.
+ * burnRate = round(2000 * (1 + taxRate * 0.4) * talentMultiplier), rounded
+ * once. baseBurnRate = round(2000 * (1 + taxRate * 0.4)).
+ *
+ * OPEN DECISION: APPLY_TALENT_COST_TO_BURN. The backend does not let
+ * effect.talentCost scale burn. When the flag is true, the multiplier is
+ * also multiplied by talentCost / baselines.talentCost.
  */
+
+export const APPLY_TALENT_COST_TO_BURN = false;
 
 export const DEPARTMENT_WEIGHTS = Object.freeze({
   tech: 1.25,
@@ -27,11 +38,18 @@ export const DEPARTMENT_WEIGHTS = Object.freeze({
   sales: 0.95,
 });
 
+const DEPARTMENT_ORDER = Object.freeze(['tech', 'marketing', 'sales']);
+
 export const SAMPLE_EMPLOYEES = Object.freeze([
-  Object.freeze({ id: 'emp-tech', department: 'tech', skill: 0.5 }),
-  Object.freeze({ id: 'emp-marketing', department: 'marketing', skill: 0.5 }),
-  Object.freeze({ id: 'emp-sales', department: 'sales', skill: 0.5 }),
+  Object.freeze({ id: 'emp-tech', department: 'tech', skillTech: 0.5, isActive: true }),
+  Object.freeze({ id: 'emp-marketing', department: 'marketing', skillMarketing: 0.5, isActive: true }),
+  Object.freeze({ id: 'emp-sales', department: 'sales', skillSales: 0.5, isActive: true }),
 ]);
+
+function roundTo(value, places) {
+  const factor = 10 ** places;
+  return Math.round((value + Math.sign(value) * 1e-10) * factor) / factor;
+}
 
 function hasAtMostDecimalPlaces(value, places) {
   const factor = 10 ** places;
@@ -39,63 +57,164 @@ function hasAtMostDecimalPlaces(value, places) {
   return Math.abs(scaled - Math.round(scaled)) <= 1e-6;
 }
 
-function clampSkill(skill) {
-  if (typeof skill !== 'number' || !Number.isFinite(skill)) {
-    throw new TypeError('Employee skill must be a finite number');
-  }
-  return Math.min(1, Math.max(0, skill));
+export function clampSkill(skill) {
+  if (skill == null || skill === '') return 0.5;
+  const numeric = Number(skill);
+  if (!Number.isFinite(numeric)) return 0.5;
+  return Math.min(1, Math.max(0, numeric));
+}
+
+export function skillFactor(skill) {
+  return 1 + 0.8 * (clampSkill(skill) - 0.5);
+}
+
+function canonicalDepartment(department) {
+  if (typeof department !== 'string') return null;
+  const key = department.trim().toLowerCase();
+  return key.length === 0 ? null : key;
 }
 
 export function departmentWeight(department) {
-  if (department == null) return 1;
-  const key = String(department).trim().toLowerCase();
-  if (key === '') return 1;
+  const key = canonicalDepartment(department);
+  if (key == null) return 1;
   return DEPARTMENT_WEIGHTS[key] ?? 1;
 }
 
-export function employeeTalentFactor(employee) {
-  const skill = clampSkill(employee?.skill);
-  return departmentWeight(employee?.department) * (1 + 0.8 * (skill - 0.5));
+function readSkill(employee, names) {
+  for (const name of names) {
+    if (!Object.prototype.hasOwnProperty.call(employee, name)) continue;
+    if (employee[name] == null || employee[name] === '') continue;
+    return employee[name];
+  }
+  return null;
+}
+
+function skillForEmployee(employee, department) {
+  if (department === 'tech') return readSkill(employee, ['skillTech', 'skill_tech']);
+  if (department === 'marketing') return readSkill(employee, ['skillMarketing', 'skill_marketing']);
+  if (department === 'sales') return readSkill(employee, ['skillSales', 'skill_sales']);
+  const parts = [
+    readSkill(employee, ['skillTech', 'skill_tech']),
+    readSkill(employee, ['skillMarketing', 'skill_marketing']),
+    readSkill(employee, ['skillSales', 'skill_sales']),
+  ].map((skill) => clampSkill(skill));
+  return (parts[0] + parts[1] + parts[2]) / 3;
+}
+
+function isCounted(employee) {
+  return employee?.isActive !== false && employee?.is_active !== false;
+}
+
+function milli(value) {
+  return Math.round((value + Math.sign(value) * 1e-10) * 10000);
+}
+
+function fromMilli(value) {
+  return value / 10000;
+}
+
+function compareDepartments(left, right) {
+  const leftRank = left == null ? DEPARTMENT_ORDER.length + 1 : DEPARTMENT_ORDER.indexOf(left);
+  const rightRank = right == null ? DEPARTMENT_ORDER.length + 1 : DEPARTMENT_ORDER.indexOf(right);
+  const leftOrder = leftRank === -1 ? DEPARTMENT_ORDER.length : leftRank;
+  const rightOrder = rightRank === -1 ? DEPARTMENT_ORDER.length : rightRank;
+  if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+  if (left == null) return 1;
+  if (right == null) return -1;
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+}
+
+function absorbContributions(groups, talentMultiplier) {
+  if (groups.length === 0) return [];
+  const target = milli(talentMultiplier);
+  const rounded = groups.map((group) => ({
+    department: group.department,
+    headcount: group.headcount,
+    avgSkill: roundTo(group.avgSkill, 4),
+    weight: group.weight,
+    contribution: fromMilli(milli(group.contribution)),
+  }));
+  const assigned = rounded.reduce((sum, group) => sum + milli(group.contribution), 0);
+  const last = rounded[rounded.length - 1];
+  last.contribution = fromMilli(milli(last.contribution) + (target - assigned));
+  return rounded;
+}
+
+function profileFromEmployees(employees) {
+  const roster = Array.isArray(employees) ? employees.filter(isCounted) : [];
+  if (roster.length === 0) return { talentMultiplier: 1, talentMix: [] };
+
+  const scored = roster.map((employee) => {
+    const department = canonicalDepartment(employee.department);
+    const skill = clampSkill(skillForEmployee(employee, department));
+    return {
+      department,
+      skill,
+      factor: departmentWeight(department) * skillFactor(skill),
+    };
+  });
+  const total = scored.reduce((sum, employee) => sum + employee.factor, 0);
+  const talentMultiplier = roundTo(total / scored.length, 4);
+  const groups = new Map();
+  for (const employee of scored) {
+    const key = employee.department ?? '';
+    const group = groups.get(key) ?? {
+      department: employee.department,
+      headcount: 0,
+      skillTotal: 0,
+      factorTotal: 0,
+      weight: departmentWeight(employee.department),
+    };
+    group.headcount += 1;
+    group.skillTotal += employee.skill;
+    group.factorTotal += employee.factor;
+    groups.set(key, group);
+  }
+  const ordered = [...groups.values()].sort((left, right) =>
+    compareDepartments(left.department, right.department)
+  );
+  const talentMix = absorbContributions(
+    ordered.map((group) => ({
+      department: group.department,
+      headcount: group.headcount,
+      avgSkill: group.skillTotal / group.headcount,
+      weight: group.weight,
+      contribution: group.factorTotal / scored.length,
+    })),
+    talentMultiplier
+  );
+  return { talentMultiplier, talentMix };
+}
+
+export function scaleTalentMultiplier(profile, triggerFactor) {
+  if (!Number.isFinite(triggerFactor) || triggerFactor < 0) {
+    throw new TypeError('triggerFactor must be a finite number >= 0');
+  }
+  const talentMultiplier = roundTo(profile.talentMultiplier * triggerFactor, 4);
+  const talentMix = absorbContributions(
+    profile.talentMix.map((group) => ({
+      ...group,
+      contribution: group.contribution * triggerFactor,
+    })),
+    talentMultiplier
+  );
+  return { talentMultiplier, talentMix };
+}
+
+export function composeTalentMultiplier({ employees, triggerFactor = 1 } = {}) {
+  const profile = profileFromEmployees(employees);
+  if (!APPLY_TALENT_COST_TO_BURN) return profile;
+  return scaleTalentMultiplier(profile, triggerFactor);
 }
 
 export function computeTalentMultiplierFromEmployees(employees) {
-  if (!Array.isArray(employees) || employees.length === 0) return 1;
-  let sum = 0;
-  for (const employee of employees) sum += employeeTalentFactor(employee);
-  return sum / employees.length;
+  return composeTalentMultiplier({ employees }).talentMultiplier;
 }
 
 export function talentMixFromEmployees(employees) {
-  if (!Array.isArray(employees) || employees.length === 0) return [];
-  const groups = new Map();
-  for (const employee of employees) {
-    const department = employee?.department ?? null;
-    const key = department == null ? '\0null' : String(department).trim().toLowerCase();
-    let group = groups.get(key);
-    if (!group) {
-      group = {
-        department: department == null || String(department).trim() === '' ? null : String(department),
-        headcount: 0,
-        skillSum: 0,
-        weight: departmentWeight(department),
-        factorSum: 0,
-      };
-      groups.set(key, group);
-    }
-    const skill = clampSkill(employee?.skill);
-    group.headcount += 1;
-    group.skillSum += skill;
-    group.factorSum += employeeTalentFactor({ department, skill });
-    groups.set(key, group);
-  }
-  const total = employees.length;
-  return [...groups.values()].map((group) => ({
-    department: group.department,
-    headcount: group.headcount,
-    avgSkill: group.skillSum / group.headcount,
-    weight: group.weight,
-    contribution: group.factorSum / total,
-  }));
+  return composeTalentMultiplier({ employees }).talentMix;
 }
 
 export function readTalentMultiplier(value) {
@@ -107,6 +226,13 @@ export function readTalentMultiplier(value) {
     throw new TypeError('talentMultiplier must have at most 4 decimal places');
   }
   return value;
+}
+
+function readDepartment(value) {
+  if (value == null) return null;
+  if (typeof value !== 'string') throw new TypeError('talentMix department must be a string or null');
+  const trimmed = value.trim();
+  return trimmed === '' ? null : trimmed;
 }
 
 function readTalentMixRow(row) {
@@ -128,7 +254,7 @@ function readTalentMixRow(row) {
     throw new TypeError('talentMix contribution must be a finite number with at most 4 decimal places');
   }
   return {
-    department: row.department == null ? null : String(row.department),
+    department: readDepartment(row.department),
     headcount,
     avgSkill,
     weight,
@@ -155,21 +281,9 @@ export function computeTalentMultiplier({ employees, talentMultiplier, dataSourc
   }
 }
 
-export function triggerTalentCostAffectsBurn(dataSource) {
-  switch (dataSource) {
-    case 'local':
-    case 'api':
-      return false;
-    default: {
-      const neverSource = dataSource;
-      throw new Error(`Unknown data source: ${String(neverSource)}`);
-    }
-  }
-}
-
-export function burnMultiplier({ talentMultiplier = 1, talentCostFactor = 1, affectsBurn = false } = {}) {
+export function burnMultiplier({ talentMultiplier = 1, talentCostFactor: factor = 1, affectsBurn = false } = {}) {
   if (!affectsBurn) return talentMultiplier;
-  return talentMultiplier * talentCostFactor;
+  return talentMultiplier * factor;
 }
 
 export function talentCostFactor(talentCost, baselineTalentCost) {
@@ -188,37 +302,42 @@ export function burnRateFromMultiplier(taxRate, talentMultiplier) {
 }
 
 export function formatTalentReadout(multiplier) {
-  const text = Number(multiplier).toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
-  if (!text.includes('.')) return `${text}.00`;
-  if (text.split('.')[1].length === 1) return `${text}0`;
-  return text;
+  const value = Number(multiplier);
+  if (!Number.isFinite(value)) return '1.0000';
+  return value.toFixed(4);
+}
+
+function triggerFactorOf(state) {
+  return talentCostFactor(state?.company?.talentCost, state?.baselines?.talentCost);
 }
 
 export function talentMultiplierOf(state) {
-  const dataSource = state?.dataSource === 'api' ? 'api' : 'local';
-  if (dataSource === 'api') {
-    return computeTalentMultiplier({
-      talentMultiplier: state?.talentMultiplier,
-      dataSource: 'api',
-    });
+  if (state?.dataSource === 'api') {
+    const base = readTalentMultiplier(state?.talentMultiplier);
+    if (!APPLY_TALENT_COST_TO_BURN) return base;
+    return roundTo(base * triggerFactorOf(state), 4);
   }
-  return computeTalentMultiplier({ employees: state?.employees, dataSource: 'local' });
+  return composeTalentMultiplier({
+    employees: state?.employees,
+    triggerFactor: triggerFactorOf(state),
+  }).talentMultiplier;
 }
 
 export function talentMixOf(state) {
-  if (state?.dataSource === 'api') return Array.isArray(state.talentMix) ? state.talentMix : [];
-  if (Array.isArray(state?.employees) && state.employees.length > 0) {
-    return talentMixFromEmployees(state.employees);
+  if (state?.dataSource === 'api') {
+    const mix = Array.isArray(state.talentMix) ? state.talentMix : [];
+    if (!APPLY_TALENT_COST_TO_BURN) return mix;
+    return scaleTalentMultiplier(
+      { talentMultiplier: readTalentMultiplier(state?.talentMultiplier), talentMix: mix },
+      triggerFactorOf(state)
+    ).talentMix;
   }
-  return [];
+  return composeTalentMultiplier({
+    employees: state?.employees,
+    triggerFactor: triggerFactorOf(state),
+  }).talentMix;
 }
 
 export function effectiveBurnRate(state) {
-  const dataSource = state?.dataSource === 'api' ? 'api' : 'local';
-  const multiplier = burnMultiplier({
-    talentMultiplier: talentMultiplierOf(state),
-    talentCostFactor: talentCostFactor(state?.company?.talentCost, state?.baselines?.talentCost),
-    affectsBurn: triggerTalentCostAffectsBurn(dataSource),
-  });
-  return burnRateFromMultiplier(state?.taxRate ?? 0, multiplier);
+  return burnRateFromMultiplier(state?.taxRate ?? 0, talentMultiplierOf(state));
 }
