@@ -61,9 +61,10 @@ export function talentCostOutOfRange(value) {
  *   Example when the factor hits the cap: "Policy change: talent cost +250%, capped at 3×, burn $6,600"
  *
  * Stacking, applied by the simulation from company baselines:
- * - hype deltas add, then clamp to 0..1
- * - talent-cost deltas multiply as (1 + delta), then floor the dollar cost at 0
- * - the burn factor is that cost divided by the baseline, clamped to 0.10×–3.00×, then rounded to 4 decimals
+ * - hype deltas add, then clamp to 0..1 and round to 4 decimals
+ * - talent-cost deltas multiply as (1 + delta) from the dollar baseline (4000 locally)
+ * - the dollar result floors at 0 and rounds to cents once
+ * - the burn factor is that cent-rounded cost divided by the baseline, clamped to 0.10×–3.00×, then rounded to 4 decimals
  * - the same id does not stack a second copy
  *
  * `appliedAtIndex` is client runtime for the chart marker. It is not part of
@@ -80,7 +81,7 @@ export const TRIGGER_CONTRACT = Object.freeze({
   }),
   stacking: Object.freeze({
     hype: 'Add deltas to the baseline, then clamp to the range 0 through 1.',
-    talentCost: 'Multiply the baseline by (1 + delta) for each active trigger, then floor the dollar cost at 0. The burn factor clamps that ratio to 0.10× through 3.00×.',
+    talentCost: 'Multiply the dollar baseline by (1 + delta) for each active trigger, floor at 0, and round to cents once. The burn factor clamps that ratio to 0.10× through 3.00×.',
     sameId: 'Re-applying an id replaces that trigger instead of stacking a second copy.',
   }),
   announcement: '{label}: talent cost ±N% if present, then hype ±N% if present.',

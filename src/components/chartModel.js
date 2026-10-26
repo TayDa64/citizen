@@ -1,5 +1,9 @@
 import { describeTrigger } from '../triggers';
 
+export function simulatedMonthLabel(index) {
+  return `T${index + 1}`;
+}
+
 export function triggerChartMarkers(state) {
   return (state.activeTriggers ?? []).map((trigger, index) => {
     const value = trigger.appliedAtIndex ?? 0;
@@ -49,14 +53,27 @@ export function axisGuideOptions(markers) {
   };
 }
 
-export function seriesDataWithTriggerNotes(values, triggers, noun) {
+function pointDescription(noun, events, index, timing) {
+  switch (timing) {
+    case 'included':
+      return `${noun} at this month includes ${events}.`;
+    case 'next-month':
+      return `${noun} first includes ${events} at ${simulatedMonthLabel(index + 1)}.`;
+    default: {
+      const neverTiming = timing;
+      throw new Error(`Unknown chart point timing: ${String(neverTiming)}`);
+    }
+  }
+}
+
+export function seriesDataWithTriggerNotes(values, triggers, noun, timing = 'included') {
   return values.map((y, index) => {
     const here = (triggers ?? []).filter((trigger) => (trigger.appliedAtIndex ?? 0) === index);
     // Point.applyOptions merges into the previous point. A bare number never
     // deletes accessibility.description, so every point sets it explicitly.
     const description = here.length === 0
       ? null
-      : `${noun} at this month includes ${here.map((trigger) => describeTrigger(trigger)).join('; ')}.`;
+      : pointDescription(noun, here.map((trigger) => describeTrigger(trigger)).join('; '), index, timing);
     return {
       y,
       accessibility: { description },

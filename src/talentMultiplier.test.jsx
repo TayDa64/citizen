@@ -507,6 +507,18 @@ describe('clamped talent-cost factor in the local readout', () => {
     expect(screen.getByTestId('effective-multiplier-value')).toHaveTextContent('Effective multiplier: 0.10');
   });
 
+  test('a -90% talent-cost trigger is exactly 0.1 with the flag false and no badge', () => {
+    const eased = applyTrigger(initialState, trigger('ease', -0.9));
+    expect(eased.company.talentCost).toBe(400);
+    expect(talentCostFactorOf(eased)).toBe(0.1);
+    expect(talentCostFactorClampedOf(eased)).toBe(false);
+    expect(effectiveBurnRate(eased)).toBe(220);
+    render(<Dashboard state={eased} />);
+    expect(screen.getByTestId('talent-cost-factor-value')).toHaveTextContent('Talent cost factor: 0.10');
+    expect(screen.getByTestId('talent-cost-factor-value')).toHaveAccessibleName('Talent cost factor 0.10');
+    expect(screen.queryByTestId('talent-cost-factor-clamp')).not.toBeInTheDocument();
+  });
+
   test('three stacked +100 triggers show the factor capped at 3.00', () => {
     let stacked = initialState;
     for (const id of ['stack-a', 'stack-b', 'stack-c']) {

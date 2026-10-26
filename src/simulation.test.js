@@ -17,6 +17,7 @@ import {
   effectiveMultiplierOf,
   talentCostFactorClampedOf,
   talentCostFactorOf,
+  talentMultiplierOf,
 } from './talentMultiplier';
 import { SAMPLE_TRIGGERS } from './triggers';
 
@@ -52,7 +53,7 @@ describe('Slice 1 baseline with no trigger', () => {
     expect(state.history.cash).toHaveLength(24);
     expect(state.history.burnRate).toHaveLength(24);
     expect(state.company.hype).toBe(0.3);
-    expect(state.company.talentCost).toBe(1);
+    expect(state.company.talentCost).toBe(4000);
   });
 
   test('setTaxRate still clamps and does not tick on its own', () => {
@@ -72,7 +73,7 @@ describe('applyTrigger', () => {
     const next = applyTrigger(initialState, policy);
 
     expect(initialState).toEqual(snapshot);
-    expect(next.company.talentCost).toBeCloseTo(1.12);
+    expect(next.company.talentCost).toBe(4480);
     expect(next.company.hype).toBe(0.3);
     expect(next.company.cash).toBe(15000);
     expect(next.company.burnRate).toBe(2000);
@@ -81,9 +82,9 @@ describe('applyTrigger', () => {
     expect(next.activeTriggers.map((trigger) => trigger.id)).toEqual([policy.id]);
     expect(next.activeTriggers[0].appliedAtIndex).toBe(0);
     expect(next.lastTriggerChange.announcement).toBe('Policy change: talent cost +12%, burn $2,464');
-    expect(next.lastTriggerChange.before).toEqual({ hype: 0.3, talentCost: 1 });
+    expect(next.lastTriggerChange.before).toEqual({ hype: 0.3, talentCost: 4000 });
     expect(next.lastTriggerChange.after.hype).toBe(0.3);
-    expect(next.lastTriggerChange.after.talentCost).toBeCloseTo(1.12);
+    expect(next.lastTriggerChange.after.talentCost).toBe(4480);
     expect(previewBurnRate(next)).toBe(2464);
     expect(previewBurnRate(initialState)).toBe(2200);
     expect(next.talentMultiplier).toBe(1);
@@ -94,16 +95,16 @@ describe('applyTrigger', () => {
     const twice = applyTrigger(once, policy);
     const replaced = applyTrigger(twice, { ...policy, effect: { talentCost: 0.2 } });
 
-    expect(twice.company.talentCost).toBeCloseTo(1.12);
+    expect(twice.company.talentCost).toBe(4480);
     expect(twice.activeTriggers).toHaveLength(1);
-    expect(replaced.company.talentCost).toBeCloseTo(1.2);
+    expect(replaced.company.talentCost).toBe(4800);
     expect(replaced.activeTriggers).toHaveLength(1);
   });
 
   test('different triggers stack from the baseline', () => {
     const stacked = applyTrigger(applyTrigger(initialState, policy), market);
 
-    expect(stacked.company.talentCost).toBeCloseTo(1.12 * 0.92);
+    expect(stacked.company.talentCost).toBe(4121.6);
     expect(stacked.company.hype).toBeCloseTo(0.25);
     expect(stacked.activeTriggers.map((trigger) => trigger.id)).toEqual([
       policy.id,
@@ -151,6 +152,19 @@ describe('applyTrigger', () => {
     );
   });
 
+  test('a -90% talent-cost trigger is factor 0.1 with the flag false', () => {
+    const eased = applyTrigger(initialState, {
+      ...policy,
+      id: 'talent-ease',
+      effect: { talentCost: -0.9 },
+    });
+    expect(eased.company.talentCost).toBe(400);
+    expect(talentCostFactorOf(eased)).toBe(0.1);
+    expect(talentCostFactorClampedOf(eased)).toBe(false);
+    expect(previewBurnRate(eased)).toBe(220);
+    expect(eased.lastTriggerChange.announcement).toBe('Policy change: talent cost -90%, burn $220');
+  });
+
   test('three stacked +100 talent-cost triggers cap the factor at exactly 3', () => {
     const plus100 = (id) => ({
       ...policy,
@@ -177,7 +191,7 @@ describe('applyTrigger', () => {
       id: 'big-policy',
       effect: { talentCost: 2.5 },
     });
-    expect(next.company.talentCost).toBeCloseTo(3.5);
+    expect(next.company.talentCost).toBe(14000);
     expect(talentCostFactorOf(next)).toBe(3);
     expect(previewBurnRate(next)).toBe(6600);
     expect(next.lastTriggerChange.announcement).toBe(
@@ -205,7 +219,7 @@ describe('applyTrigger', () => {
   test('a later tax tick scales burn by the talent-cost factor once', () => {
     const state = applyEffects(setTaxRate(applyTrigger(initialState, policy), 0.5));
     expect(state.taxRate).toBe(0.5);
-    expect(state.company.talentCost).toBeCloseTo(1.12);
+    expect(state.company.talentCost).toBe(4480);
     expect(state.talentMultiplier).toBe(1);
     expect(state.company.burnRate).toBe(Math.round(2000 * (1 + 0.5 * 0.4) * 1.12));
     expect(state.company.burnRate).toBe(2688);
@@ -245,7 +259,7 @@ describe('applyTrigger', () => {
 
   test('policy then market uses talent-cost factor 1.0304', () => {
     const stacked = applyTrigger(applyTrigger(initialState, policy), market);
-    expect(stacked.company.talentCost).toBeCloseTo(1.12 * 0.92, 5);
+    expect(stacked.company.talentCost).toBe(4121.6);
     expect(talentCostFactorOf(stacked)).toBe(1.0304);
     expect(effectiveMultiplierOf(stacked)).toBe(1.0304);
     expect(previewBurnRate(stacked)).toBe(2267);
@@ -279,7 +293,7 @@ describe('applyTrigger', () => {
     for (let i = 0; i < 5; i += 1) state = applyEffects(state);
     expect(state.history.cash).toHaveLength(24);
     expect(state.activeTriggers[0].appliedAtIndex).toBe(18);
-    expect(state.company.talentCost).toBeCloseTo(1.12);
+    expect(state.company.talentCost).toBe(4480);
   });
 });
 
@@ -290,7 +304,7 @@ describe('removeTrigger and clearTriggers', () => {
 
     expect(remaining.activeTriggers.map((trigger) => trigger.id)).toEqual([news.id]);
     expect(remaining.company.hype).toBeCloseTo(0.4);
-    expect(remaining.company.talentCost).toBeCloseTo(1);
+    expect(remaining.company.talentCost).toBe(4000);
     expect(remaining.company.cash).toBe(stacked.company.cash);
   });
 
@@ -419,7 +433,7 @@ describe('removeTrigger and clearTriggers', () => {
     expect(second.company.talentMultiplier).toBe(1.75);
     expect(second.company.cash).toBe(15000 - 4900 / 12 - 4900 / 12);
     const triggered = applyTrigger(taxed, policy);
-    expect(triggered.company.talentCost).toBeCloseTo(1.12, 5);
+    expect(triggered.company.talentCost).toBe(4480);
     expect(triggered.company.burnRate).toBe(4900);
     expect(triggered.talentMultiplier).toBe(1.75);
     expect(previewBurnRate(triggered)).toBe(5488);
@@ -507,7 +521,7 @@ describe('removeTrigger and clearTriggers', () => {
     const cleared = clearTriggers(stacked);
 
     expect(cleared.company.hype).toBe(0.3);
-    expect(cleared.company.talentCost).toBe(1);
+    expect(cleared.company.talentCost).toBe(4000);
     expect(cleared.company.cash).toBe(15000);
     expect(cleared.company.burnRate).toBe(2000);
     expect(cleared.history).toEqual(initialState.history);
@@ -693,5 +707,119 @@ describe('company payload shapes', () => {
     expect(applyEffects(disagreed).effectiveMultiplier).toBe(2);
     expect(applyEffects(disagreed).talentCostFactor).toBe(1.12);
     expect(talentCostFactorOf(applyEffects(disagreed))).toBe(1.12);
+  });
+});
+
+describe('local mode parity with the OpenAPI 0.7.0 simulation', () => {
+  test('5,000 random trigger stacks match cent-rounded dollars, the factor, the flag, and burn', () => {
+    function referenceRound(value, places) {
+      const scale = 10 ** places;
+      return Math.round((value + Math.sign(value) * 1e-10) * scale) / scale;
+    }
+
+    function referenceStack(triggers) {
+      const ordered = [...triggers].sort((left, right) => {
+        if (String(left.id) < String(right.id)) return -1;
+        if (String(left.id) > String(right.id)) return 1;
+        return 0;
+      });
+      let hype = 0.3;
+      let factor = 1;
+      for (const trigger of ordered) {
+        if (typeof trigger.effect?.hype === 'number') hype += trigger.effect.hype;
+        if (typeof trigger.effect?.talentCost === 'number') factor *= 1 + trigger.effect.talentCost;
+      }
+      const talent = 4000 * factor;
+      return {
+        hype: referenceRound(Math.min(1, Math.max(0, hype)), 4),
+        talentCost: Math.min(9999999999.99, referenceRound(Math.max(0, Number.isFinite(talent) ? talent : 0), 2)),
+      };
+    }
+
+    function referenceResolve(talentCost) {
+      const raw = talentCost / 4000;
+      const clamped = raw < 0.1 || raw > 3;
+      return {
+        factor: referenceRound(Math.min(3, Math.max(0.1, raw)), 4),
+        clamped,
+      };
+    }
+
+    function referenceBurn(taxRate, employee, factor) {
+      const base = Math.round(2000 * (1 + taxRate * 0.4));
+      return Math.round(base * employee * factor);
+    }
+
+    function mulberry32(seed) {
+      let state = seed >>> 0;
+      return () => {
+        state = (state + 0x6d2b79f5) | 0;
+        let t = Math.imul(state ^ (state >>> 15), 1 | state);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    function decimalDelta(random, span) {
+      const raw = (random() * 2 - 1) * span;
+      const rounded = Math.round(raw * 10000) / 10000;
+      if (rounded === 0) return raw < 0 ? -0.0001 : 0.0001;
+      return Math.max(-100, Math.min(100, rounded));
+    }
+
+    const random = mulberry32(0x0cc0b661);
+    const departments = ['tech', 'marketing', 'sales', 'ops'];
+    for (let draw = 0; draw < 5000; draw += 1) {
+      const count = 1 + Math.floor(random() * 4);
+      const triggers = [];
+      for (let index = 0; index < count; index += 1) {
+        const effect = {};
+        if (random() < 0.85) effect.talentCost = decimalDelta(random, random() < 0.2 ? 5 : 0.95);
+        if (random() < 0.35) {
+          effect.hype = Math.round((random() * 0.4 - 0.2) * 10000) / 10000;
+        }
+        if (effect.talentCost == null && (effect.hype == null || effect.hype === 0)) {
+          effect.talentCost = -0.9;
+        }
+        triggers.push({
+          id: `${random() < 0.5 ? 'z' : 'a'}-${draw}-${index}`,
+          type: 'policy_change',
+          label: 'Policy change',
+          source: 'mock:local',
+          timestamp: '2026-04-02T15:00:00.000Z',
+          effect,
+        });
+      }
+
+      const employees = [];
+      const headcount = Math.floor(random() * 5);
+      for (let index = 0; index < headcount; index += 1) {
+        const department = departments[Math.floor(random() * departments.length)];
+        employees.push({
+          department,
+          skillTech: random(),
+          skillMarketing: random(),
+          skillSales: random(),
+        });
+      }
+
+      let state = {
+        ...initialState,
+        taxRate: Math.round(random() * 10000) / 10000,
+        employees,
+      };
+      for (const trigger of triggers) state = applyTrigger(state, trigger);
+
+      const stacked = referenceStack(state.activeTriggers);
+      const resolved = referenceResolve(stacked.talentCost);
+      const employee = talentMultiplierOf(state);
+      expect(state.company.talentCost, `draw ${draw} talent cost`).toBe(stacked.talentCost);
+      expect(state.company.hype, `draw ${draw} hype`).toBe(stacked.hype);
+      expect(talentCostFactorOf(state), `draw ${draw} factor`).toBe(resolved.factor);
+      expect(talentCostFactorClampedOf(state), `draw ${draw} flag`).toBe(resolved.clamped);
+      expect(previewBurnRate(state), `draw ${draw} burn`).toBe(
+        referenceBurn(state.taxRate, employee, resolved.factor)
+      );
+    }
   });
 });

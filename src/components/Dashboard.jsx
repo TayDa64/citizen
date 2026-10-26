@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Chart, Title } from '@highcharts/react';
 import { LineSeries } from '@highcharts/react/series/Line';
 import { talentCostShowsDollars } from '../dataSource';
-import { previewBurnRate } from '../simulation';
+import { BASE_TALENT_COST, previewBurnRate } from '../simulation';
 import {
   baseBurnRate,
   effectiveMultiplierOf,
@@ -31,6 +31,7 @@ import {
   axisGuideOptions,
   metricsChartDescription,
   seriesDataWithTriggerNotes,
+  simulatedMonthLabel,
   triggerChartMarkers,
 } from './chartModel';
 
@@ -55,9 +56,12 @@ function shownTalent(value) {
   return Number.isFinite(numeric) ? clampTalentCost(numeric) : 0;
 }
 
-function formatTalentValue(value, dataSource) {
+function formatTalentValue(value, dataSource, baseline) {
   if (talentCostShowsDollars(dataSource)) return formatTalentDollars(value);
-  return formatTalentMultiplier(value);
+  const numeric = Number(value);
+  const base = Number(baseline);
+  const ratio = Number.isFinite(numeric) && Number.isFinite(base) && base > 0 ? numeric / base : numeric;
+  return formatTalentMultiplier(Number.isFinite(ratio) ? ratio : 0);
 }
 
 function TalentMixTable({ rows }) {
@@ -113,7 +117,7 @@ function WorldEventEffect({ state }) {
   if (active.length === 0) return null;
 
   const dataSource = state.dataSource === 'api' ? 'api' : 'local';
-  const rawBefore = state.baselines ?? { hype: state.company.hype, talentCost: 1 };
+  const rawBefore = state.baselines ?? { hype: state.company.hype, talentCost: BASE_TALENT_COST };
   const before = { hype: shownHype(rawBefore.hype), talentCost: shownTalent(rawBefore.talentCost) };
   const after = {
     hype: shownHype(state.company.hype),
@@ -135,10 +139,10 @@ function WorldEventEffect({ state }) {
           label="Hype after"
           value={`${formatHypePercent(after.hype)} (${deltaPhrase(after.hype - before.hype)})`}
         />
-        <ReadoutRow label="Talent cost before" value={formatTalentValue(before.talentCost, dataSource)} />
+        <ReadoutRow label="Talent cost before" value={formatTalentValue(before.talentCost, dataSource, before.talentCost)} />
         <ReadoutRow
           label="Talent cost after"
-          value={`${formatTalentValue(after.talentCost, dataSource)} (${deltaPhrase((after.talentCost - before.talentCost) / (before.talentCost || 1))})`}
+          value={`${formatTalentValue(after.talentCost, dataSource, before.talentCost)} (${deltaPhrase((after.talentCost - before.talentCost) / (before.talentCost || 1))})`}
         />
       </dl>
     </section>
@@ -148,7 +152,7 @@ function WorldEventEffect({ state }) {
 export default function Dashboard({ state }) {
   const factorClampNote = talentCostFactorClampNote(talentCostFactorClampOf(state));
   const { cash, burnRate } = state.history;
-  const categories = cash.map((_, i) => `T${i}`);
+  const categories = cash.map((_, i) => simulatedMonthLabel(i));
   const markers = triggerChartMarkers(state);
   const guides = axisGuideOptions(markers);
   const description = metricsChartDescription(state);
@@ -253,7 +257,7 @@ export default function Dashboard({ state }) {
             />
             <LineSeries
               name="Burn Rate"
-              data={seriesDataWithTriggerNotes(burnRate, state.activeTriggers, 'Burn rate')}
+              data={seriesDataWithTriggerNotes(burnRate, state.activeTriggers, 'Burn rate', 'next-month')}
               color="#f87171"
               options={{
                 accessibility: {

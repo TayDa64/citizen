@@ -1,7 +1,7 @@
 /**
- * Talent cost is dollars on the API and a dimensionless multiplier in local
- * sample mode. Burn uses talentMultiplier, not this display choice.
- * APPLY_TALENT_COST_TO_BURN scales burn by the talent-cost factor, clamped to 0.10×–3.00×.
+ * Talent cost is stored in dollars in both modes. Local sample mode still
+ * shows that cost as a multiplier of the baseline. The API shows dollars.
+ * Burn uses the clamped talent-cost factor, not this display choice.
  */
 export function talentCostShowsDollars(dataSource) {
   switch (dataSource) {

@@ -1,7 +1,7 @@
 // Client-side simulation.
 // Slice 1: taxRate increases burn, then cash falls on each tick.
 // Slice 2: real-world triggers move hype and talent cost. With no active
-// trigger, talent cost stays 1 and burn matches the Slice 1 formula.
+// trigger, talent cost stays at the $4,000 baseline and burn matches Slice 1.
 // baseBurnRate = round(2000 * (1 + taxRate * 0.4)).
 // Burn is round(baseBurnRate * talentMultiplier * talentCostFactor), once.
 // talentMultiplier is employee-only and is not clamped. talentCostFactor is
@@ -18,6 +18,7 @@ import {
   clampTalentCost,
   describeTrigger,
   hypeOutOfRange,
+  roundTo,
   talentCostOutOfRange,
 } from './triggers';
 import {
@@ -33,7 +34,7 @@ import {
 
 export const BASE_BURN = 2000;
 export const BASE_HYPE = 0.3;
-export const BASE_TALENT_COST = 1;
+export const BASE_TALENT_COST = 4000;
 
 export const initialState = {
   taxRate: 0.25,
@@ -123,16 +124,25 @@ function cloneTriggerState(state) {
 }
 
 function combinedEffects(baselines, activeTriggers) {
-  let hype = baselines.hype;
-  let talentCost = baselines.talentCost;
-  for (const trigger of activeTriggers) {
-    if (typeof trigger.effect.hype === 'number') hype += trigger.effect.hype;
-    if (typeof trigger.effect.talentCost === 'number') {
-      talentCost *= 1 + trigger.effect.talentCost;
-    }
+  const hypeBaseline = Number.isFinite(Number(baselines?.hype)) ? Number(baselines.hype) : BASE_HYPE;
+  const talentBaseline = Number.isFinite(Number(baselines?.talentCost))
+    ? Number(baselines.talentCost)
+    : BASE_TALENT_COST;
+  const ordered = [...activeTriggers].sort((left, right) => {
+    if (String(left.id) < String(right.id)) return -1;
+    if (String(left.id) > String(right.id)) return 1;
+    return 0;
+  });
+  let hype = hypeBaseline;
+  let factor = 1;
+  for (const trigger of ordered) {
+    if (typeof trigger.effect?.hype === 'number') hype += trigger.effect.hype;
+    if (typeof trigger.effect?.talentCost === 'number') factor *= 1 + trigger.effect.talentCost;
   }
+  const talent = talentBaseline * factor;
+  const talentCost = roundTo(Math.max(0, Number.isFinite(talent) ? talent : 0), 2);
   return {
-    hype: clampHype(hype),
+    hype: roundTo(clampHype(hype), 4),
     talentCost: clampTalentCost(talentCost),
   };
 }
