@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import App from './App';
@@ -513,6 +513,58 @@ describe('API talent multiplier', () => {
     expect(within(table).getByRole('columnheader', { name: 'Department' })).toBeInTheDocument();
     expect(within(table).getByRole('cell', { name: 'tech' })).toBeInTheDocument();
     expect(screen.queryByText(/\$2,464/)).not.toBeInTheDocument();
+  });
+
+  test('keeps a loaded 1.75 multiplier when the month advances and the tax slider moves', async () => {
+    const user = userEvent.setup();
+    vi.stubEnv('VITE_CITIZEN_API', '/api');
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      const path = String(url);
+      if (path.endsWith('/api/companies')) {
+        return jsonResponse([{
+          ...apiCompany,
+          cash: 1,
+          burnRate: 4900,
+          baseBurnRate: 2800,
+          talentMultiplier: 1.75,
+          talentMix: [{ department: 'tech', headcount: 4, avgSkill: 1, weight: 1.25, contribution: 1.75 }],
+          employees: [
+            { id: 'e1', department: 'tech', skillTech: 1 },
+            { id: 'e2', department: 'tech', skillTech: 1 },
+            { id: 'e3', department: 'tech', skillTech: 1 },
+            { id: 'e4', department: 'marketing', skillMarketing: 0.5 },
+          ],
+        }]);
+      }
+      if (path.endsWith('/api/triggers')) return jsonResponse([]);
+      return jsonResponse({ error: 'Not found' }, 404);
+    }));
+
+    render(<App />);
+    const talent = await screen.findByRole('region', { name: 'Talent and burn' });
+    expect(talent).toHaveTextContent('×1.7500 talent');
+    expect(talent).toHaveTextContent('Effective burn $3,850');
+    expect(talent).toHaveTextContent(/base burn \$2,200/i);
+    expect(within(talent).getByRole('cell', { name: 'tech' })).toBeInTheDocument();
+    expect(within(talent).getByRole('cell', { name: '4' })).toBeInTheDocument();
+    expect(screen.getByText(/Cash: \$15000/)).toBeInTheDocument();
+    expect(screen.getByText(/Burn\/mo: \$2000/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /advance month \(apply effects\)/i }));
+    expect(talent).toHaveTextContent('×1.7500 talent');
+    expect(screen.getByText(/Burn\/mo: \$3850/)).toBeInTheDocument();
+    expect(screen.queryByText(/Burn\/mo: \$2200/)).not.toBeInTheDocument();
+    expect(within(talent).getByRole('cell', { name: 'tech' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('slider', { name: /tax rate/i }), { target: { value: '1' } });
+    expect(screen.getByText(/Tax: 100%/)).toBeInTheDocument();
+    expect(talent).toHaveTextContent('×1.7500 talent');
+    expect(talent).toHaveTextContent('Effective burn $4,900');
+    expect(talent).toHaveTextContent(/base burn \$2,800/i);
+    expect(screen.getByText(/Burn\/mo: \$4900/)).toBeInTheDocument();
+    expect(within(talent).getByRole('cell', { name: '4' })).toBeInTheDocument();
+    expect(document.querySelector('[data-id="3"]').textContent).toContain('Talent ×1.7500');
+    expect(document.querySelector('[data-id="3"]').textContent).toContain('tech 4');
   });
 });
 

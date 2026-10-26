@@ -65,6 +65,11 @@ export function baselineBurnRate(state) {
 
 export function applyEffects(state) {
   const next = structuredClone(state);
+  // API mode keeps the fetched multiplier, mix, and employees. Burn changes
+  // only with tax. Recomputing from the employee list would turn an empty
+  // list into ×1 and the Slice 1 burn. Those fields update on the next fetch.
+  // Local mode uses the type-weighted employee rule. Talent cost scales burn
+  // only when APPLY_TALENT_COST_TO_BURN is on.
   if (next.dataSource !== 'api') {
     const profile = composeTalentMultiplier({
       employees: next.employees,
@@ -187,25 +192,40 @@ export function readApiSnapshot(prev, snapshot) {
     return storeTrigger(trigger, prior?.appliedAtIndex ?? index);
   });
 
+  const talentMultiplier = readTalentMultiplier(company.talentMultiplier);
+  const talentMix = readTalentMix(company.talentMix);
   return {
     state: {
       ...prev,
       dataSource: 'api',
       baselines: { hype: baselineHype, talentCost: baselineTalent },
       activeTriggers,
-      employees: [],
-      talentMultiplier: readTalentMultiplier(company.talentMultiplier),
-      talentMix: readTalentMix(company.talentMix),
+      employees: readProvidedEmployees(snapshot, company),
+      talentMultiplier,
+      talentMix,
       company: {
         ...prev.company,
         hype: hype ?? baselineHype,
         talentCost: talentCost ?? baselineTalent,
+        talentMultiplier,
+        talentMix,
       },
     },
     skipped,
     missingHype: hype == null,
     missingTalent: talentCost == null,
   };
+}
+
+function readProvidedEmployees(snapshot, company) {
+  const raw = Array.isArray(company?.employees)
+    ? company.employees
+    : Array.isArray(snapshot?.employees)
+      ? snapshot.employees
+      : [];
+  return raw
+    .filter((employee) => employee != null && typeof employee === 'object' && !Array.isArray(employee))
+    .map((employee) => ({ ...employee }));
 }
 
 export function hydrateFromApi(prev, snapshot) {

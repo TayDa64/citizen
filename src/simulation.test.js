@@ -17,8 +17,8 @@ const policy = SAMPLE_TRIGGERS.find((trigger) => trigger.type === 'policy_change
 const news = SAMPLE_TRIGGERS.find((trigger) => trigger.type === 'news_spike');
 const market = SAMPLE_TRIGGERS.find((trigger) => trigger.type === 'market_shift');
 
-function slice1Burn(taxRate, talentCost = 1) {
-  return Math.round(2000 * (1 + taxRate * 0.4) * talentCost);
+function slice1Burn(taxRate) {
+  return Math.round(2000 * (1 + taxRate * 0.4));
 }
 
 describe('Slice 1 baseline with no trigger', () => {
@@ -140,11 +140,12 @@ describe('applyTrigger', () => {
     expect(baseline.history.burnRate).toEqual([2000, 2200]);
   });
 
-  test('tax and talent cost compose on the following tick', () => {
+  test('a later tax tick does not scale burn by talent cost', () => {
     const state = applyEffects(setTaxRate(applyTrigger(initialState, policy), 0.5));
     expect(state.taxRate).toBe(0.5);
     expect(state.company.talentCost).toBeCloseTo(1.12);
     expect(state.company.burnRate).toBe(slice1Burn(0.5));
+    expect(state.company.burnRate).not.toBe(Math.round(slice1Burn(0.5) * 1.12));
   });
 
   test('the chart marker stays inside the 24-month window', () => {
@@ -260,6 +261,7 @@ describe('removeTrigger and clearTriggers', () => {
     expect(scaled.talentMix[0].department).toBe('tech');
     expect(previewBurnRate(scaled)).toBe(2816);
     expect(applyEffects(scaled).company.burnRate).toBe(2816);
+    expect(applyEffects(scaled).talentMultiplier).toBe(1.28);
     expect(applyEffects(scaled).history.cash[0]).toBe(15000);
 
     expect(() => hydrateFromApi(initialState, {
@@ -296,6 +298,75 @@ describe('removeTrigger and clearTriggers', () => {
     expect(triggered.company.talentCost).toBeCloseTo(1.12, 5);
     expect(triggered.company.burnRate).toBe(4900);
     expect(previewBurnRate(triggered)).toBe(4900);
+  });
+
+  test('API mode keeps a loaded 1.75 multiplier across a tick and a tax change', () => {
+    const employees = [
+      { id: 'm1', department: 'marketing', skillMarketing: 0.5 },
+    ];
+    const talentMix = [
+      { department: 'tech', headcount: 4, avgSkill: 1, weight: 1.25, contribution: 1.75 },
+    ];
+    const loaded = hydrateFromApi(initialState, {
+      company: {
+        id: 'company-1',
+        cash: 1,
+        burnRate: 4900,
+        baseBurnRate: 2800,
+        hype: 0.3,
+        talentCost: 4480,
+        baselines: { hype: 0.3, talentCost: 4000 },
+        talentMultiplier: 1.75,
+        talentMix,
+        employees,
+      },
+    });
+
+    expect(loaded.talentMultiplier).toBe(1.75);
+    expect(loaded.company.talentMultiplier).toBe(1.75);
+    expect(loaded.talentMix).toEqual(talentMix);
+    expect(loaded.employees).toEqual(employees);
+    expect(loaded.company.cash).toBe(15000);
+    expect(loaded.company.burnRate).toBe(2000);
+    expect(previewBurnRate(loaded)).toBe(3850);
+
+    const ticked = applyEffects(loaded);
+    expect(ticked.talentMultiplier).toBe(1.75);
+    expect(ticked.company.talentMultiplier).toBe(1.75);
+    expect(ticked.talentMix).toEqual(talentMix);
+    expect(ticked.employees).toEqual(employees);
+    expect(ticked.company.baseBurnRate).toBe(2200);
+    expect(ticked.company.burnRate).toBe(3850);
+    expect(ticked.company.cash).toBeCloseTo(15000 - 3850 / 12);
+
+    const taxed = applyEffects(setTaxRate(ticked, 1));
+    expect(taxed.taxRate).toBe(1);
+    expect(taxed.talentMultiplier).toBe(1.75);
+    expect(taxed.company.talentMultiplier).toBe(1.75);
+    expect(taxed.talentMix).toEqual(talentMix);
+    expect(taxed.employees).toEqual(employees);
+    expect(taxed.company.baseBurnRate).toBe(2800);
+    expect(taxed.company.burnRate).toBe(4900);
+    expect(taxed.company.cash).toBeCloseTo(15000 - 3850 / 12 - 4900 / 12);
+
+    const refreshed = hydrateFromApi(taxed, {
+      company: {
+        id: 'company-1',
+        cash: 9,
+        burnRate: 1,
+        hype: 0.3,
+        talentCost: 4000,
+        baselines: { hype: 0.3, talentCost: 4000 },
+        talentMultiplier: 1.05,
+        talentMix: [{ department: 'marketing', headcount: 1, avgSkill: 0.5, weight: 1.05, contribution: 1.05 }],
+        employees: [],
+      },
+    });
+    expect(refreshed.company.cash).toBe(taxed.company.cash);
+    expect(refreshed.company.burnRate).toBe(taxed.company.burnRate);
+    expect(refreshed.talentMultiplier).toBe(1.05);
+    expect(refreshed.employees).toEqual([]);
+    expect(previewBurnRate(refreshed)).toBe(Math.round(2800 * 1.05));
   });
 
   test('clearTriggers restores the Slice 1 hype and talent baseline without ticking', () => {
