@@ -10,7 +10,7 @@ import {
   validateMockRequest,
   validateTriggerPayload,
   validateTriggerRecord
-} from '../src/triggerContract.js';
+} from '../../src/triggerContract.js';
 
 const [POLICY, NEWS, MARKET] = SAMPLE_TRIGGERS;
 

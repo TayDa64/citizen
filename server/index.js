@@ -3,7 +3,13 @@ import path from 'node:path';
 import pg from 'pg';
 import { pathToFileURL } from 'node:url';
 import { assertLocalDatabase } from './database.js';
-import { createTrigger, listCompanies, listTriggers } from './triggers.js';
+import {
+  clearTriggers,
+  createTrigger,
+  deleteTrigger,
+  listCompanies,
+  listTriggers
+} from './triggers.js';
 import {
   mockTriggerPayload,
   TriggerValidationError,
@@ -12,6 +18,13 @@ import {
 
 const MAX_BODY_BYTES = 16 * 1024;
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
+
+function sendEmpty(res, status, origin) {
+  const headers = { 'Cache-Control': 'no-store' };
+  if (origin) headers['Access-Control-Allow-Origin'] = origin;
+  res.writeHead(status, headers);
+  res.end();
+}
 
 function sendJson(res, status, body, origin) {
   const payload = JSON.stringify(body);
@@ -80,7 +93,7 @@ async function handleRequest(req, res, pool) {
   if (req.method === 'OPTIONS' && pathname.startsWith('/api/')) {
     res.writeHead(204, {
       'Access-Control-Allow-Origin': origin || 'http://127.0.0.1:5173',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Accept',
       'Access-Control-Max-Age': '600'
     });
@@ -93,6 +106,26 @@ async function handleRequest(req, res, pool) {
   }
   if (req.method === 'GET' && pathname === '/api/companies') {
     sendJson(res, 200, await listCompanies(pool), origin);
+    return;
+  }
+  if (req.method === 'DELETE' && pathname === '/api/triggers') {
+    await clearTriggers(pool);
+    sendEmpty(res, 204, origin);
+    return;
+  }
+  const triggerPath = pathname.match(/^\/api\/triggers\/([^/]+)$/);
+  if (req.method === 'DELETE' && triggerPath && triggerPath[1] !== 'mock') {
+    let id;
+    try {
+      id = decodeURIComponent(triggerPath[1]);
+    } catch {
+      const error = new Error('Invalid trigger id');
+      error.status = 400;
+      error.issues = [{ path: 'id', code: 'invalid_value', message: 'id is not valid URL encoding' }];
+      throw error;
+    }
+    await deleteTrigger(pool, id);
+    sendEmpty(res, 204, origin);
     return;
   }
   if (req.method === 'POST' && (pathname === '/api/triggers' || pathname === '/api/triggers/mock')) {

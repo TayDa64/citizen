@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { test } from 'node:test';
-import { DOWN_MIGRATIONS, UP_MIGRATIONS, splitMigration } from '../server/migrate.js';
+import { DOWN_MIGRATIONS, UP_MIGRATIONS, splitMigration } from '../../server/migrate.js';
 
 test('splits migrate:up and migrate:down sections', () => {
   const parts = splitMigration('-- intro\n-- migrate:up\nSELECT 1;\n-- migrate:down\nSELECT 2;\n');
@@ -45,6 +45,10 @@ test('migration 003 is additive and reversible in source', () => {
   assert.match(parts.up, /'news', 'market', 'talent', 'policy'/);
   assert.match(parts.up, /hype_baseline/);
   assert.match(parts.up, /talent_cost_baseline/);
+  assert.match(parts.down, /hype = hype_baseline/);
+  assert.match(parts.down, /talent_cost = talent_cost_baseline/);
+  assert.match(parts.down, /DELETE FROM real_world_triggers/);
+  assert.match(parts.down, /DELETE FROM effects/);
   assert.match(parts.down, /DROP COLUMN IF EXISTS client_id/);
   assert.match(parts.down, /DROP COLUMN IF EXISTS hype_baseline/);
   assert.match(parts.down, /'news', 'market', 'talent', 'policy'/);
@@ -59,4 +63,14 @@ test('migration 003 is additive and reversible in source', () => {
     'migrations/003_trigger_contract_v1.sql',
     'migrations/002_real_world_trigger_effects.sql'
   ]);
+});
+
+test('api suite filenames stay outside the vitest default include', () => {
+  const files = fs.readdirSync('test/api');
+  const vitestDefault = /\.(test|spec)\.(c|m)?[jt]sx?$/;
+  assert.ok(files.length > 0);
+  for (const file of files) {
+    assert.equal(vitestDefault.test(file), false, file);
+    assert.equal(file.endsWith('.api.js') || file === 'throwaway-db.js', true, file);
+  }
 });

@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import pg from 'pg';
 import { describe, test } from 'node:test';
-import { applyMigration } from '../server/migrate.js';
+import { SAMPLE_TRIGGERS } from '../../src/triggerContract.js';
+import { createTrigger, listCompanies, listTriggers } from '../../server/triggers.js';
+import { applyMigration } from '../../server/migrate.js';
 import { createThrowawayDatabase } from './throwaway-db.js';
 
 const MIGRATION_001 = 'migrations/001_initial_schema.sql';
@@ -180,7 +182,7 @@ describe('migration 003', { concurrency: 1, timeout: 120_000 }, () => {
       );
       assert.deepEqual(
         types.rows.map((row) => row.trigger_type),
-        [null, null, 'news', null]
+        [null, null, 'news']
       );
       await db.pool.query(
         `INSERT INTO real_world_triggers (trigger_type, label) VALUES ('policy', 'still-legacy')`
@@ -196,6 +198,69 @@ describe('migration 003', { concurrency: 1, timeout: 120_000 }, () => {
       await db.pool.query(
         `INSERT INTO real_world_triggers (trigger_type, label, client_id)
          VALUES ('market_shift', 'Market shift', 'evt-market-cooling')`
+      );
+    } finally {
+      await db.close();
+    }
+  });
+
+  test('down restores stacked company metrics so reapplying the samples does not double count', async () => {
+    const db = await createThrowawayDatabase();
+    try {
+      await applyMigration(db.pool, MIGRATION_001, 'up');
+      await applyMigration(db.pool, MIGRATION_002, 'up');
+      await applyMigration(db.pool, MIGRATION_003, 'up');
+      await db.pool.query(
+        `INSERT INTO companies (name, cash, burn_rate, hype)
+         VALUES ('Citizen', 15000, 2000, 0.3)`
+      );
+      await db.pool.query(
+        `INSERT INTO real_world_triggers (source_url, trigger_type, label)
+         VALUES ('legacy', 'news', 'keep me')`
+      );
+      const [policy, news] = SAMPLE_TRIGGERS;
+      await createTrigger(db.pool, news);
+      await createTrigger(db.pool, policy);
+
+      let [company] = await listCompanies(db.pool);
+      assert.equal(company.hype, 0.4);
+      assert.equal(company.talentCost, 4480);
+      assert.equal(company.cash, 15000);
+      assert.equal(company.burnRate, 2000);
+
+      await applyMigration(db.pool, MIGRATION_003, 'down');
+      const restored = await db.pool.query(
+        'SELECT hype, talent_cost, cash, burn_rate FROM companies WHERE name = $1',
+        ['Citizen']
+      );
+      assert.ok(Math.abs(Number(restored.rows[0].hype) - 0.3) < 1e-6);
+      assert.equal(Number(restored.rows[0].talent_cost), 4000);
+      assert.equal(Number(restored.rows[0].cash), 15000);
+      assert.equal(Number(restored.rows[0].burn_rate), 2000);
+      assert.equal(await columnExists(db.pool, 'companies', 'hype_baseline'), false);
+      const leftovers = await db.pool.query(
+        `SELECT trigger_type FROM real_world_triggers ORDER BY source_url`
+      );
+      assert.deepEqual(
+        leftovers.rows.map((row) => row.trigger_type),
+        ['news']
+      );
+      const effects = await db.pool.query('SELECT COUNT(*)::int AS n FROM effects');
+      assert.equal(effects.rows[0].n, 0);
+
+      await applyMigration(db.pool, MIGRATION_003, 'up');
+      await createTrigger(db.pool, news);
+      await createTrigger(db.pool, policy);
+      [company] = await listCompanies(db.pool);
+      assert.equal(company.hype, 0.4);
+      assert.equal(company.talentCost, 4480);
+      assert.notEqual(company.hype, 0.5);
+      assert.notEqual(company.talentCost, 5017.6);
+      const listed = await listTriggers(db.pool);
+      assert.equal(listed.length, 2);
+      assert.deepEqual(
+        listed.map((trigger) => trigger.id).sort(),
+        [news.id, policy.id].sort()
       );
     } finally {
       await db.close();

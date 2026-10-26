@@ -5,7 +5,10 @@ import { test } from 'node:test';
 test('OpenAPI document publishes TRIGGER_CONTRACT v1', () => {
   const spec = JSON.parse(fs.readFileSync('openapi.json', 'utf8'));
   assert.equal(spec.openapi, '3.0.3');
-  assert.equal(spec.info.version, '0.3.0');
+  assert.equal(spec.info.version, '0.4.0');
+  assert.equal(spec.paths['/api/triggers'].delete.responses['204'].description.length > 0, true);
+  assert.equal(spec.paths['/api/triggers/{id}'].delete.responses['204'].description.length > 0, true);
+  assert.equal(spec.paths['/api/triggers/{id}'].delete.responses['404'].description.length > 0, true);
 
   const trigger = spec.components.schemas.Trigger;
   assert.deepEqual(trigger.properties.type.enum, [

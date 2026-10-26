@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { SAMPLE_TRIGGERS } from '../src/triggerContract.js';
+import { SAMPLE_TRIGGERS } from '../../src/triggerContract.js';
 import {
   applyEffects,
   applyTriggerEffect,
   initialState,
   setTaxRate
-} from '../src/simulation.js';
+} from '../../src/simulation.js';
 
 const [POLICY, NEWS, MARKET] = SAMPLE_TRIGGERS;
 

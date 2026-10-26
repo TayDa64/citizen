@@ -5,6 +5,7 @@ import {
   TriggerValidationError,
   roundTo,
   stackTriggerEffects,
+  validateTriggerId,
   validateTriggerPayload,
   validateTriggerRecord
 } from '../src/triggerContract.js';
@@ -98,6 +99,11 @@ function baselineNumber(stored, current, fallback, places) {
   return roundTo(value, places);
 }
 
+// Recompute runs on trigger create, replace, delete, and clear. A company
+// inserted while triggers are already active keeps its own hype and talent
+// cost until the next one of those writes. That write captures a null
+// baseline from the row as it stands, so the new company does not inherit
+// effects that were applied before it existed.
 async function recomputeCompanies(client) {
   const companies = await client.query(
     `SELECT id, hype, talent_cost, hype_baseline, talent_cost_baseline
@@ -214,6 +220,59 @@ export async function createTrigger(pool, payload) {
   } finally {
     client.release();
   }
+}
+
+async function withTransaction(pool, work) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await work(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    try {
+      await client.query('ROLLBACK');
+    } catch {
+      // The connection may already be aborted.
+    }
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function deleteTrigger(pool, id) {
+  const validated = validateTriggerId(id);
+  if (!validated.ok) {
+    throw new TriggerValidationError('Invalid trigger id', validated.issues);
+  }
+  await withTransaction(pool, async (client) => {
+    const removed = await client.query(
+      `DELETE FROM real_world_triggers
+       WHERE client_id = $1
+         AND trigger_type = ANY($2::text[])
+       RETURNING id`,
+      [validated.value, TRIGGER_TYPES]
+    );
+    if (removed.rowCount === 0) {
+      const missing = new Error('Trigger not found');
+      missing.status = 404;
+      missing.issues = [];
+      throw missing;
+    }
+    await recomputeCompanies(client);
+  });
+}
+
+export async function clearTriggers(pool) {
+  await withTransaction(pool, async (client) => {
+    await client.query(
+      `DELETE FROM real_world_triggers
+       WHERE trigger_type = ANY($1::text[])`,
+      [TRIGGER_TYPES]
+    );
+    await recomputeCompanies(client);
+  });
 }
 
 export async function listTriggers(pool) {

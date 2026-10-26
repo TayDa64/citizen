@@ -35,9 +35,38 @@ ALTER TABLE companies
   ADD COLUMN IF NOT EXISTS talent_cost_baseline NUMERIC(12,2);
 
 -- migrate:down
+-- Put company metrics back on the captured baselines before those columns
+-- disappear. Leaving the stacked hype and talent_cost in place makes the
+-- next up/apply count the same triggers twice. v1 trigger rows and their
+-- effect rows go with them. Legacy trigger types stay.
 
-UPDATE real_world_triggers
-SET trigger_type = NULL
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'companies'
+      AND column_name = 'hype_baseline'
+  ) THEN
+    UPDATE companies
+    SET hype = hype_baseline
+    WHERE hype_baseline IS NOT NULL;
+
+    UPDATE companies
+    SET talent_cost = talent_cost_baseline
+    WHERE talent_cost_baseline IS NOT NULL;
+  END IF;
+END $$;
+
+DELETE FROM effects
+WHERE trigger_id IN (
+  SELECT id
+  FROM real_world_triggers
+  WHERE trigger_type IN ('news_spike', 'policy_change', 'market_shift')
+);
+
+DELETE FROM real_world_triggers
 WHERE trigger_type IN ('news_spike', 'policy_change', 'market_shift');
 
 ALTER TABLE companies

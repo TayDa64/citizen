@@ -34,3 +34,36 @@ export async function postMockTrigger(scenario) {
   }
   return body;
 }
+
+async function readTriggerResponse(response) {
+  if (response.status === 204) return null;
+  let body = null;
+  try {
+    body = await response.json();
+  } catch {
+    throw new Error('Trigger service returned an unreadable response');
+  }
+  if (!response.ok) {
+    const detail = Array.isArray(body.issues) && body.issues.length > 0
+      ? body.issues.map((entry) => entry.message).join('; ')
+      : body.error;
+    throw new Error(detail || 'Trigger request failed');
+  }
+  return body;
+}
+
+export async function deleteTrigger(id) {
+  const response = await fetch(`/api/triggers/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: { Accept: 'application/json' }
+  });
+  return readTriggerResponse(response);
+}
+
+export async function clearTriggers() {
+  const response = await fetch('/api/triggers', {
+    method: 'DELETE',
+    headers: { Accept: 'application/json' }
+  });
+  return readTriggerResponse(response);
+}

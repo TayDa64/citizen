@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { SAMPLE_TRIGGERS } from '../src/triggerContract.js';
-import { createTrigger, listCompanies, listTriggers } from '../server/triggers.js';
-import { startServer } from '../server/index.js';
-import { applyMigration } from '../server/migrate.js';
+import { SAMPLE_TRIGGERS } from '../../src/triggerContract.js';
+import { createTrigger, listCompanies, listTriggers } from '../../server/triggers.js';
+import { startServer } from '../../server/index.js';
+import { applyMigration } from '../../server/migrate.js';
 import { createThrowawayDatabase } from './throwaway-db.js';
 
 const [POLICY, NEWS, MARKET] = SAMPLE_TRIGGERS;
@@ -298,6 +298,82 @@ describe('real-world trigger persistence', { concurrency: 1, timeout: 120_000 },
         body: `{"label":"${'a'.repeat(20_000)}"}`
       });
       assert.equal(huge.status, 413);
+    } finally {
+      await new Promise((resolve, reject) => {
+        server.close((err) => (err ? reject(err) : resolve()));
+      });
+      await db.close();
+    }
+  });
+
+  test('DELETE removes one trigger or clears every v1 trigger back to baseline', async () => {
+    const db = await migratedDatabase();
+    const server = await startServer({ pool: db.pool, port: 0, host: '127.0.0.1' });
+    try {
+      const base = `http://127.0.0.1:${server.address().port}`;
+      await db.pool.query(
+        `INSERT INTO real_world_triggers (source_url, trigger_type, label)
+         VALUES ('legacy', 'news', 'keep me')`
+      );
+      const policy = await fetch(`${base}/api/triggers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(POLICY)
+      });
+      assert.equal(policy.status, 201);
+      const news = await fetch(`${base}/api/triggers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(NEWS)
+      });
+      assert.equal(news.status, 201);
+
+      const removed = await fetch(`${base}/api/triggers/${POLICY.id}`, { method: 'DELETE' });
+      assert.equal(removed.status, 204);
+      assert.equal(await removed.text(), '');
+      let companies = await (await fetch(`${base}/api/companies`)).json();
+      assert.equal(companies[0].talentCost, 4000);
+      closeTo(companies[0].hype, 0.4);
+      assert.equal(companies[0].baselines.talentCost, 4000);
+      assert.equal(companies[0].burnRate, 2000);
+      let triggers = await (await fetch(`${base}/api/triggers`)).json();
+      assert.deepEqual(triggers.map((trigger) => trigger.id), [NEWS.id]);
+
+      const missing = await fetch(`${base}/api/triggers/${POLICY.id}`, { method: 'DELETE' });
+      assert.equal(missing.status, 404);
+      const badId = await fetch(`${base}/api/triggers/${'x'.repeat(201)}`, { method: 'DELETE' });
+      assert.equal(badId.status, 400);
+      const mockDelete = await fetch(`${base}/api/triggers/mock`, { method: 'DELETE' });
+      assert.equal(mockDelete.status, 405);
+
+      const cleared = await fetch(`${base}/api/triggers`, { method: 'DELETE' });
+      assert.equal(cleared.status, 204);
+      companies = await (await fetch(`${base}/api/companies`)).json();
+      closeTo(companies[0].hype, 0.3);
+      assert.equal(companies[0].talentCost, 4000);
+      assert.equal(companies[0].cash, 15000);
+      assert.equal(companies[0].burnRate, 2000);
+      triggers = await (await fetch(`${base}/api/triggers`)).json();
+      assert.deepEqual(triggers, []);
+
+      const clearedAgain = await fetch(`${base}/api/triggers`, { method: 'DELETE' });
+      assert.equal(clearedAgain.status, 204);
+      const legacy = await db.pool.query(
+        `SELECT label FROM real_world_triggers WHERE trigger_type = 'news'`
+      );
+      assert.deepEqual(
+        legacy.rows.map((row) => row.label),
+        ['keep me']
+      );
+
+      await fetch(`${base}/api/triggers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(POLICY)
+      });
+      companies = await (await fetch(`${base}/api/companies`)).json();
+      assert.equal(companies[0].talentCost, 4480);
+      closeTo(companies[0].hype, 0.3);
     } finally {
       await new Promise((resolve, reject) => {
         server.close((err) => (err ? reject(err) : resolve()));

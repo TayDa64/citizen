@@ -21,6 +21,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "start:api": "node server/index.js",
-    "test": "node --test tests/*.test.js"
+    "test:api": "node --test test/api/*.api.js",
+    "test": "npm run test:api"
   }
 }

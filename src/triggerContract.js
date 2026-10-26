@@ -173,6 +173,13 @@ function validateId(issues, value) {
   return value;
 }
 
+export function validateTriggerId(value) {
+  const issues = [];
+  const id = validateId(issues, value);
+  if (id == null) return { ok: false, issues };
+  return { ok: true, value: id };
+}
+
 function validateTimestamp(issues, value) {
   if (typeof value !== 'string') {
     issues.push(issue('timestamp', 'invalid_type', 'timestamp must be a string'));

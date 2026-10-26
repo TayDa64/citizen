@@ -19,3 +19,15 @@ Forked conceptually from civic-brief ideas and expanded into a full game backend
 5. Extend the WorkflowDiagram.jsx and add backend schema from previous design.
 
 See the React Flow component in `src/WorkflowDiagram.jsx` for the core gameplay loop visualization.
+
+## Local Postgres
+
+Install the pgvector package that matches the cluster major version, `postgresql-<major>-pgvector`. `pg_lsclusters` prints the version and cluster name. Start that cluster with `sudo pg_ctlcluster <version> <name> start`.
+
+The API binds to loopback and refuses a `DATABASE_URL` whose host, after `pg-connection-string` parsing, is not `localhost`, `127.0.0.1`, `::1`, or a unix-socket path. An omitted host uses `PGHOST`, then `localhost`. Repeated `host` parameters and comma-separated host lists are refused. Tests create throwaway databases on the local socket and do not read `DATABASE_URL`.
+
+A company inserted while v1 triggers are already active keeps its own hype and talent cost until the next trigger create, replace, delete, or clear. That write recomputes every company. A row that does not yet have a baseline is captured as it stands, so it does not inherit effects applied before it existed.
+
+## Tests
+
+`npm test` runs the API suite (`npm run test:api`). Those files live in `test/api` and are named `*.api.js`, which is outside Vitest's default include (`**/*.{test,spec}.?(c|m)[jt]s?(x)`). The frontend Vitest config should set `include` to `src/**` so it does not collect this suite.
