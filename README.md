@@ -30,12 +30,16 @@ The API binds to loopback and refuses a `DATABASE_URL` whose host, after `pg-con
 
 A company inserted while v1 triggers are already active keeps its own hype and talent cost until the next trigger create, replace, delete, or clear. That write recomputes every company. A row that does not yet have a baseline is captured as it stands, so it does not inherit effects applied before it existed.
 
-`talentMultiplier` is the employee mean and is exactly 1 when the mix is empty. Contributions sum to that multiplier only when the mix is non-empty. A null, blank, NaN, or Infinity skill counts as 0.5. `talentCostFactor` is the stacked ratio `talentCost / baselines.talentCost`, clamped once to [0.1, 3] and rounded to 4 decimal places. It is 1, and `talentCostFactorClamped` is false, when there is no trigger or the baseline is missing, 0, negative, or non-finite. `talentCostFactorClamped` is true only when that raw ratio fell outside the range. The stored talent cost and hype stay raw. `effectiveMultiplier` is `round(talentMultiplier * talentCostFactor, 4)`. Both the API and the client simulation use `burnRate = round(base * talentMultiplier * talentCostFactor)`, rounded once. The API base is stored `baseBurnRate` and includes no tax. The simulation base is `round(2000 * (1 + taxRate * 0.4))`. GET `/api/companies` does not write `companies.burn_rate` or `companies.cash`.
+`talentMultiplier` is the employee mean and is exactly 1 when the mix is empty. Contributions sum to that multiplier only when the mix is non-empty. A null, blank, NaN, or Infinity skill counts as 0.5. `talentCostFactor` is the stacked ratio `talentCost / baselines.talentCost`, clamped once to [0.1, 3] and rounded to 4 decimal places. It is 1, and `talentCostFactorClamped` is false, when there is no trigger or the baseline is missing, 0, negative, or non-finite. `talentCostFactorClamped` is true only when that raw ratio fell outside the range. The stored talent cost and hype stay raw. `effectiveMultiplier` is `round(talentMultiplier * talentCostFactor, 4)`. API `burnRate` is `round(baseBurnRate * talentMultiplier * talentCostFactor)`, rounded once, with no tax. GET `/api/companies` does not write `companies.burn_rate` or `companies.cash`. Validation failures are `400` `{ "error", "issues" }`. A method the route does not implement is `405` `{ "error": "Method not allowed", "issues": [] }`.
+
+## Browser tests against the API
+
+`npm run test:browser` skips the live API check unless `CITIZEN_API_E2E=1`. Playwright runs `npm run build` and then `vite preview`, so the API base is fixed at build time. Set `VITE_CITIZEN_API=/api` in that build. The preview server proxies `/api` to `http://127.0.0.1:8787`, which keeps the Host header on an address the API allows. When `CITIZEN_API_E2E` is set, every browser test calls `DELETE /api/triggers` before it starts and after it finishes.
 
 ## Tests
 
-`npm test` runs the database-free unit and simulation suite in `test/unit`. It does not need Postgres. CI's `npm run test --if-present` uses this script.
+`npm test` runs the database-free backend suite in `test/unit`, then the UI suite (`vitest run`). Neither needs Postgres. CI's `npm run test --if-present` uses this script.
 
 `npm run test:api` runs the Postgres suite in `test/api`. That suite creates and drops `citizen_slice2_test_*` databases on the local socket and does not read `DATABASE_URL`.
 
-Both suites use `*.api.js` names, which sit outside Vitest's default include (`**/*.{test,spec}.?(c|m)[jt]s?(x)`). The frontend Vitest config should set `include` to `src/**` so it does not collect them.
+Both backend suites use `*.api.js` names, which sit outside Vitest's include (`src/**/*.{test,spec}.{js,jsx}`).
