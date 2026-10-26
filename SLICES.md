@@ -58,3 +58,7 @@ Live company and world-event data comes from Citizen API OpenAPI 0.4.0 on PR #2 
 `APPLY_TALENT_COST_TO_BURN` in `src/talentMultiplier.js` is on. Trigger talent cost scales burn in local mode and API mode. `talentMultiplier` stays employee-only.
 
 OpenAPI 0.6.0 (PR #6, not pushed yet) adds `talentCostFactor` and `effectiveMultiplier` on `GET /api/companies`. `talentMultiplier` remains employee-only. A 0.5.0 payload omits the new fields and the client computes them. Parsing stays in `src/talentMultiplier.js`. A missing Host is 400 `Host required`, two Host headers are 400 `Duplicate host`, and any other host is 403 `Forbidden host`. Those alerts keep the current numbers. Hype outside 0–1 and talent cost outside $0–$9,999,999,999.99 are clamped, and the status says so.
+
+## Merge train
+
+Which slices land in which order, and what is already verified, is tracked in [STATE.md](STATE.md).
