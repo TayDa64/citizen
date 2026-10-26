@@ -156,7 +156,8 @@ describe('real-world trigger persistence', { concurrency: 1, timeout: 120_000 },
       assert.equal(companies[0].talentCost, 4857.6);
       assert.equal(companies[1].talentCost, 9715.2);
       assert.equal((await listTriggers(db.pool)).length, 4);
-      assert.equal(companies[0].burnRate, 2000);
+      assert.equal(companies[0].talentCostFactor, 1.2144);
+      assert.equal(companies[0].burnRate, 2429);
       assert.equal(companies[0].cash, 15000);
 
       await db.pool.query(
@@ -256,7 +257,10 @@ describe('real-world trigger persistence', { concurrency: 1, timeout: 120_000 },
       const companyList = await companies.json();
       assert.equal(companyList[0].talentCost, 4480);
       assert.equal(companyList[0].baselines.talentCost, 4000);
-      assert.equal(companyList[0].burnRate, 2000);
+      assert.equal(companyList[0].talentMultiplier, 1);
+      assert.equal(companyList[0].talentCostFactor, 1.12);
+      assert.equal(companyList[0].effectiveMultiplier, 1.12);
+      assert.equal(companyList[0].burnRate, 2240);
       assert.equal(companyList[0].cash, 15000);
       closeTo(companyList[0].hype, 0.3);
 
@@ -268,6 +272,8 @@ describe('real-world trigger persistence', { concurrency: 1, timeout: 120_000 },
       assert.equal(replaced.status, 201);
       const afterReplace = await (await fetch(`${base}/api/companies`)).json();
       assert.equal(afterReplace[0].talentCost, 4800);
+      assert.equal(afterReplace[0].talentCostFactor, 1.2);
+      assert.equal(afterReplace[0].burnRate, 2400);
       const afterList = await (await fetch(`${base}/api/triggers`)).json();
       assert.equal(afterList.length, 1);
       assert.deepEqual(afterList[0].effect, { talentCost: 0.2 });

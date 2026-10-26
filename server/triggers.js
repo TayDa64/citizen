@@ -9,6 +9,7 @@ import {
   validateTriggerPayload,
   validateTriggerRecord
 } from '../src/triggerContract.js';
+import { burnFromBase, composeTalentMultiplier, resolveTalentCostFactor } from '../src/talentBurn.js';
 
 const METRICS = {
   hype: { objectName: 'hype', bounds: HYPE_BOUNDS, op: 'add' },
@@ -94,9 +95,23 @@ async function metricId(client, objectName, bounds) {
   return result.rows[0].id;
 }
 
+function finiteRounded(value, places) {
+  if (value == null || value === '') return null;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  return roundTo(numeric, places);
+}
+
+function firstFinite(places, ...values) {
+  for (const value of values) {
+    const rounded = finiteRounded(value, places);
+    if (rounded != null) return rounded;
+  }
+  return null;
+}
+
 function baselineNumber(stored, current, fallback, places) {
-  const value = stored != null ? Number(stored) : current != null ? Number(current) : fallback;
-  return roundTo(value, places);
+  return firstFinite(places, stored, current, fallback);
 }
 
 // Recompute runs on trigger create, replace, delete, and clear. A company
@@ -289,14 +304,33 @@ export async function listCompanies(pool) {
      FROM companies
      ORDER BY founded_at ASC, id ASC`
   );
-  return result.rows.map((row) => ({
-    id: row.id,
-    name: row.name,
-    cash: Number(row.cash),
-    burnRate: Number(row.burn_rate),
-    hype: row.hype == null ? null : roundTo(Number(row.hype), 4),
-    talentCost: row.talent_cost == null ? null : roundTo(Number(row.talent_cost), 2),
-    baselines: {
+  const ids = result.rows.map((row) => row.id);
+  const employeesByCompany = new Map();
+  if (ids.length > 0) {
+    const employees = await pool.query(
+      `SELECT company_id, department, skill_tech, skill_marketing, skill_sales, is_active
+       FROM employees
+       WHERE company_id = ANY($1::uuid[])`,
+      [ids]
+    );
+    for (const employee of employees.rows) {
+      const list = employeesByCompany.get(employee.company_id) ?? [];
+      list.push(employee);
+      employeesByCompany.set(employee.company_id, list);
+    }
+  }
+  return result.rows.map((row) => {
+    const profile = composeTalentMultiplier({
+      employees: employeesByCompany.get(row.id) ?? []
+    });
+    const talentMultiplier = finiteRounded(profile.talentMultiplier, 4) ?? 1;
+    const talentCost = firstFinite(
+      2,
+      row.talent_cost,
+      row.talent_cost_baseline,
+      TALENT_COST_BOUNDS.fallback
+    );
+    const baselines = {
       hype: baselineNumber(row.hype_baseline, row.hype, HYPE_BOUNDS.fallback, 4),
       talentCost: baselineNumber(
         row.talent_cost_baseline,
@@ -304,6 +338,35 @@ export async function listCompanies(pool) {
         TALENT_COST_BOUNDS.fallback,
         2
       )
-    }
-  }));
+    };
+    const resolved = resolveTalentCostFactor(talentCost, baselines.talentCost);
+    const burn = burnFromBase(
+      finiteRounded(row.burn_rate, 2) ?? 0,
+      talentMultiplier,
+      resolved.talentCostFactor,
+      resolved.talentCostFactorClamped
+    );
+    const talentMix = (profile.talentMix ?? []).map((group) => ({
+      department: group.department == null || group.department === '' ? null : String(group.department),
+      headcount: finiteRounded(group.headcount, 0) ?? 0,
+      avgSkill: finiteRounded(group.avgSkill, 4) ?? 0,
+      weight: finiteRounded(group.weight, 4) ?? 1,
+      contribution: finiteRounded(group.contribution, 4) ?? 0
+    }));
+    return {
+      id: row.id,
+      name: row.name,
+      cash: finiteRounded(row.cash, 2) ?? 0,
+      baseBurnRate: burn.baseBurnRate,
+      burnRate: burn.burnRate,
+      talentMultiplier,
+      talentCostFactor: burn.talentCostFactor,
+      talentCostFactorClamped: burn.talentCostFactorClamped,
+      effectiveMultiplier: burn.effectiveMultiplier,
+      talentMix,
+      hype: firstFinite(4, row.hype, row.hype_baseline, HYPE_BOUNDS.fallback),
+      talentCost,
+      baselines
+    };
+  });
 }

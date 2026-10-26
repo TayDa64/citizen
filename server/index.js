@@ -28,6 +28,19 @@ export function isAllowedHostHeader(hostHeader, port) {
   return HOST_HEADER_NAMES.some((name) => value === `${name}:${port}`);
 }
 
+export function classifyHostHeader({ hostHeader, rawHeaders, port }) {
+  let hostCount = 0;
+  if (Array.isArray(rawHeaders)) {
+    for (let index = 0; index < rawHeaders.length; index += 2) {
+      if (String(rawHeaders[index]).toLowerCase() === 'host') hostCount += 1;
+    }
+  }
+  if (hostCount > 1) return { status: 400, error: 'Duplicate host' };
+  if (hostHeader === undefined) return { status: 400, error: 'Host required' };
+  if (!isAllowedHostHeader(hostHeader, port)) return { status: 403, error: 'Forbidden host' };
+  return null;
+}
+
 function sendEmpty(res, status, origin) {
   const headers = { 'Cache-Control': 'no-store' };
   if (origin) headers['Access-Control-Allow-Origin'] = origin;
@@ -170,8 +183,13 @@ export function createServer(pool) {
   const server = http.createServer(async (req, res) => {
     const address = server.address();
     const port = address && typeof address === 'object' ? address.port : 0;
-    if (!isAllowedHostHeader(req.headers.host, port)) {
-      sendJson(res, 403, { error: 'Forbidden host' });
+    const hostProblem = classifyHostHeader({
+      hostHeader: req.headers.host,
+      rawHeaders: req.rawHeaders,
+      port
+    });
+    if (hostProblem) {
+      sendJson(res, hostProblem.status, { error: hostProblem.error });
       return;
     }
     try {
