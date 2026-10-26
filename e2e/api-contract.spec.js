@@ -1,9 +1,9 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 test('policy sample from the API shows $4,480 without raising burn', async ({ page }) => {
   test.skip(
     !process.env.CITIZEN_API_E2E,
-    'Optional. Set CITIZEN_API_E2E=1 and VITE_CITIZEN_API while building, with PR #2 listening on 127.0.0.1:8787. Not required for CI.'
+    'Optional. Set CITIZEN_API_E2E=1 and VITE_CITIZEN_API=/api at build time, with PR #2 listening on 127.0.0.1:8787. Playwright builds before preview. Not required for CI.'
   );
 
   await page.goto('/');

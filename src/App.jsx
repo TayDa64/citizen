@@ -1,21 +1,25 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import WorkflowDiagram from './WorkflowDiagram';
 import Dashboard from './components/Dashboard';
 import TriggerPanel from './components/TriggerPanel';
 import {
   CONNECTED_NOTE,
   LOADING_NOTE,
+  MISSING_HYPE_NOTE,
+  MISSING_TALENT_COST_NOTE,
   SAMPLE_DATA_NOTE,
+  UNREADABLE_COMPANY_NOTE,
   createCitizenApi,
   loadCitizenWorld,
   readCitizenApiBase,
+  skippedTriggerAlert,
 } from './citizenApi';
 import {
   applyEffects,
   applyTrigger,
   clearTriggers,
-  hydrateFromApi,
   initialState,
+  readApiSnapshot,
   removeTrigger,
 } from './simulation';
 import { CLEARED_ANNOUNCEMENT, announceTrigger } from './triggers';
@@ -44,14 +48,42 @@ function saveBlockedMessage(error, label) {
   return `Could not save ${label}. ${error.message}`;
 }
 
+function sourceNotes(reading) {
+  const notes = [CONNECTED_NOTE];
+  if (reading.missingHype) notes.push(MISSING_HYPE_NOTE);
+  if (reading.missingTalent) notes.push(MISSING_TALENT_COST_NOTE);
+  return notes.join(' ');
+}
+
 function App() {
   const configuredBase = readCitizenApiBase();
   const [state, setState] = useState(initialState);
+  const stateRef = useRef(state);
+  stateRef.current = state;
   const [announcement, setAnnouncement] = useState('');
   const [sourceNote, setSourceNote] = useState(configuredBase ? LOADING_NOTE : SAMPLE_DATA_NOTE);
   const [sourceBusy, setSourceBusy] = useState(Boolean(configuredBase));
   const [actionError, setActionError] = useState('');
   const [apiBase, setApiBase] = useState(configuredBase);
+
+  const showSampleData = (note) => {
+    setState(initialState);
+    stateRef.current = initialState;
+    setApiBase(null);
+    setSourceNote(note);
+    setActionError('');
+  };
+
+  // Read the payload before setState. A throw inside an updater runs during
+  // render, where the caller's try/catch cannot see it.
+  const commitSnapshot = (snapshot, { clearChange = false } = {}) => {
+    const reading = readApiSnapshot(stateRef.current, snapshot);
+    const next = clearChange ? { ...reading.state, lastTriggerChange: null } : reading.state;
+    setState(next);
+    stateRef.current = next;
+    setSourceNote(sourceNotes(reading));
+    return reading;
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -59,15 +91,22 @@ function App() {
       .then((result) => {
         if (cancelled) return;
         if (result.mode === 'api' && result.snapshot) {
-          setState((prev) => hydrateFromApi(prev, result.snapshot));
-          setApiBase(result.baseUrl);
-          setSourceNote(result.note || CONNECTED_NOTE);
+          try {
+            const reading = commitSnapshot(result.snapshot);
+            setApiBase(result.baseUrl);
+            setActionError(reading.skipped > 0 ? skippedTriggerAlert(reading.skipped) : (result.alert || ''));
+          } catch (error) {
+            if (error?.code === 'unreadable-company') {
+              showSampleData(UNREADABLE_COMPANY_NOTE);
+            } else {
+              showSampleData(SAMPLE_DATA_NOTE);
+              setActionError(result.alert || '');
+            }
+          }
         } else {
-          setState(initialState);
-          setApiBase(null);
-          setSourceNote(result.note || SAMPLE_DATA_NOTE);
+          showSampleData(result.note || SAMPLE_DATA_NOTE);
+          setActionError(result.alert || '');
         }
-        setActionError(result.alert || '');
       })
       .finally(() => {
         if (!cancelled) setSourceBusy(false);
@@ -90,7 +129,7 @@ function App() {
 
   const refreshApi = async (baseUrl) => {
     const snapshot = await createCitizenApi({ baseUrl }).loadWorld();
-    setState((prev) => hydrateFromApi(prev, snapshot));
+    return commitSnapshot(snapshot);
   };
 
   const onToggleTrigger = async (trigger) => {
@@ -118,12 +157,36 @@ function App() {
         await api.createMock(trigger.type);
       }
       saved = true;
+      let reading = null;
       try {
-        await refreshApi(apiBase);
-      } catch {
-        setState((prev) => (active ? removeTrigger(prev, trigger.id) : applyTrigger(prev, trigger)));
+        reading = await refreshApi(apiBase);
+      } catch (error) {
+        if (error?.code === 'unreadable-company') {
+          showSampleData(UNREADABLE_COMPANY_NOTE);
+          setAnnouncement('');
+          return;
+        }
+        const next = active
+          ? removeTrigger(stateRef.current, trigger.id)
+          : applyTrigger(stateRef.current, trigger);
+        setState(next);
+        stateRef.current = next;
+        setAnnouncement(announceTrigger(trigger, active ? 'remove' : 'apply'));
+        return;
       }
-      setAnnouncement(announceTrigger(trigger, active ? 'remove' : 'apply'));
+      const listed = reading.state.activeTriggers.find((item) => item.id === trigger.id);
+      const alerts = [];
+      if (reading.skipped > 0) alerts.push(skippedTriggerAlert(reading.skipped));
+      if (listed) {
+        setAnnouncement(announceTrigger(listed, 'apply'));
+        if (active) alerts.push(`${listed.label} is still listed by the service.`);
+      } else if (active) {
+        setAnnouncement(announceTrigger(trigger, 'remove'));
+      } else {
+        alerts.push(`${trigger.label} is not listed by the service.`);
+        setAnnouncement('');
+      }
+      setActionError(alerts.join(' '));
     } catch (error) {
       if (!saved) {
         if (active) {
@@ -155,11 +218,25 @@ function App() {
       saved = true;
       try {
         const snapshot = await api.loadWorld();
-        setState((prev) => ({ ...hydrateFromApi(prev, snapshot), lastTriggerChange: null }));
-      } catch {
+        const reading = commitSnapshot(snapshot, { clearChange: true });
+        const alerts = [];
+        if (reading.skipped > 0) alerts.push(skippedTriggerAlert(reading.skipped));
+        if (reading.state.activeTriggers.length === 0) {
+          setAnnouncement(CLEARED_ANNOUNCEMENT);
+        } else {
+          alerts.push('World events are still listed by the service.');
+          setAnnouncement('');
+        }
+        setActionError(alerts.join(' '));
+      } catch (error) {
+        if (error?.code === 'unreadable-company') {
+          showSampleData(UNREADABLE_COMPANY_NOTE);
+          setAnnouncement('');
+          return;
+        }
         setState((prev) => clearTriggers(prev));
+        setAnnouncement(CLEARED_ANNOUNCEMENT);
       }
-      setAnnouncement(CLEARED_ANNOUNCEMENT);
     } catch (error) {
       if (!saved) {
         setActionError(removalBlockedMessage(error, 'world events'));
