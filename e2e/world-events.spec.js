@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test } from './fixtures';
+import { expect, formatMoney, simulationBurn, test } from './fixtures';
 
 const POLICY = 'Policy change: talent cost +12%';
 
@@ -32,6 +32,7 @@ test('applying, clearing, and toggling a world event removes the chart marker', 
   await expect(page.locator('.metrics-chart .highcharts-plot-band')).toHaveCount(0);
 
   const policy = page.getByRole('button', { name: /^Policy change / });
+  await expect(policy).toBeEnabled();
   await policy.click();
   await expect(page.locator('.metrics-chart .highcharts-plot-line-label')).toContainText(POLICY);
   let state = await chartMarkup(page);
@@ -49,7 +50,12 @@ test('applying, clearing, and toggling a world event removes the chart marker', 
   expect(mentionsPolicy(state), JSON.stringify(state)).toBe(false);
 
   await page.getByRole('button', { name: /advance month/i }).click();
-  await expect(page.getByText(/Burn\/mo: \$2200/)).toBeVisible();
+  let quietBurn = '$2,200';
+  if (process.env.CITIZEN_API_E2E) {
+    const quiet = (await (await page.request.get('http://127.0.0.1:8787/api/companies')).json())[0];
+    quietBurn = formatMoney(simulationBurn(quiet));
+  }
+  await expect(page.getByTestId('burn-value')).toContainText(quietBurn);
   await expect(page.locator('.metrics-chart .highcharts-plot-line')).toHaveCount(0);
   await expect(page.locator('.metrics-chart .highcharts-plot-band')).toHaveCount(0);
   state = await chartMarkup(page);
@@ -97,7 +103,9 @@ test('event buttons expose a name that starts with the visible label', async ({ 
     .analyze();
   expect(idle.violations).toEqual([]);
 
-  await page.getByRole('button', { name: /^Policy change / }).click();
+  const policy = page.getByRole('button', { name: /^Policy change / });
+  await expect(policy).toBeEnabled();
+  await policy.click();
   const pressed = await new AxeBuilder({ page })
     .include('.trigger-panel')
     .include('.data-source')

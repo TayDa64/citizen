@@ -4,7 +4,9 @@ import {
   TRIGGER_CONTRACT,
   assertValidTrigger,
   describeTrigger,
+  formatCurrency,
   formatDollars,
+  formatHypePercent,
   formatSignedPercent,
   formatTalentDollars,
   projectedTalentDollars,
@@ -158,7 +160,11 @@ describe('talent cost dollars', () => {
     expect(formatSignedPercent(0.12)).toBe('+12%');
     expect(formatTalentDollars(4121.6)).toBe('$4,121.60');
     expect(formatDollars(4121.6)).toBe('$4,121.60');
-    expect(formatTalentDollars(-4121.6)).toBe('-$4,121.60');
+    expect(formatTalentDollars(-4121.6)).toBe('$0');
+    expect(formatDollars(-4121.6)).toBe('-$4,121.60');
+    expect(formatCurrency(1e308)).toBe('$9,999,999,999.99');
+    expect(formatHypePercent(-5)).toBe('0%');
+    expect(formatHypePercent(4)).toBe('100%');
     expect(projectedTalentDollars(4000, -0.08)).toBe(3680);
   });
 });
@@ -182,11 +188,17 @@ describe('triggerDiagramOverlay', () => {
   test('matches the Slice 1 labels when no trigger is active', () => {
     expect(triggerDiagramOverlay(quiet)).toEqual({
       nodeLabels: {
+        3: 'Hire Staff\n(Tech / Marketing / Sales)\nTalent ×1.0000\nno employees',
         5: 'Real-World Triggers\n(Firecrawl + Events)',
+        7: 'Launch / Market / Sell\nTrack Runway & Hype\nBurn $2,200 (base $2,200)\nTalent ×1.0000 × cost factor 1.00 = 1.00\nHype: 30%',
         'civic-infra': 'Civic Lever:\nInfrastructure / Talent',
       },
       edgeLabels: {
         'einfra-7': 'talent cost',
+      },
+      nodeAriaLabels: {
+        3: 'Hire Staff. Talent multiplier 1.0000. no employees.',
+        7: 'Launch / Market / Sell. Burn $2,200. Base burn $2,200. Talent multiplier 1 times cost factor 1 equals 1. Hype: 30%.',
       },
       hypeNode: null,
     });
@@ -206,6 +218,27 @@ describe('triggerDiagramOverlay', () => {
     expect(overlay.nodeLabels['civic-infra']).toContain('talent cost +12%');
     expect(overlay.edgeLabels['einfra-7']).toBe('talent cost +12%');
     expect(overlay.hypeNode).toBeNull();
+  });
+
+  test('shows an API talent multiplier on the infrastructure edge', () => {
+    const overlay = triggerDiagramOverlay({
+      dataSource: 'api',
+      talentMultiplier: 1.28,
+      company: { hype: 0.3, talentCost: 4000 },
+      baselines: { hype: 0.3, talentCost: 4000 },
+      activeTriggers: [],
+    });
+    expect(overlay.edgeLabels['einfra-7']).toBe('×1.2800 talent');
+    expect(overlay.nodeLabels['civic-infra']).toContain('×1.2800 talent');
+    expect(overlay.nodeLabels[3]).toContain('Talent ×1.2800');
+    expect(overlay.nodeLabels[3]).toContain('no employees');
+    expect(overlay.nodeLabels[7]).toBe(
+      'Launch / Market / Sell\nTrack Runway & Hype\nBurn $2,816 (base $2,200)\nTalent ×1.2800 × cost factor 1.00 = 1.28\nHype: 30%'
+    );
+    expect(overlay.nodeAriaLabels[7]).toBe(
+      'Launch / Market / Sell. Burn $2,816. Base burn $2,200. Talent multiplier 1.28 times cost factor 1 equals 1.28. Hype: 30%.'
+    );
+    expect(overlay.nodeAriaLabels[3]).toBe('Hire Staff. Talent multiplier 1.2800. no employees.');
   });
 
   test('adds a hype node only when hype moved', () => {

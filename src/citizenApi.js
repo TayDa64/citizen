@@ -1,3 +1,4 @@
+import { readTalentMix, readTalentMultiplier } from './talentMultiplier';
 import { TRIGGER_TYPES, assertTriggerId, assertValidTrigger } from './triggers';
 
 const TRIGGER_FIELDS = ['id', 'type', 'label', 'source', 'timestamp', 'effect'];
@@ -11,6 +12,9 @@ export const LOADING_NOTE = 'Loading company and world events.';
 export const CONNECTED_NOTE = 'Connected to the Citizen service. Talent cost is shown in dollars.';
 export const MISSING_HYPE_NOTE = 'Hype was missing, so the baseline is shown.';
 export const MISSING_TALENT_COST_NOTE = 'Talent cost was missing, so the baseline is shown.';
+export const CLAMPED_HYPE_NOTE = 'Hype was outside 0% to 100%, so it is shown clamped.';
+export const CLAMPED_TALENT_COST_NOTE =
+  'Talent cost was outside $0 to $9,999,999,999.99, so it is shown clamped.';
 
 function finiteNumber(value) {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
@@ -21,7 +25,20 @@ export function skippedTriggerAlert(count) {
   return `Skipped ${count} ${noun} the service sent in an unexpected shape.`;
 }
 export const HOST_REFUSED_ALERT =
-  'The Citizen service refused this page (403). Use the local /api address on this machine.';
+  'The Citizen service refused this host (403 Forbidden host). Use the local /api address on this machine. Nothing on this screen was changed.';
+export const HOST_REQUIRED_ALERT =
+  'The Citizen service requires a Host header (400 Host required). Nothing on this screen was changed.';
+export const DUPLICATE_HOST_ALERT =
+  'The Citizen service received two Host headers (400 Duplicate host). Nothing on this screen was changed.';
+
+export function hostHeaderAlert(error) {
+  const status = error?.status;
+  const detail = typeof error?.message === 'string' ? error.message : '';
+  if (status === 400 && /host required/i.test(detail)) return HOST_REQUIRED_ALERT;
+  if (status === 400 && /duplicate host/i.test(detail)) return DUPLICATE_HOST_ALERT;
+  if (status === 403) return HOST_REFUSED_ALERT;
+  return null;
+}
 
 export function selectCompany(companies, companyId) {
   if (!Array.isArray(companies) || companies.length === 0) return null;
@@ -143,6 +160,8 @@ export function createCitizenApi({ fetchImpl = globalThis.fetch, baseUrl } = {})
     if (!Array.isArray(triggers)) {
       throw new Error('Trigger service returned an unreadable response');
     }
+    readTalentMultiplier(company.talentMultiplier);
+    readTalentMix(company.talentMix);
     const baselines = company?.baselines;
     if (finiteNumber(baselines?.hype) == null || finiteNumber(baselines?.talentCost) == null) {
       const error = new Error('Company payload could not be read');
@@ -199,11 +218,12 @@ export async function loadCitizenWorld({ env = import.meta.env, fetchImpl = glob
     const snapshot = await createCitizenApi({ fetchImpl, baseUrl }).loadWorld();
     return { mode: 'api', note: CONNECTED_NOTE, alert: null, snapshot, baseUrl };
   } catch (error) {
-    if (error?.status === 403) {
+    const hostAlert = hostHeaderAlert(error);
+    if (hostAlert) {
       return {
         mode: 'local',
         note: SAMPLE_DATA_NOTE,
-        alert: HOST_REFUSED_ALERT,
+        alert: hostAlert,
         snapshot: null,
         baseUrl: null,
       };

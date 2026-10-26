@@ -202,6 +202,45 @@ button:focus-visible {
   color: #f8fafc;
 }
 
+.talent-burn {
+  margin: 0.75rem 0 0;
+  color: #f8fafc;
+}
+
+.talent-burn h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+  color: #f8fafc;
+}
+
+.talent-mix {
+  width: 100%;
+  margin-top: 0.75rem;
+  border-collapse: collapse;
+  color: #f8fafc;
+}
+
+.talent-mix caption {
+  caption-side: top;
+  margin-bottom: 0.35rem;
+  font-weight: 700;
+  text-align: left;
+  color: #f8fafc;
+}
+
+.talent-mix th,
+.talent-mix td {
+  padding: 0.4rem 0.55rem;
+  border: 1px solid #94a3b8;
+  text-align: left;
+}
+
+.talent-mix th {
+  background: #1e293b;
+  color: #f8fafc;
+  font-weight: 700;
+}
+
 .chart-caption {
   margin: 0 0 0.5rem;
   color: #e2e8f0;

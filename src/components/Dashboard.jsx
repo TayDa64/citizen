@@ -2,45 +2,40 @@ import { useEffect, useState } from 'react';
 import { Chart, Title } from '@highcharts/react';
 import { LineSeries } from '@highcharts/react/series/Line';
 import { talentCostShowsDollars } from '../dataSource';
-import { baselineBurnRate, previewBurnRate } from '../simulation';
+import { BASE_TALENT_COST, previewBurnRate } from '../simulation';
+import {
+  baseBurnRate,
+  effectiveMultiplierOf,
+  formatTalentCostFactor,
+  formatTalentReadout,
+  talentCostFactorClampOf,
+  talentCostFactorOf,
+  talentMixOf,
+  talentMultiplierOf,
+} from '../talentMultiplier';
 import {
   deltaPhrase,
   describeTrigger,
-  formatDollars,
+  clampHype,
+  clampTalentCost,
+  formatBurnBreakdown,
+  formatCurrency,
   formatHypePercent,
   formatTalentDollars,
   formatTalentMultiplier,
+  talentCostFactorClampNote,
+  talentEquation,
 } from '../triggers';
 import { loadChartAccessibility } from './loadChartAccessibility';
 import {
   axisGuideOptions,
   metricsChartDescription,
   seriesDataWithTriggerNotes,
+  simulatedMonthLabel,
   triggerChartMarkers,
 } from './chartModel';
 
 const LIGHT_LABEL = { color: '#e2e8f0', fontSize: '12px' };
-
-function burnDirectionOf(delta) {
-  if (delta > 0.0005) return 'up';
-  if (delta < -0.0005) return 'down';
-  return 'flat';
-}
-
-function directionArrow(direction) {
-  switch (direction) {
-    case 'up':
-      return '▲';
-    case 'down':
-      return '▼';
-    case 'flat':
-      return '■';
-    default: {
-      const neverDirection = direction;
-      throw new Error(`Unknown direction: ${String(neverDirection)}`);
-    }
-  }
-}
 
 function ReadoutRow({ label, value }) {
   return (
@@ -51,9 +46,70 @@ function ReadoutRow({ label, value }) {
   );
 }
 
-function formatTalentValue(value, dataSource) {
+function shownHype(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? clampHype(numeric) : 0;
+}
+
+function shownTalent(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? clampTalentCost(numeric) : 0;
+}
+
+function formatTalentValue(value, dataSource, baseline) {
   if (talentCostShowsDollars(dataSource)) return formatTalentDollars(value);
-  return formatTalentMultiplier(value);
+  const numeric = Number(value);
+  const base = Number(baseline);
+  const ratio = Number.isFinite(numeric) && Number.isFinite(base) && base > 0 ? numeric / base : numeric;
+  return formatTalentMultiplier(Number.isFinite(ratio) ? ratio : 0);
+}
+
+function TalentMixTable({ rows }) {
+  return (
+    <table className="talent-mix">
+      <caption>Talent mix</caption>
+      <thead>
+        <tr>
+          <th scope="col">Department</th>
+          <th scope="col">Headcount</th>
+          <th scope="col">Average skill</th>
+          <th scope="col">Weight</th>
+          <th scope="col">Contribution</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => (
+          <tr key={`${row.department ?? 'unknown'}-${row.headcount}-${row.avgSkill}`}>
+            <td>{row.department ?? 'Unassigned'}</td>
+            <td>{String(row.headcount)}</td>
+            <td>{formatTalentReadout(row.avgSkill)}</td>
+            <td>{formatTalentReadout(row.weight)}</td>
+            <td>{formatTalentReadout(row.contribution)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function TalentBurnSummary({ state }) {
+  const mix = talentMixOf(state);
+  const equation = talentEquation(state);
+
+  return (
+    <section className="talent-burn" aria-labelledby="talent-burn-heading">
+      <h3 id="talent-burn-heading">Talent and burn</h3>
+      <p>{formatBurnBreakdown(state)}</p>
+      <p data-testid="talent-equation" role="group" aria-label={equation.name}>
+        {equation.visible}
+      </p>
+      {mix.length > 0 ? (
+        <TalentMixTable rows={mix} />
+      ) : (
+        <p>No employees. Talent multiplier is 1.0000.</p>
+      )}
+    </section>
+  );
 }
 
 function WorldEventEffect({ state }) {
@@ -61,13 +117,12 @@ function WorldEventEffect({ state }) {
   if (active.length === 0) return null;
 
   const dataSource = state.dataSource === 'api' ? 'api' : 'local';
-  const before = state.baselines ?? { hype: state.company.hype, talentCost: 1 };
-  const after = { hype: state.company.hype, talentCost: state.company.talentCost ?? 1 };
-  const nextBurn = previewBurnRate(state);
-  const baselineBurn = baselineBurnRate(state);
-  const burnDelta = baselineBurn === 0 ? 0 : nextBurn / baselineBurn - 1;
-  const burnDirection = burnDirectionOf(burnDelta);
-  const burnArrow = directionArrow(burnDirection);
+  const rawBefore = state.baselines ?? { hype: state.company.hype, talentCost: BASE_TALENT_COST };
+  const before = { hype: shownHype(rawBefore.hype), talentCost: shownTalent(rawBefore.talentCost) };
+  const after = {
+    hype: shownHype(state.company.hype),
+    talentCost: shownTalent(state.company.talentCost ?? before.talentCost),
+  };
 
   return (
     <section className="trigger-readout" aria-labelledby="world-event-effect-heading">
@@ -84,24 +139,20 @@ function WorldEventEffect({ state }) {
           label="Hype after"
           value={`${formatHypePercent(after.hype)} (${deltaPhrase(after.hype - before.hype)})`}
         />
-        <ReadoutRow label="Talent cost before" value={formatTalentValue(before.talentCost, dataSource)} />
+        <ReadoutRow label="Talent cost before" value={formatTalentValue(before.talentCost, dataSource, before.talentCost)} />
         <ReadoutRow
           label="Talent cost after"
-          value={`${formatTalentValue(after.talentCost, dataSource)} (${deltaPhrase((after.talentCost - before.talentCost) / (before.talentCost || 1))})`}
+          value={`${formatTalentValue(after.talentCost, dataSource, before.talentCost)} (${deltaPhrase((after.talentCost - before.talentCost) / (before.talentCost || 1))})`}
         />
       </dl>
-      <p className={`delta delta--${burnDirection}`}>
-        <span aria-hidden="true">{burnArrow}</span>
-        {' '}
-        Next month burn {formatDollars(nextBurn)} ({deltaPhrase(burnDelta)}) versus {formatDollars(baselineBurn)} at this tax rate before talent-cost events.
-      </p>
     </section>
   );
 }
 
 export default function Dashboard({ state }) {
+  const factorClampNote = talentCostFactorClampNote(talentCostFactorClampOf(state));
   const { cash, burnRate } = state.history;
-  const categories = cash.map((_, i) => `T${i}`);
+  const categories = cash.map((_, i) => simulatedMonthLabel(i));
   const markers = triggerChartMarkers(state);
   const guides = axisGuideOptions(markers);
   const description = metricsChartDescription(state);
@@ -133,8 +184,34 @@ export default function Dashboard({ state }) {
     <div className="dashboard" style={{ padding: '1rem', background: '#12121f', color: '#e0e0e0' }}>
       <h3 style={{ margin: '0 0 0.5rem' }}>Company Metrics (Slice 1)</h3>
       <p>
-        Cash: ${state.company.cash.toFixed(0)} | Burn/mo: ${state.company.burnRate} | Tax: {(state.taxRate * 100).toFixed(0)}%
+        <span data-testid="cash-value">Cash: ${state.company.cash.toFixed(0)}</span>
+        {' | '}
+        <span id="burn-value" data-testid="burn-value">Burn/mo: {formatCurrency(previewBurnRate(state))}</span>
+        {' | '}
+        <span id="base-burn-value" data-testid="base-burn-value">Base burn: {formatCurrency(baseBurnRate(state.taxRate))}</span>
+        {' | '}
+        <span id="talent-multiplier-value" data-testid="talent-multiplier-value">Talent multiplier: {formatTalentReadout(talentMultiplierOf(state))}</span>
+        {' | '}
+        <span
+          id="talent-cost-factor-value"
+          data-testid="talent-cost-factor-value"
+          role="group"
+          aria-label={`Talent cost factor ${formatTalentCostFactor(talentCostFactorOf(state))}${factorClampNote ? `, ${factorClampNote}` : ''}`}
+        >
+          Talent cost factor: {formatTalentCostFactor(talentCostFactorOf(state))}
+        </span>
+        {factorClampNote ? (
+          <>
+            {' '}
+            <span data-testid="talent-cost-factor-clamp">{factorClampNote}</span>
+          </>
+        ) : null}
+        {' | '}
+        <span id="effective-multiplier-value" data-testid="effective-multiplier-value">Effective multiplier: {formatTalentCostFactor(effectiveMultiplierOf(state))}</span>
+        {' | '}
+        Tax: {(state.taxRate * 100).toFixed(0)}%
       </p>
+      <TalentBurnSummary state={state} />
       <WorldEventEffect state={state} />
       <figure className="metrics-chart" aria-busy={ChartAccessibility === undefined}>
         <figcaption id="metrics-chart-description" className="chart-caption">
@@ -180,11 +257,11 @@ export default function Dashboard({ state }) {
             />
             <LineSeries
               name="Burn Rate"
-              data={seriesDataWithTriggerNotes(burnRate, state.activeTriggers, 'Burn rate')}
+              data={seriesDataWithTriggerNotes(burnRate, state.activeTriggers, 'Burn rate', 'next-month')}
               color="#f87171"
               options={{
                 accessibility: {
-                  description: 'Monthly burn rate in dollars. Talent-cost events change burn on the following month.',
+                  description: 'Monthly burn rate in dollars after tax, the employee talent multiplier, and the talent-cost factor. The talent-cost factor is limited to 0.10× through 3.00×. A talent-cost event is included in this series on the following month.',
                 },
               }}
             />

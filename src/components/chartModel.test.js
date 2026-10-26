@@ -54,6 +54,14 @@ describe('chart markers', () => {
         },
       },
     ]);
+    expect(seriesDataWithTriggerNotes(state.history.burnRate, state.activeTriggers, 'Burn rate', 'next-month')).toEqual([
+      {
+        y: 2000,
+        accessibility: {
+          description: 'Burn rate first includes Policy change: talent cost +12% at T2.',
+        },
+      },
+    ]);
     expect(metricsChartDescription(state)).toBe(
       'Cash and burn rate by simulated month. Active world event: Policy change: talent cost +12%.'
     );

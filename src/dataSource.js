@@ -1,26 +1,8 @@
 /**
- * OPEN DECISION: whether a talent-cost world event multiplies monthly burn.
- *
- * Local sample mode keeps PR #1: burn is round(2000 * (1 + taxRate * 0.4) * talentCost),
- * and talentCost is a multiplier around 1.
- * API mode follows Citizen API 0.3.0 / 0.4.0: burn stays round(2000 * (1 + taxRate * 0.4)).
- * Talent cost from the API is dollars and does not enter the burn formula.
- *
- * This is the only function that answers that question.
+ * Talent cost is stored in dollars in both modes. Local sample mode still
+ * shows that cost as a multiplier of the baseline. The API shows dollars.
+ * Burn uses the clamped talent-cost factor, not this display choice.
  */
-export function talentCostMultipliesBurn(dataSource) {
-  switch (dataSource) {
-    case 'local':
-      return true;
-    case 'api':
-      return false;
-    default: {
-      const neverSource = dataSource;
-      throw new Error(`Unknown data source: ${String(neverSource)}`);
-    }
-  }
-}
-
 export function talentCostShowsDollars(dataSource) {
   switch (dataSource) {
     case 'local':

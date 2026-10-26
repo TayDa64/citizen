@@ -5,12 +5,15 @@ import TriggerPanel from './components/TriggerPanel';
 import {
   CONNECTED_NOTE,
   LOADING_NOTE,
+  CLAMPED_HYPE_NOTE,
+  CLAMPED_TALENT_COST_NOTE,
   MISSING_HYPE_NOTE,
   MISSING_TALENT_COST_NOTE,
   SAMPLE_DATA_NOTE,
   UNREADABLE_COMPANY_NOTE,
   createCitizenApi,
   loadCitizenWorld,
+  hostHeaderAlert,
   readCitizenApiBase,
   skippedTriggerAlert,
 } from './citizenApi';
@@ -23,8 +26,11 @@ import {
   removeTrigger,
 } from './simulation';
 import { CLEARED_ANNOUNCEMENT, announceTrigger } from './triggers';
+import { effectiveBurnRate, talentCostFactorClampOf } from './talentMultiplier';
 
 function removalBlockedMessage(error, label) {
+  const hostAlert = hostHeaderAlert(error);
+  if (hostAlert) return `Could not remove ${label}. ${hostAlert}`;
   const status = error?.status;
   if (status === 404 || status === 405) {
     return `Could not remove ${label}. The service has not enabled that action yet (${status}). Nothing on this screen was changed.`;
@@ -42,9 +48,8 @@ function removalBlockedMessage(error, label) {
 }
 
 function saveBlockedMessage(error, label) {
-  if (error?.status === 403) {
-    return `Could not save ${label}. The Citizen service refused this page (403). Use the local /api address on this machine. Nothing on this screen was changed.`;
-  }
+  const hostAlert = hostHeaderAlert(error);
+  if (hostAlert) return `Could not save ${label}. ${hostAlert}`;
   return `Could not save ${label}. ${error.message}`;
 }
 
@@ -52,6 +57,8 @@ function sourceNotes(reading) {
   const notes = [CONNECTED_NOTE];
   if (reading.missingHype) notes.push(MISSING_HYPE_NOTE);
   if (reading.missingTalent) notes.push(MISSING_TALENT_COST_NOTE);
+  if (reading.clampedHype) notes.push(CLAMPED_HYPE_NOTE);
+  if (reading.clampedTalent) notes.push(CLAMPED_TALENT_COST_NOTE);
   return notes.join(' ');
 }
 
@@ -136,12 +143,16 @@ function App() {
     const active = (state.activeTriggers ?? []).some((item) => item.id === trigger.id);
     if (state.dataSource !== 'api' || !apiBase) {
       if (active) {
-        setState((prev) => removeTrigger(prev, trigger.id));
-        setAnnouncement(announceTrigger(trigger, 'remove'));
+        const next = removeTrigger(stateRef.current, trigger.id);
+        setState(next);
+        stateRef.current = next;
+        setAnnouncement(announceTrigger(trigger, 'remove', effectiveBurnRate(next), talentCostFactorClampOf(next)));
         return;
       }
-      setState((prev) => applyTrigger(prev, trigger));
-      setAnnouncement(announceTrigger(trigger, 'apply'));
+      const next = applyTrigger(stateRef.current, trigger);
+      setState(next);
+      stateRef.current = next;
+      setAnnouncement(announceTrigger(trigger, 'apply', effectiveBurnRate(next), talentCostFactorClampOf(next)));
       return;
     }
 
@@ -161,6 +172,12 @@ function App() {
       try {
         reading = await refreshApi(apiBase);
       } catch (error) {
+        const hostAlert = hostHeaderAlert(error);
+        if (hostAlert) {
+          setActionError(hostAlert);
+          setAnnouncement('');
+          return;
+        }
         if (error?.code === 'unreadable-company') {
           showSampleData(UNREADABLE_COMPANY_NOTE);
           setAnnouncement('');
@@ -171,17 +188,17 @@ function App() {
           : applyTrigger(stateRef.current, trigger);
         setState(next);
         stateRef.current = next;
-        setAnnouncement(announceTrigger(trigger, active ? 'remove' : 'apply'));
+        setAnnouncement(announceTrigger(trigger, active ? 'remove' : 'apply', effectiveBurnRate(next), talentCostFactorClampOf(next)));
         return;
       }
       const listed = reading.state.activeTriggers.find((item) => item.id === trigger.id);
       const alerts = [];
       if (reading.skipped > 0) alerts.push(skippedTriggerAlert(reading.skipped));
       if (listed) {
-        setAnnouncement(announceTrigger(listed, 'apply'));
+        setAnnouncement(announceTrigger(listed, 'apply', effectiveBurnRate(reading.state), talentCostFactorClampOf(reading.state)));
         if (active) alerts.push(`${listed.label} is still listed by the service.`);
       } else if (active) {
-        setAnnouncement(announceTrigger(trigger, 'remove'));
+        setAnnouncement(announceTrigger(trigger, 'remove', effectiveBurnRate(reading.state), talentCostFactorClampOf(reading.state)));
       } else {
         alerts.push(`${trigger.label} is not listed by the service.`);
         setAnnouncement('');
@@ -229,6 +246,12 @@ function App() {
         }
         setActionError(alerts.join(' '));
       } catch (error) {
+        const hostAlert = hostHeaderAlert(error);
+        if (hostAlert) {
+          setActionError(hostAlert);
+          setAnnouncement('');
+          return;
+        }
         if (error?.code === 'unreadable-company') {
           showSampleData(UNREADABLE_COMPANY_NOTE);
           setAnnouncement('');

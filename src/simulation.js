@@ -1,20 +1,40 @@
 // Client-side simulation.
 // Slice 1: taxRate increases burn, then cash falls on each tick.
 // Slice 2: real-world triggers move hype and talent cost. With no active
-// trigger, talent cost stays 1 and burn matches the Slice 1 formula.
-// API mode uses dollar talent cost and does not multiply burn. That choice
-// lives only in talentCostMultipliesBurn (src/dataSource.js). OPEN DECISION.
-// The service is the source of truth for hype, talentCost, and baselines.
-// Cash and burn stay on the client simulation.
+// trigger, talent cost stays at the $4,000 baseline and burn matches Slice 1.
+// baseBurnRate = round(2000 * (1 + taxRate * 0.4)).
+// Burn is round(baseBurnRate * talentMultiplier * talentCostFactor), once.
+// talentMultiplier is employee-only and is not clamped. talentCostFactor is
+// round4(clamp(talentCost / baselines.talentCost, 0.1, 3)).
+// The service is the source of truth for hype, talentCost, baselines, and
+// talentMultiplier. Cash and burn stay on the client simulation.
 // `appliedAtIndex` on an active trigger is client runtime for the chart, not
 // part of the RealWorldTrigger payload in triggers.js.
 
-import { talentCostMultipliesBurn } from './dataSource';
-import { assertValidTrigger, describeTrigger } from './triggers';
+import {
+  announceTrigger,
+  assertValidTrigger,
+  clampHype,
+  clampTalentCost,
+  describeTrigger,
+  hypeOutOfRange,
+  roundTo,
+  talentCostOutOfRange,
+} from './triggers';
+import {
+  burnRateFromMultiplier,
+  composeTalentMultiplier,
+  effectiveBurnRate,
+  readOptionalFactor,
+  talentCostFactorClampOf,
+  readTalentMix,
+  readTalentMultiplier,
+  baseBurnRate as taxOnlyBurnRate,
+} from './talentMultiplier';
 
 export const BASE_BURN = 2000;
 export const BASE_HYPE = 0.3;
-export const BASE_TALENT_COST = 1;
+export const BASE_TALENT_COST = 4000;
 
 export const initialState = {
   taxRate: 0.25,
@@ -34,62 +54,42 @@ export const initialState = {
     talentCost: BASE_TALENT_COST,
   },
   dataSource: 'local',
+  employees: [],
+  talentMultiplier: 1,
+  talentMix: [],
   activeTriggers: [],
   lastTriggerChange: null,
 };
 
-// Minimal safe formula evaluator: supports {var} substitution + basic + - * /
-function evalFormula(formula, context) {
-  let expr = formula;
-  for (const [k, v] of Object.entries(context)) {
-    expr = expr.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v));
-  }
-  // Very limited: only numbers, operators, parentheses. No eval of arbitrary code.
-  if (!/^[0-9.+\-*/()\s]+$/.test(expr)) {
-    console.warn('Unsafe formula rejected:', formula);
-    return 0;
-  }
-  try {
-    // eslint-disable-next-line no-new-func
-    return Function(`"use strict"; return (${expr})`)();
-  } catch {
-    return 0;
-  }
-}
-
-function dataSourceOf(state) {
-  return state?.dataSource === 'api' ? 'api' : 'local';
-}
-
-export function computeBurnRate(taxRate, talentCost = BASE_TALENT_COST, dataSource = 'local') {
-  const talentFactor = talentCostMultipliesBurn(dataSource) ? (talentCost ?? BASE_TALENT_COST) : 1;
-  const formula = '{baseBurn} * (1 + {taxRate} * 0.4) * {talentFactor}';
-  return Math.round(
-    evalFormula(formula, {
-      baseBurn: BASE_BURN,
-      taxRate,
-      talentFactor,
-    })
-  );
+export function computeBurnRate(taxRate, talentMultiplier = 1) {
+  return burnRateFromMultiplier(taxRate, talentMultiplier);
 }
 
 export function previewBurnRate(state) {
-  return computeBurnRate(
-    state.taxRate,
-    state.company.talentCost ?? BASE_TALENT_COST,
-    dataSourceOf(state)
-  );
+  return effectiveBurnRate(state);
 }
 
 export function baselineBurnRate(state) {
-  const talent = state.baselines?.talentCost ?? state.company?.talentCost ?? BASE_TALENT_COST;
-  return computeBurnRate(state.taxRate, talent, dataSourceOf(state));
+  return taxOnlyBurnRate(state.taxRate);
 }
 
 export function applyEffects(state) {
   const next = structuredClone(state);
-  const talentCost = next.company.talentCost ?? BASE_TALENT_COST;
-  next.company.burnRate = computeBurnRate(next.taxRate, talentCost, dataSourceOf(next));
+  // API mode keeps the fetched multiplier, mix, employees, and any
+  // talentCostFactor or effectiveMultiplier. Burn changes with tax. An empty
+  // employee list must not reset the server multiplier. Those fields update
+  // on the next fetch. Local mode recomputes the employee multiplier only.
+  if (next.dataSource !== 'api') {
+    const profile = composeTalentMultiplier({ employees: next.employees });
+    next.talentMultiplier = profile.talentMultiplier;
+    next.talentMix = profile.talentMix;
+    next.talentCostFactor = null;
+    next.effectiveMultiplier = null;
+  }
+  next.company.talentMultiplier = next.talentMultiplier;
+  next.company.talentMix = next.talentMix;
+  next.company.baseBurnRate = baselineBurnRate(next);
+  next.company.burnRate = previewBurnRate(next);
   next.company.cash = Math.max(0, next.company.cash - next.company.burnRate / 12);
   next.history.cash.push(Math.round(next.company.cash));
   next.history.burnRate.push(next.company.burnRate);
@@ -124,17 +124,26 @@ function cloneTriggerState(state) {
 }
 
 function combinedEffects(baselines, activeTriggers) {
-  let hype = baselines.hype;
-  let talentCost = baselines.talentCost;
-  for (const trigger of activeTriggers) {
-    if (typeof trigger.effect.hype === 'number') hype += trigger.effect.hype;
-    if (typeof trigger.effect.talentCost === 'number') {
-      talentCost *= 1 + trigger.effect.talentCost;
-    }
+  const hypeBaseline = Number.isFinite(Number(baselines?.hype)) ? Number(baselines.hype) : BASE_HYPE;
+  const talentBaseline = Number.isFinite(Number(baselines?.talentCost))
+    ? Number(baselines.talentCost)
+    : BASE_TALENT_COST;
+  const ordered = [...activeTriggers].sort((left, right) => {
+    if (String(left.id) < String(right.id)) return -1;
+    if (String(left.id) > String(right.id)) return 1;
+    return 0;
+  });
+  let hype = hypeBaseline;
+  let factor = 1;
+  for (const trigger of ordered) {
+    if (typeof trigger.effect?.hype === 'number') hype += trigger.effect.hype;
+    if (typeof trigger.effect?.talentCost === 'number') factor *= 1 + trigger.effect.talentCost;
   }
+  const talent = talentBaseline * factor;
+  const talentCost = roundTo(Math.max(0, Number.isFinite(talent) ? talent : 0), 2);
   return {
-    hype: Math.min(1, Math.max(0, hype)),
-    talentCost: Math.max(0, talentCost),
+    hype: roundTo(clampHype(hype), 4),
+    talentCost: clampTalentCost(talentCost),
   };
 }
 
@@ -191,8 +200,12 @@ export function readApiSnapshot(prev, snapshot) {
     }
   }
 
-  const hype = finiteNumber(company.hype);
-  const talentCost = finiteNumber(company.talentCost);
+  const hypeReading = clampMetric(finiteNumber(company.hype), clampHype, hypeOutOfRange);
+  const talentReading = clampMetric(finiteNumber(company.talentCost), clampTalentCost, talentCostOutOfRange);
+  const baselineHypeReading = clampMetric(baselineHype, clampHype, hypeOutOfRange);
+  const baselineTalentReading = clampMetric(baselineTalent, clampTalentCost, talentCostOutOfRange);
+  const hype = hypeReading.value;
+  const talentCost = talentReading.value;
   const index = Math.max(0, (prev.history?.cash?.length ?? 1) - 1);
   const previousById = new Map((prev.activeTriggers ?? []).map((item) => [item.id, item]));
   const activeTriggers = accepted.map((trigger) => {
@@ -200,22 +213,58 @@ export function readApiSnapshot(prev, snapshot) {
     return storeTrigger(trigger, prior?.appliedAtIndex ?? index);
   });
 
+  const talentMultiplier = readTalentMultiplier(company.talentMultiplier);
+  const talentMix = readTalentMix(company.talentMix);
+  const talentCostFactor = readOptionalFactor(company.talentCostFactor, 'talentCostFactor');
+  const effectiveMultiplier = readOptionalFactor(company.effectiveMultiplier, 'effectiveMultiplier');
+  const talentCostFactorClamped = typeof company.talentCostFactorClamped === 'boolean'
+    ? company.talentCostFactorClamped
+    : null;
+  const resolvedHype = hype ?? baselineHypeReading.value;
+  const resolvedTalent = talentCost ?? baselineTalentReading.value;
   return {
     state: {
       ...prev,
       dataSource: 'api',
-      baselines: { hype: baselineHype, talentCost: baselineTalent },
+      baselines: { hype: baselineHypeReading.value, talentCost: baselineTalentReading.value },
       activeTriggers,
+      employees: readProvidedEmployees(snapshot, company),
+      talentMultiplier,
+      talentMix,
+      talentCostFactor,
+      talentCostFactorClamped,
+      effectiveMultiplier,
       company: {
         ...prev.company,
-        hype: hype ?? baselineHype,
-        talentCost: talentCost ?? baselineTalent,
+        hype: resolvedHype,
+        talentCost: resolvedTalent,
+        talentMultiplier,
+        talentMix,
       },
     },
     skipped,
     missingHype: hype == null,
     missingTalent: talentCost == null,
+    clampedHype: hypeReading.clamped || baselineHypeReading.clamped || hypeOutOfRange(resolvedHype),
+    clampedTalent: talentReading.clamped || baselineTalentReading.clamped || talentCostOutOfRange(resolvedTalent),
   };
+}
+
+function clampMetric(value, clamp, outOfRange) {
+  if (value == null) return { value: null, clamped: false };
+  if (!outOfRange(value)) return { value, clamped: false };
+  return { value: clamp(value), clamped: true };
+}
+
+function readProvidedEmployees(snapshot, company) {
+  const raw = Array.isArray(company?.employees)
+    ? company.employees
+    : Array.isArray(snapshot?.employees)
+      ? snapshot.employees
+      : [];
+  return raw
+    .filter((employee) => employee != null && typeof employee === 'object' && !Array.isArray(employee))
+    .map((employee) => ({ ...employee }));
 }
 
 export function hydrateFromApi(prev, snapshot) {
@@ -245,12 +294,19 @@ export function applyTrigger(state, trigger) {
     ...next.activeTriggers.filter((item) => item.id !== trigger.id),
     storeTrigger(trigger, appliedAtIndex),
   ];
-  return applyActiveTriggers(next, before, {
+  const applied = applyActiveTriggers(next, before, {
     triggerId: trigger.id,
     label: trigger.label,
     type: trigger.type,
     announcement: describeTrigger(trigger),
   });
+  applied.lastTriggerChange.announcement = announceTrigger(
+    trigger,
+    'apply',
+    effectiveBurnRate(applied),
+    talentCostFactorClampOf(applied),
+  );
+  return applied;
 }
 
 export function removeTrigger(state, triggerId) {
