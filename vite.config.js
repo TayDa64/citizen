@@ -14,6 +14,7 @@ export default defineConfig({
     port: 5173,
     open: true,
     proxy: {
+      // Relative /api keeps the Host header on localhost, which the API allows.
       '/api': 'http://127.0.0.1:8787',
     },
   }

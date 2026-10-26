@@ -25,10 +25,23 @@ function removalBlockedMessage(error, label) {
   if (status === 404 || status === 405) {
     return `Could not remove ${label}. The service has not enabled that action yet (${status}). Nothing on this screen was changed.`;
   }
+  if (status === 400 || status === 413) {
+    return `Could not remove ${label}. The service rejected that request (${status}). Nothing on this screen was changed.`;
+  }
+  if (status === 403) {
+    return `Could not remove ${label}. The Citizen service refused this page (403). Use the local /api address on this machine. Nothing on this screen was changed.`;
+  }
   const detail = typeof error?.message === 'string' && error.message.trim() !== ''
     ? ` ${error.message}`
     : '';
   return `Could not remove ${label}.${detail} Nothing on this screen was changed.`;
+}
+
+function saveBlockedMessage(error, label) {
+  if (error?.status === 403) {
+    return `Could not save ${label}. The Citizen service refused this page (403). Use the local /api address on this machine. Nothing on this screen was changed.`;
+  }
+  return `Could not save ${label}. ${error.message}`;
 }
 
 function App() {
@@ -54,7 +67,7 @@ function App() {
           setApiBase(null);
           setSourceNote(result.note || SAMPLE_DATA_NOTE);
         }
-        setActionError('');
+        setActionError(result.alert || '');
       })
       .finally(() => {
         if (!cancelled) setSourceBusy(false);
@@ -116,7 +129,7 @@ function App() {
         if (active) {
           setActionError(removalBlockedMessage(error, trigger.label));
         } else {
-          setActionError(`Could not save ${trigger.label}. ${error.message}`);
+          setActionError(saveBlockedMessage(error, trigger.label));
         }
         setAnnouncement('');
       }

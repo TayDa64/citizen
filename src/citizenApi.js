@@ -1,11 +1,30 @@
-import { TRIGGER_TYPES, assertValidTrigger } from './triggers';
+import { TRIGGER_TYPES, assertTriggerId, assertValidTrigger } from './triggers';
 
 const TRIGGER_FIELDS = ['id', 'type', 'label', 'source', 'timestamp', 'effect'];
 const EFFECT_FIELDS = new Set(['hype', 'talentCost']);
 
 export const SAMPLE_DATA_NOTE = 'Using sample data on this device.';
+export const EMPTY_COMPANIES_NOTE = 'No company was returned. Using sample data on this device.';
 export const LOADING_NOTE = 'Loading company and world events.';
 export const CONNECTED_NOTE = 'Connected to the Citizen service. Talent cost is shown in dollars.';
+export const HOST_REFUSED_ALERT =
+  'The Citizen service refused this page (403). Use the local /api address on this machine.';
+
+export function selectCompany(companies, companyId) {
+  if (!Array.isArray(companies) || companies.length === 0) return null;
+  if (typeof companyId === 'string') {
+    return companies.find((company) => company?.id === companyId) ?? null;
+  }
+  return companies[0];
+}
+
+function joinApiUrl(root, path) {
+  const base = root.replace(/\/$/, '');
+  if (base === '/api' || base.endsWith('/api')) {
+    return `${base.slice(0, -'/api'.length)}${path}`;
+  }
+  return `${base}${path}`;
+}
 
 export function readCitizenApiBase(env = import.meta.env) {
   const value = env?.VITE_CITIZEN_API;
@@ -83,7 +102,7 @@ export function createCitizenApi({ fetchImpl = globalThis.fetch, baseUrl } = {})
   const root = baseUrl.replace(/\/$/, '');
 
   async function send(path, { method = 'GET', body } = {}) {
-    const response = await fetchImpl(`${root}${path}`, {
+    const response = await fetchImpl(joinApiUrl(root, path), {
       method,
       headers: {
         Accept: 'application/json',
@@ -99,13 +118,18 @@ export function createCitizenApi({ fetchImpl = globalThis.fetch, baseUrl } = {})
       send('/api/triggers'),
       send('/api/companies'),
     ]);
-    if (!Array.isArray(companies) || companies.length === 0) {
-      throw new Error('Company service returned no company');
+    if (!Array.isArray(companies)) {
+      throw new Error('Company service returned an unreadable response');
+    }
+    const company = selectCompany(companies);
+    if (!company) {
+      const error = new Error('No company was returned');
+      error.code = 'empty-companies';
+      throw error;
     }
     if (!Array.isArray(triggers)) {
       throw new Error('Trigger service returned an unreadable response');
     }
-    const company = companies[0];
     const baselines = company?.baselines;
     if (
       baselines == null ||
@@ -140,9 +164,7 @@ export function createCitizenApi({ fetchImpl = globalThis.fetch, baseUrl } = {})
       });
     },
     async deleteTrigger(id) {
-      if (typeof id !== 'string' || id.trim() === '') {
-        throw new TypeError('Trigger id must be a non-empty string');
-      }
+      assertTriggerId(id);
       try {
         await send(`/api/triggers/${encodeURIComponent(id)}`, { method: 'DELETE' });
       } catch (error) {
@@ -165,7 +187,25 @@ export async function loadCitizenWorld({ env = import.meta.env, fetchImpl = glob
   try {
     const snapshot = await createCitizenApi({ fetchImpl, baseUrl }).loadWorld();
     return { mode: 'api', note: CONNECTED_NOTE, alert: null, snapshot, baseUrl };
-  } catch {
+  } catch (error) {
+    if (error?.status === 403) {
+      return {
+        mode: 'local',
+        note: SAMPLE_DATA_NOTE,
+        alert: HOST_REFUSED_ALERT,
+        snapshot: null,
+        baseUrl: null,
+      };
+    }
+    if (error?.code === 'empty-companies') {
+      return {
+        mode: 'local',
+        note: EMPTY_COMPANIES_NOTE,
+        alert: null,
+        snapshot: null,
+        baseUrl: null,
+      };
+    }
     return { mode: 'local', note: SAMPLE_DATA_NOTE, alert: null, snapshot: null, baseUrl: null };
   }
 }

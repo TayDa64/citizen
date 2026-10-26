@@ -206,6 +206,36 @@ describe('removeTrigger and clearTriggers', () => {
     expect(previewBurnRate(stacked)).toBe(2200);
   });
 
+  test('hydrate keeps client cash and burn and takes only hype, talent cost, and baselines', () => {
+    const ticking = applyEffects(initialState);
+    const snapshot = {
+      company: {
+        id: 'company-1',
+        cash: 1,
+        burnRate: 9,
+        hype: 0.55,
+        talentCost: 4480,
+        baselines: { hype: 0.3, talentCost: 4000 },
+      },
+      triggers: [policy],
+    };
+
+    const firstLoad = hydrateFromApi(initialState, snapshot);
+    expect(firstLoad.company.cash).toBe(initialState.company.cash);
+    expect(firstLoad.company.burnRate).toBe(initialState.company.burnRate);
+    expect(firstLoad.history).toEqual(initialState.history);
+    expect(firstLoad.company.hype).toBe(0.55);
+    expect(firstLoad.company.talentCost).toBe(4480);
+    expect(firstLoad.baselines).toEqual({ hype: 0.3, talentCost: 4000 });
+
+    const refreshed = hydrateFromApi(ticking, snapshot);
+    expect(refreshed.company.cash).toBe(ticking.company.cash);
+    expect(refreshed.company.burnRate).toBe(ticking.company.burnRate);
+    expect(refreshed.history).toEqual(ticking.history);
+    expect(refreshed.company.hype).toBe(0.55);
+    expect(refreshed.company.talentCost).toBe(4480);
+  });
+
   test('clearTriggers restores the Slice 1 hype and talent baseline without ticking', () => {
     const stacked = applyTrigger(applyTrigger(initialState, policy), market);
     const cleared = clearTriggers(stacked);

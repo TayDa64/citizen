@@ -4,6 +4,8 @@
 // trigger, talent cost stays 1 and burn matches the Slice 1 formula.
 // API mode uses dollar talent cost and does not multiply burn. That choice
 // lives only in talentCostMultipliesBurn (src/dataSource.js). OPEN DECISION.
+// The service is the source of truth for hype, talentCost, and baselines.
+// Cash and burn stay on the client simulation.
 // `appliedAtIndex` on an active trigger is client runtime for the chart, not
 // part of the RealWorldTrigger payload in triggers.js.
 
@@ -170,9 +172,6 @@ export function hydrateFromApi(prev, snapshot) {
     const prior = previousById.get(trigger.id);
     return storeTrigger(trigger, prior?.appliedAtIndex ?? index);
   });
-  const chartStarted = (prev.history?.cash?.length ?? 1) > 1;
-  const cash = Number(company.cash);
-  const burnRate = Number(company.burnRate);
   return {
     ...prev,
     dataSource: 'api',
@@ -182,14 +181,7 @@ export function hydrateFromApi(prev, snapshot) {
       ...prev.company,
       hype: Number(company.hype),
       talentCost: Number(company.talentCost),
-      ...(chartStarted ? {} : { cash, burnRate }),
     },
-    history: chartStarted
-      ? prev.history
-      : {
-          cash: [Math.round(cash)],
-          burnRate: [burnRate],
-        },
   };
 }
 

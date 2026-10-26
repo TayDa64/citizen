@@ -116,13 +116,25 @@ export function roundTo(value, places) {
   return Math.round((value + Math.sign(value) * 1e-10) * factor) / factor;
 }
 
+const USD_CURRENCY = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+export function assertTriggerId(id) {
+  if (typeof id !== 'string' || id.length < 1 || id.length > 200 || id.trim() === '') {
+    throw new TypeError('Trigger id must be 1–200 characters');
+  }
+  return id;
+}
+
 export function assertValidTrigger(trigger) {
   if (trigger === null || typeof trigger !== 'object' || Array.isArray(trigger)) {
     throw new TypeError('Trigger must be an object');
   }
-  if (typeof trigger.id !== 'string' || trigger.id.trim() === '') {
-    throw new TypeError('Trigger.id must be a non-empty string');
-  }
+  assertTriggerId(trigger.id);
   if (!TRIGGER_TYPES.includes(trigger.type)) {
     throw new TypeError(`Trigger.type must be one of: ${TRIGGER_TYPES.join(', ')}`);
   }
@@ -214,21 +226,19 @@ export function projectedTalentDollars(baseline, delta) {
   return roundTo(Math.max(0, baseline * (1 + delta)), 2);
 }
 
+export function formatCurrency(value) {
+  const amount = roundTo(Number(value), 2);
+  if (!Number.isFinite(amount)) return '$0';
+  const body = USD_CURRENCY.format(Math.abs(amount)).replace(/\.00$/, '');
+  return amount < 0 ? `-${body}` : body;
+}
+
 export function formatTalentDollars(value) {
-  const rounded = roundTo(Number(value), 2);
-  if (!Number.isFinite(rounded)) return '$0';
-  const sign = rounded < 0 ? '-' : '';
-  const absolute = Math.abs(rounded);
-  const body = Number.isInteger(absolute) ? String(absolute) : absolute.toFixed(2);
-  return `${sign}$${body}`;
+  return formatCurrency(value);
 }
 
 export function formatDollars(value) {
-  const rounded = Math.round(value);
-  const sign = rounded < 0 ? '-' : '';
-  const digits = String(Math.abs(rounded));
-  const withCommas = digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  return `${sign}$${withCommas}`;
+  return formatCurrency(value);
 }
 
 export function formatTriggerDate(timestamp) {

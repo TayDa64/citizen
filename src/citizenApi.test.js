@@ -6,6 +6,7 @@ import {
   createCitizenApi,
   loadCitizenWorld,
   readCitizenApiBase,
+  selectCompany,
   toTriggerPayload,
 } from './citizenApi';
 
@@ -106,6 +107,15 @@ describe('createCitizenApi', () => {
     expect(JSON.parse(options.body)).toEqual({ scenario: 'policy_change' });
   });
 
+  test('always sends scenario and does not call fetch when it is omitted', async () => {
+    const fetchImpl = vi.fn();
+    const api = createCitizenApi({ fetchImpl, baseUrl: 'http://127.0.0.1:8787' });
+
+    await expect(api.createMock()).rejects.toThrow(/scenario/);
+    await expect(api.createMock(undefined)).rejects.toThrow(/scenario/);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   test('keeps company baselines separate from the current talent cost', async () => {
     const priced = { ...company, hype: 0.4, talentCost: 4480, baselines: { hype: 0.3, talentCost: 4000 } };
     const fetchImpl = vi.fn(async (url) => {
@@ -118,6 +128,26 @@ describe('createCitizenApi', () => {
     expect(snapshot.company.talentCost).toBe(4480);
     expect(snapshot.company.baselines).toEqual({ hype: 0.3, talentCost: 4000 });
     expect(snapshot.triggers).toEqual([policy]);
+  });
+
+  test('uses the first company and can select another by id', () => {
+    const later = { ...company, id: 'company-b', name: 'Later' };
+    expect(selectCompany([later, company])?.id).toBe('company-b');
+    expect(selectCompany([later, company], company.id)?.name).toBe('Northwind');
+    expect(selectCompany([], company.id)).toBeNull();
+    expect(selectCompany([])).toBeNull();
+  });
+
+  test('requests /api through a relative base without doubling the prefix', async () => {
+    const fetchImpl = vi.fn(async (url) => {
+      if (String(url).endsWith('/api/companies')) return jsonResponse([company]);
+      return jsonResponse([]);
+    });
+    const api = createCitizenApi({ fetchImpl, baseUrl: '/api' });
+
+    await api.listCompanies();
+
+    expect(fetchImpl.mock.calls[0][0]).toBe('/api/companies');
   });
 
   test('deletes one trigger by id and clears every trigger', async () => {
@@ -158,6 +188,46 @@ describe('createCitizenApi', () => {
     await expect(api.deleteTriggers()).resolves.toBeNull();
   });
 
+  test('url-encodes the id and rejects ids outside 1–200 characters', async () => {
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      status: 204,
+      json: async () => {
+        throw new Error('empty 204 must not be parsed');
+      },
+    }));
+    const api = createCitizenApi({ fetchImpl, baseUrl: 'http://127.0.0.1:8787' });
+    const id = 'evt/policy wage';
+
+    await api.deleteTrigger(id);
+    expect(fetchImpl.mock.calls[0][0]).toBe(
+      `http://127.0.0.1:8787/api/triggers/${encodeURIComponent(id)}`
+    );
+
+    fetchImpl.mockClear();
+    await expect(api.deleteTrigger('')).rejects.toThrow(/1–200/);
+    await expect(api.deleteTrigger('a'.repeat(201))).rejects.toThrow(/1–200/);
+    expect(fetchImpl).not.toHaveBeenCalled();
+
+    await api.deleteTrigger('a'.repeat(200));
+    expect(fetchImpl.mock.calls[0][0]).toBe(
+      `http://127.0.0.1:8787/api/triggers/${'a'.repeat(200)}`
+    );
+  });
+
+  test('413 and a collection 404 reject instead of counting as removed', async () => {
+    const fetchImpl = vi.fn(async (url, options = {}) => {
+      if (options.method === 'DELETE' && String(url).endsWith('/api/triggers')) {
+        return jsonResponse({ error: 'Not found', issues: [] }, 404);
+      }
+      return jsonResponse({ error: 'Payload too large', issues: [] }, 413);
+    });
+    const api = createCitizenApi({ fetchImpl, baseUrl: 'http://127.0.0.1:8787' });
+
+    await expect(api.deleteTrigger(policy.id)).rejects.toMatchObject({ status: 413 });
+    await expect(api.deleteTriggers()).rejects.toMatchObject({ status: 404 });
+  });
+
   test('405 from delete still rejects', async () => {
     const fetchImpl = vi.fn(async () =>
       jsonResponse({ error: 'Method not allowed', issues: [] }, 405)
@@ -188,6 +258,37 @@ describe('loadCitizenWorld', () => {
     const result = await loadCitizenWorld({ env: {}, fetchImpl });
     expect(result).toMatchObject({ mode: 'local', note: SAMPLE_DATA_NOTE, alert: null });
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  test('an empty company list falls back to sample data with a status note', async () => {
+    const fetchImpl = vi.fn(async (url) => {
+      if (String(url).endsWith('/api/companies')) return jsonResponse([]);
+      return jsonResponse([policy]);
+    });
+    const result = await loadCitizenWorld({
+      env: { VITE_CITIZEN_API: '/api' },
+      fetchImpl,
+    });
+    expect(result.mode).toBe('local');
+    expect(result.snapshot).toBeNull();
+    expect(result.alert).toBeNull();
+    expect(result.note).toMatch(/no company was returned/i);
+    expect(result.note).toMatch(/sample data/i);
+    expect(result.note.toLowerCase()).not.toContain('error');
+    expect(result.note.toLowerCase()).not.toContain('fail');
+  });
+
+  test('a 403 falls back to sample data and explains the local /api address', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ error: 'Forbidden', issues: [] }, 403));
+    const result = await loadCitizenWorld({
+      env: { VITE_CITIZEN_API: 'http://example.test' },
+      fetchImpl,
+    });
+    expect(result.mode).toBe('local');
+    expect(result.snapshot).toBeNull();
+    expect(result.note).toBe(SAMPLE_DATA_NOTE);
+    expect(result.alert).toMatch(/403/);
+    expect(result.alert).toMatch(/\/api/);
   });
 
   test('falls back to sample data when the service cannot be reached', async () => {

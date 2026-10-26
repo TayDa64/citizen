@@ -4,6 +4,7 @@ import {
   TRIGGER_CONTRACT,
   assertValidTrigger,
   describeTrigger,
+  formatDollars,
   formatSignedPercent,
   formatTalentDollars,
   projectedTalentDollars,
@@ -141,16 +142,23 @@ describe('trigger contract', () => {
     expect(() => assertValidTrigger({ ...base, effect: { hype: 0, talentCost: 0 } })).toThrow(
       /hype or talentCost/
     );
+    expect(() => assertValidTrigger({ ...base, id: 'x'.repeat(201), effect: { hype: 0.1 } })).toThrow(/1–200/);
+    expect(assertValidTrigger({ ...base, id: 'x'.repeat(200), effect: { hype: 0.1 } }).id).toHaveLength(200);
   });
 });
 
 describe('talent cost dollars', () => {
-  test('projects the policy sample from the API baseline to $4480 and +12%', () => {
+  test('formats talent cost with the same thousands separator as burn and cash', () => {
     expect(projectedTalentDollars(4000, 0.12)).toBe(4480);
-    expect(formatTalentDollars(4480)).toBe('$4480');
-    expect(formatTalentDollars(projectedTalentDollars(4000, 0.12))).toBe('$4480');
+    expect(formatTalentDollars(4480)).toBe('$4,480');
+    expect(formatTalentDollars(projectedTalentDollars(4000, 0.12))).toBe('$4,480');
+    expect(formatDollars(4480)).toBe(formatTalentDollars(4480));
+    expect(formatDollars(15000)).toBe('$15,000');
+    expect(formatDollars(2200)).toBe('$2,200');
     expect(formatSignedPercent(0.12)).toBe('+12%');
-    expect(formatTalentDollars(4121.6)).toBe('$4121.60');
+    expect(formatTalentDollars(4121.6)).toBe('$4,121.60');
+    expect(formatDollars(4121.6)).toBe('$4,121.60');
+    expect(formatTalentDollars(-4121.6)).toBe('-$4,121.60');
     expect(projectedTalentDollars(4000, -0.08)).toBe(3680);
   });
 });

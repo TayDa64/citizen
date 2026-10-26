@@ -33,7 +33,7 @@ function jsonResponse(body, status = 200) {
 }
 
 describe('API talent cost display', () => {
-  test('shows the policy sample as $4480 and a +12% delta from the company baseline', () => {
+  test('shows the policy sample as $4,480 and a +12% delta from the company baseline', () => {
     const state = hydrateFromApi(initialState, { company: apiCompany, triggers: [] });
     render(
       <TriggerPanel
@@ -46,7 +46,7 @@ describe('API talent cost display', () => {
 
     const button = screen.getByRole('button', { name: /^Policy change / });
     expect(button).toHaveAccessibleName(/talent cost \+12%/);
-    expect(button).toHaveAccessibleName(/\$4480/);
+    expect(button).toHaveAccessibleName(/\$4,480/);
     expect(button).toHaveAccessibleName(/Up/);
   });
 
@@ -64,8 +64,8 @@ describe('API talent cost display', () => {
     render(<Dashboard state={loaded} />);
 
     const effect = screen.getByRole('region', { name: 'World event effect' });
-    expect(within(effect).getByText('$4000')).toBeInTheDocument();
-    expect(within(effect).getByText('$4480 (up +12%)')).toBeInTheDocument();
+    expect(within(effect).getByText('$4,000')).toBeInTheDocument();
+    expect(within(effect).getByText('$4,480 (up +12%)')).toBeInTheDocument();
     expect(within(effect).getByText(/\$2,200/)).toBeInTheDocument();
     expect(within(effect).queryByText(/\$2,464/)).not.toBeInTheDocument();
     expect(within(effect).queryByText(/1\.12×/)).not.toBeInTheDocument();
@@ -86,7 +86,7 @@ describe('sample data fallback', () => {
     expect(fetchImpl).not.toHaveBeenCalled();
 
     const policyButton = screen.getByRole('button', { name: /^Policy change / });
-    expect(policyButton).not.toHaveAccessibleName(/\$4480/);
+    expect(policyButton).not.toHaveAccessibleName(/\$4,480/);
     await user.click(policyButton);
 
     expect(screen.getByText(/\$2,464/)).toBeInTheDocument();
@@ -122,7 +122,7 @@ describe('sample data fallback', () => {
 
     await user.click(screen.getByRole('button', { name: /^Policy change / }));
     expect(screen.getByText(/\$2,464/)).toBeInTheDocument();
-    expect(screen.queryByText('$4480')).not.toBeInTheDocument();
+    expect(screen.queryByText('$4,480')).not.toBeInTheDocument();
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
   });
@@ -158,13 +158,13 @@ describe('sample data fallback', () => {
     expect(connected).toHaveAttribute('aria-busy', 'false');
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 
-    const policyButton = await screen.findByRole('button', { name: /\$4480/ });
+    const policyButton = await screen.findByRole('button', { name: /\$4,480/ });
     expect(policyButton).toHaveAccessibleName(/\+12%/);
     await user.click(policyButton);
 
     const effect = await screen.findByRole('region', { name: 'World event effect' });
-    expect(within(effect).getByText('$4480 (up +12%)')).toBeInTheDocument();
-    expect(within(effect).getByText('$4000')).toBeInTheDocument();
+    expect(within(effect).getByText('$4,480 (up +12%)')).toBeInTheDocument();
+    expect(within(effect).getByText('$4,000')).toBeInTheDocument();
     expect(screen.getByText(/Burn\/mo: \$2000/)).toBeInTheDocument();
     expect(screen.queryByText(/\$2,464/)).not.toBeInTheDocument();
 
@@ -292,7 +292,7 @@ describe('sample data fallback', () => {
     expect(alert).toHaveTextContent(/has not enabled that action yet \(405\)/i);
     expect(alert).toHaveTextContent(/nothing on this screen was changed/i);
     expect(screen.getByRole('button', { name: /^Policy change / })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('region', { name: 'World event effect' })).toHaveTextContent('$4480');
+    expect(screen.getByRole('region', { name: 'World event effect' })).toHaveTextContent('$4,480');
     expect(screen.queryByRole('alert')).toHaveTextContent(/Could not remove/);
   });
 
@@ -350,8 +350,92 @@ describe('sample data fallback', () => {
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent(/404/);
     expect(alert).toHaveTextContent(/nothing on this screen was changed/i);
-    expect(screen.getByRole('region', { name: 'World event effect' })).toHaveTextContent('$4480');
+    expect(screen.getByRole('region', { name: 'World event effect' })).toHaveTextContent('$4,480');
     expect(screen.getByRole('button', { name: /^Policy change / })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  test('a 413 delete keeps the current numbers and does not re-sync', async () => {
+    vi.stubEnv('VITE_CITIZEN_API', 'http://127.0.0.1:8787');
+    const calls = [];
+    vi.stubGlobal('fetch', vi.fn(async (url, options = {}) => {
+      const path = String(url);
+      const method = options.method || 'GET';
+      calls.push({ path, method });
+      if (method === 'DELETE') return jsonResponse({ error: 'Payload too large', issues: [] }, 413);
+      if (path.endsWith('/api/companies')) {
+        return jsonResponse([{ ...apiCompany, cash: 1, burnRate: 9, talentCost: 4480, baselines: { hype: 0.3, talentCost: 4000 } }]);
+      }
+      if (path.endsWith('/api/triggers')) return jsonResponse([policy]);
+      return jsonResponse({ error: 'Not found' }, 404);
+    }));
+
+    const user = userEvent.setup();
+    render(<App />);
+    expect(await screen.findByText(/Cash: \$15000/)).toBeInTheDocument();
+    expect(screen.getByText(/Burn\/mo: \$2000/)).toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: /^Policy change /, pressed: true }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/413/);
+    expect(alert).toHaveTextContent(/nothing on this screen was changed/i);
+    expect(screen.getByRole('button', { name: /^Policy change / })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('region', { name: 'World event effect' })).toHaveTextContent('$4,480');
+    expect(screen.getByText(/Cash: \$15000/)).toBeInTheDocument();
+    expect(calls.filter((call) => call.method === 'GET' && call.path.endsWith('/api/triggers'))).toHaveLength(1);
+  });
+
+  test('an empty company list falls back to sample data', async () => {
+    vi.stubEnv('VITE_CITIZEN_API', '/api');
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      if (String(url).endsWith('/api/companies')) return jsonResponse([]);
+      return jsonResponse([policy]);
+    }));
+    const user = userEvent.setup();
+    render(<App />);
+
+    const note = await screen.findByRole('status', { name: /no company was returned/i });
+    expect(note).toHaveTextContent(/sample data/i);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /^Policy change / }));
+    expect(screen.getByText(/\$2,464/)).toBeInTheDocument();
+  });
+
+  test('a 403 shows an alert and stays on sample data', async () => {
+    vi.stubEnv('VITE_CITIZEN_API', 'http://example.test');
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ error: 'Forbidden', issues: [] }, 403)));
+    const user = userEvent.setup();
+    render(<App />);
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/403/);
+    expect(alert).toHaveTextContent(/\/api/);
+    expect(screen.getByRole('status', { name: /using sample data on this device/i })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /^Policy change / }));
+    expect(screen.getByText(/\$2,464/)).toBeInTheDocument();
+  });
+
+  test('a 403 delete keeps the current numbers', async () => {
+    vi.stubEnv('VITE_CITIZEN_API', '/api');
+    vi.stubGlobal('fetch', vi.fn(async (url, options = {}) => {
+      const path = String(url);
+      const method = options.method || 'GET';
+      if (method === 'DELETE') return jsonResponse({ error: 'Forbidden', issues: [] }, 403);
+      if (path.endsWith('/api/companies')) {
+        return jsonResponse([{ ...apiCompany, talentCost: 4480, baselines: { hype: 0.3, talentCost: 4000 } }]);
+      }
+      if (path.endsWith('/api/triggers')) return jsonResponse([policy]);
+      return jsonResponse({ error: 'Not found' }, 404);
+    }));
+
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole('button', { name: /^Policy change /, pressed: true }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/403/);
+    expect(alert).toHaveTextContent(/nothing on this screen was changed/i);
+    expect(screen.getByRole('button', { name: /^Policy change / })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('region', { name: 'World event effect' })).toHaveTextContent('$4,480');
   });
 });
 
