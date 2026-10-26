@@ -4,7 +4,9 @@ import {
   TRIGGER_CONTRACT,
   assertValidTrigger,
   describeTrigger,
+  formatCurrency,
   formatDollars,
+  formatHypePercent,
   formatSignedPercent,
   formatTalentDollars,
   projectedTalentDollars,
@@ -158,7 +160,11 @@ describe('talent cost dollars', () => {
     expect(formatSignedPercent(0.12)).toBe('+12%');
     expect(formatTalentDollars(4121.6)).toBe('$4,121.60');
     expect(formatDollars(4121.6)).toBe('$4,121.60');
-    expect(formatTalentDollars(-4121.6)).toBe('-$4,121.60');
+    expect(formatTalentDollars(-4121.6)).toBe('$0');
+    expect(formatDollars(-4121.6)).toBe('-$4,121.60');
+    expect(formatCurrency(1e308)).toBe('$9,999,999,999.99');
+    expect(formatHypePercent(-5)).toBe('0%');
+    expect(formatHypePercent(4)).toBe('100%');
     expect(projectedTalentDollars(4000, -0.08)).toBe(3680);
   });
 });
@@ -184,7 +190,7 @@ describe('triggerDiagramOverlay', () => {
       nodeLabels: {
         3: 'Hire Staff\n(Tech / Marketing / Sales)\nTalent ×1.0000\nno employees',
         5: 'Real-World Triggers\n(Firecrawl + Events)',
-        7: 'Launch / Market / Sell\nTrack Runway & Hype\nBurn: $2,200 (base $2,200)',
+        7: 'Launch / Market / Sell\nTrack Runway & Hype\nBurn $2,200 (base $2,200 · talent ×1.0000 · talent cost ×1.00)',
         'civic-infra': 'Civic Lever:\nInfrastructure / Talent',
       },
       edgeLabels: {
@@ -223,7 +229,7 @@ describe('triggerDiagramOverlay', () => {
     expect(overlay.nodeLabels[3]).toContain('Talent ×1.2800');
     expect(overlay.nodeLabels[3]).toContain('no employees');
     expect(overlay.nodeLabels[7]).toBe(
-      'Launch / Market / Sell\nTrack Runway & Hype\nBurn: $2,816 (base $2,200)'
+      'Launch / Market / Sell\nTrack Runway & Hype\nBurn $2,816 (base $2,200 · talent ×1.2800 · talent cost ×1.00)'
     );
   });
 

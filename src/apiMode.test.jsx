@@ -50,7 +50,7 @@ describe('API talent cost display', () => {
     expect(button).toHaveAccessibleName(/Up/);
   });
 
-  test('the effect readout uses API dollars and does not multiply burn', () => {
+  test('the effect readout uses API dollars and the talent-cost burn', () => {
     const loaded = hydrateFromApi(
       {
         ...initialState,
@@ -66,9 +66,10 @@ describe('API talent cost display', () => {
     const effect = screen.getByRole('region', { name: 'World event effect' });
     expect(within(effect).getByText('$4,000')).toBeInTheDocument();
     expect(within(effect).getByText('$4,480 (up +12%)')).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Talent and burn' })).toHaveTextContent('×1.0000 talent');
-    expect(screen.getByRole('region', { name: 'Talent and burn' })).toHaveTextContent(/base burn \$2,200/i);
-    expect(screen.queryByText(/\$2,464/)).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Talent and burn' })).toHaveTextContent(
+      'Burn $2,464 (base $2,200 · talent ×1.0000 · talent cost ×1.12)'
+    );
+    expect(screen.getByText(/Burn\/mo: \$2,464/)).toBeInTheDocument();
     expect(within(effect).queryByText(/1\.12×/)).not.toBeInTheDocument();
   });
 });
@@ -90,8 +91,9 @@ describe('sample data fallback', () => {
     expect(policyButton).not.toHaveAccessibleName(/\$4,480/);
     await user.click(policyButton);
 
-    expect(screen.getByRole('region', { name: 'Talent and burn' })).toHaveTextContent('×1.0000 talent');
-    expect(screen.queryByText(/\$2,464/)).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Talent and burn' })).toHaveTextContent(
+      'Burn $2,464 (base $2,200 · talent ×1.0000 · talent cost ×1.12)'
+    );
     expect(screen.getByText(/1\.12×/)).toBeInTheDocument();
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
@@ -123,14 +125,14 @@ describe('sample data fallback', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /^Policy change / }));
-    expect(screen.queryByText(/\$2,464/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Burn\/mo: \$2,464/)).toBeInTheDocument();
     expect(screen.getByText(/1\.12×/)).toBeInTheDocument();
     expect(screen.queryByText('$4,480')).not.toBeInTheDocument();
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
   });
 
-  test('a reachable API shows dollar talent cost and leaves burn uncoupled', async () => {
+  test('a reachable API shows dollar talent cost and the talent-cost burn', async () => {
     vi.stubEnv('VITE_CITIZEN_API', 'http://127.0.0.1:8787');
     const calls = [];
     vi.stubGlobal('fetch', vi.fn(async (url, options = {}) => {
@@ -168,15 +170,17 @@ describe('sample data fallback', () => {
     const effect = await screen.findByRole('region', { name: 'World event effect' });
     expect(within(effect).getByText('$4,480 (up +12%)')).toBeInTheDocument();
     expect(within(effect).getByText('$4,000')).toBeInTheDocument();
-    expect(screen.getByText(/Burn\/mo: \$2000/)).toBeInTheDocument();
-    expect(screen.queryByText(/\$2,464/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Burn\/mo: \$2,464/)).toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: 'World events' })).getByRole('status')).toHaveTextContent(
+      'Policy change: talent cost +12%, burn $2,464'
+    );
 
     const mockCall = calls.find((call) => call.path.endsWith('/api/triggers/mock'));
     expect(JSON.parse(mockCall.options.body)).toEqual({ scenario: 'policy_change' });
     expect(mockCall.options.body).not.toContain('appliedAtIndex');
 
     await user.click(screen.getByRole('button', { name: /advance month/i }));
-    expect(screen.getByText(/Burn\/mo: \$2200/)).toBeInTheDocument();
+    expect(screen.getByText(/Burn\/mo: \$2,464/)).toBeInTheDocument();
     expect(screen.getByRole('slider', { name: /tax rate/i })).toHaveValue('0.25');
 
     vi.unstubAllEnvs();
@@ -209,7 +213,7 @@ describe('sample data fallback', () => {
     expect(alert).toHaveTextContent(/could not save/i);
     expect(alert).toHaveTextContent(/scenario must be one of/i);
     expect(screen.queryByRole('region', { name: 'World event effect' })).not.toBeInTheDocument();
-    expect(screen.getByText(/Burn\/mo: \$2000/)).toBeInTheDocument();
+    expect(screen.getByText(/Burn\/mo: \$2,200/)).toBeInTheDocument();
   });
 
   test('toggling off and clearing call DELETE and restore the API baselines', async () => {
@@ -270,7 +274,9 @@ describe('sample data fallback', () => {
     );
     expect(screen.getByRole('heading', { name: 'World events' })).toHaveFocus();
     expect(screen.queryByRole('region', { name: 'World event effect' })).not.toBeInTheDocument();
-    expect(screen.getByText(/Cash: \$/).textContent).toBe(cashAfterTick);
+    const metrics = screen.getByText(/Cash: \$/).textContent;
+    expect(metrics.match(/Cash: \$\d+/)[0]).toBe(cashAfterTick.match(/Cash: \$\d+/)[0]);
+    expect(metrics).toContain('Burn/mo: $2,200');
     expect(screen.getByRole('main')).toContainElement(screen.getByRole('heading', { name: 'Cash & Burn Rate' }));
   });
 
@@ -375,7 +381,7 @@ describe('sample data fallback', () => {
     const user = userEvent.setup();
     render(<App />);
     expect(await screen.findByText(/Cash: \$15000/)).toBeInTheDocument();
-    expect(screen.getByText(/Burn\/mo: \$2000/)).toBeInTheDocument();
+    expect(screen.getByText(/Burn\/mo: \$2,464/)).toBeInTheDocument();
     await user.click(await screen.findByRole('button', { name: /^Policy change /, pressed: true }));
 
     const alert = await screen.findByRole('alert');
@@ -384,6 +390,7 @@ describe('sample data fallback', () => {
     expect(screen.getByRole('button', { name: /^Policy change / })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('region', { name: 'World event effect' })).toHaveTextContent('$4,480');
     expect(screen.getByText(/Cash: \$15000/)).toBeInTheDocument();
+    expect(screen.getByText(/Burn\/mo: \$2,464/)).toBeInTheDocument();
     expect(calls.filter((call) => call.method === 'GET' && call.path.endsWith('/api/triggers'))).toHaveLength(1);
   });
 
@@ -401,7 +408,7 @@ describe('sample data fallback', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /^Policy change / }));
     expect(screen.getByText(/1\.12×/)).toBeInTheDocument();
-    expect(screen.queryByText(/\$2,464/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Burn\/mo: \$2,464/)).toBeInTheDocument();
   });
 
   test('a missing Host shows an alert and keeps the sample numbers', async () => {
@@ -415,7 +422,7 @@ describe('sample data fallback', () => {
     expect(alert).toHaveTextContent(/nothing on this screen was changed/i);
     expect(screen.getByRole('status', { name: /using sample data on this device/i })).toBeInTheDocument();
     expect(screen.getByText(/Cash: \$15000/)).toBeInTheDocument();
-    expect(screen.getByText(/Burn\/mo: \$2000/)).toBeInTheDocument();
+    expect(screen.getByText(/Burn\/mo: \$2,200/)).toBeInTheDocument();
   });
 
   test('a duplicate Host on delete keeps the current numbers', async () => {
@@ -454,7 +461,7 @@ describe('sample data fallback', () => {
     expect(screen.getByRole('status', { name: /using sample data on this device/i })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /^Policy change / }));
     expect(screen.getByText(/1\.12×/)).toBeInTheDocument();
-    expect(screen.queryByText(/\$2,464/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Burn\/mo: \$2,464/)).toBeInTheDocument();
   });
 
   test('a 403 delete keeps the current numbers', async () => {
@@ -504,11 +511,11 @@ describe('API talent multiplier', () => {
     render(<App />);
     expect(await screen.findByText(/×1\.2800 talent/)).toBeInTheDocument();
     const talent = screen.getByRole('region', { name: 'Talent and burn' });
-    expect(talent).toHaveTextContent('Effective burn $2,816');
-    expect(talent).toHaveTextContent('×1.2800 talent');
-    expect(talent).toHaveTextContent(/base burn \$2,200/i);
+    expect(talent).toHaveTextContent(
+      'Burn $3,154 (base $2,200 · talent ×1.2800 · talent cost ×1.12)'
+    );
     expect(screen.getByText(/Cash: \$15000/)).toBeInTheDocument();
-    expect(screen.getByText(/Burn\/mo: \$2000/)).toBeInTheDocument();
+    expect(screen.getByText(/Burn\/mo: \$3,154/)).toBeInTheDocument();
     const table = within(talent).getByRole('table', { name: 'Talent mix' });
     expect(within(table).getByRole('columnheader', { name: 'Department' })).toBeInTheDocument();
     expect(within(table).getByRole('cell', { name: 'tech' })).toBeInTheDocument();
@@ -542,26 +549,26 @@ describe('API talent multiplier', () => {
 
     render(<App />);
     const talent = await screen.findByRole('region', { name: 'Talent and burn' });
-    expect(talent).toHaveTextContent('×1.7500 talent');
-    expect(talent).toHaveTextContent('Effective burn $3,850');
-    expect(talent).toHaveTextContent(/base burn \$2,200/i);
+    expect(talent).toHaveTextContent(
+      'Burn $3,850 (base $2,200 · talent ×1.7500 · talent cost ×1.00)'
+    );
     expect(within(talent).getByRole('cell', { name: 'tech' })).toBeInTheDocument();
     expect(within(talent).getByRole('cell', { name: '4' })).toBeInTheDocument();
     expect(screen.getByText(/Cash: \$15000/)).toBeInTheDocument();
-    expect(screen.getByText(/Burn\/mo: \$2000/)).toBeInTheDocument();
+    expect(screen.getByText(/Burn\/mo: \$3,850/)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /advance month \(apply effects\)/i }));
-    expect(talent).toHaveTextContent('×1.7500 talent');
-    expect(screen.getByText(/Burn\/mo: \$3850/)).toBeInTheDocument();
-    expect(screen.queryByText(/Burn\/mo: \$2200/)).not.toBeInTheDocument();
+    expect(talent).toHaveTextContent('talent ×1.7500');
+    expect(screen.getByText(/Burn\/mo: \$3,850/)).toBeInTheDocument();
+    expect(screen.queryByText(/Burn\/mo: \$2,200/)).not.toBeInTheDocument();
     expect(within(talent).getByRole('cell', { name: 'tech' })).toBeInTheDocument();
 
     fireEvent.change(screen.getByRole('slider', { name: /tax rate/i }), { target: { value: '1' } });
     expect(screen.getByText(/Tax: 100%/)).toBeInTheDocument();
-    expect(talent).toHaveTextContent('×1.7500 talent');
-    expect(talent).toHaveTextContent('Effective burn $4,900');
-    expect(talent).toHaveTextContent(/base burn \$2,800/i);
-    expect(screen.getByText(/Burn\/mo: \$4900/)).toBeInTheDocument();
+    expect(talent).toHaveTextContent(
+      'Burn $4,900 (base $2,800 · talent ×1.7500 · talent cost ×1.00)'
+    );
+    expect(screen.getByText(/Burn\/mo: \$4,900/)).toBeInTheDocument();
     expect(within(talent).getByRole('cell', { name: '4' })).toBeInTheDocument();
     expect(document.querySelector('[data-id="3"]').textContent).toContain('Talent ×1.7500');
     expect(document.querySelector('[data-id="3"]').textContent).toContain('tech 4');
@@ -642,7 +649,7 @@ describe('out-of-contract API payloads', () => {
     expect(screen.queryByText(/NaN/)).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /^Policy change / }));
     expect(screen.getByText(/1\.12×/)).toBeInTheDocument();
-    expect(screen.queryByText(/\$2,464/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Burn\/mo: \$2,464/)).toBeInTheDocument();
   });
 
   test('null hype and talent cost use the baselines and say they were missing', async () => {
@@ -701,7 +708,7 @@ describe('out-of-contract API payloads', () => {
     expect(alert).toHaveTextContent(/still listed/i);
     const live = within(screen.getByRole('region', { name: 'World events' })).getByRole('status');
     expect(live).not.toHaveTextContent(/removed/i);
-    expect(live).toHaveTextContent('Policy change: talent cost +12%');
+    expect(live).toHaveTextContent('Policy change: talent cost +12%, burn $2,464');
     expect(screen.getByRole('button', { name: /^Policy change / })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('region', { name: 'World event effect' })).toHaveTextContent('$4,480');
   });
@@ -719,5 +726,134 @@ describe('local diagram still uses the multiplier baseline', () => {
     expect(state.baselines.talentCost).toBe(4000);
     expect(state.company.talentCost).toBeCloseTo(4480, 5);
     expect(state.company.hype).toBeCloseTo(0.4, 5);
+  });
+});
+
+describe('clamped API metrics', () => {
+  test('the effect readout clamps a raw hype and talent cost', () => {
+    render(
+      <Dashboard
+        state={{
+          taxRate: 0.25,
+          dataSource: 'api',
+          employees: [],
+          talentMix: [],
+          company: { cash: 15000, burnRate: 2000, hype: -5, talentCost: -1, productQuality: 0.4 },
+          baselines: { hype: 0.3, talentCost: 4000 },
+          history: { cash: [15000], burnRate: [2000] },
+          activeTriggers: [policy],
+        }}
+      />
+    );
+
+    expect(screen.queryByText('-500%')).not.toBeInTheDocument();
+    expect(screen.queryByText('-$1')).not.toBeInTheDocument();
+    const effect = screen.getByRole('region', { name: 'World event effect' });
+    expect(within(effect).getByText('Hype after').parentElement).toHaveTextContent('0%');
+    expect(within(effect).getByText('Talent cost after').parentElement).toHaveTextContent('$0');
+  });
+
+  test('shows a status when hype and talent cost are outside the contract', async () => {
+    vi.stubEnv('VITE_CITIZEN_API', '/api');
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      const path = String(url);
+      if (path.endsWith('/api/companies')) {
+        return jsonResponse([{
+          ...apiCompany,
+          hype: -5,
+          talentCost: -1,
+          baselines: { hype: -5, talentCost: 4000 },
+        }]);
+      }
+      if (path.endsWith('/api/triggers')) return jsonResponse([policy]);
+      return jsonResponse({ error: 'Not found' }, 404);
+    }));
+
+    render(<App />);
+    const note = await screen.findByRole('status', { name: /hype was outside 0% to 100%/i });
+    expect(note).toHaveTextContent(/talent cost was outside \$0 to \$9,999,999,999\.99/i);
+    expect(screen.queryByText('-500%')).not.toBeInTheDocument();
+    expect(screen.queryByText('-$1')).not.toBeInTheDocument();
+    const effect = await screen.findByRole('region', { name: 'World event effect' });
+    expect(within(effect).getByText('Hype after').parentElement).toHaveTextContent('0%');
+    expect(within(effect).getByText('Talent cost after').parentElement).toHaveTextContent('$0');
+  });
+
+  test('caps a huge talent cost at the contract maximum', async () => {
+    vi.stubEnv('VITE_CITIZEN_API', '/api');
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      const path = String(url);
+      if (path.endsWith('/api/companies')) {
+        return jsonResponse([{ ...apiCompany, talentCost: 1e308 }]);
+      }
+      if (path.endsWith('/api/triggers')) return jsonResponse([policy]);
+      return jsonResponse({ error: 'Not found' }, 404);
+    }));
+
+    render(<App />);
+    const note = await screen.findByRole('status', { name: /talent cost was outside/i });
+    expect(note).not.toHaveTextContent(/hype was outside/i);
+    const effect = await screen.findByRole('region', { name: 'World event effect' });
+    expect(within(effect).getByText('Talent cost after').parentElement).toHaveTextContent('$9,999,999,999.99');
+  });
+});
+
+describe('0.5.0 and 0.6.0 company payloads', () => {
+  test('a 0.5.0 company computes the talent-cost factor in the burn readout', async () => {
+    vi.stubEnv('VITE_CITIZEN_API', '/api');
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      const path = String(url);
+      if (path.endsWith('/api/companies')) {
+        return jsonResponse([{
+          ...apiCompany,
+          talentCost: 4480,
+          talentMultiplier: 1,
+        }]);
+      }
+      if (path.endsWith('/api/triggers')) return jsonResponse([policy]);
+      return jsonResponse({ error: 'Not found' }, 404);
+    }));
+
+    render(<App />);
+    const talent = await screen.findByRole('region', { name: 'Talent and burn' });
+    expect(talent).toHaveTextContent(
+      'Burn $2,464 (base $2,200 · talent ×1.0000 · talent cost ×1.12)'
+    );
+    expect(screen.getByText(/Burn\/mo: \$2,464/)).toBeInTheDocument();
+  });
+
+  test('a 0.6.0 company prefers the server factor and effective burn', async () => {
+    vi.stubEnv('VITE_CITIZEN_API', '/api');
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      const path = String(url);
+      if (path.endsWith('/api/companies')) {
+        return jsonResponse([{
+          ...apiCompany,
+          talentCost: 999,
+          talentMultiplier: 1.75,
+          talentCostFactor: 1.12,
+          effectiveMultiplier: 1.96,
+          talentMix: [{ department: 'tech', headcount: 4, avgSkill: 1, weight: 1.25, contribution: 1.75 }],
+          employees: [{ id: 'm1', department: 'marketing', skillMarketing: 0.5 }],
+        }]);
+      }
+      if (path.endsWith('/api/triggers')) return jsonResponse([policy]);
+      return jsonResponse({ error: 'Not found' }, 404);
+    }));
+
+    render(<App />);
+    const talent = await screen.findByRole('region', { name: 'Talent and burn' });
+    expect(talent).toHaveTextContent(
+      'Burn $4,312 (base $2,200 · talent ×1.7500 · talent cost ×1.12)'
+    );
+    expect(screen.getByText(/Burn\/mo: \$4,312/)).toBeInTheDocument();
+    expect(within(talent).getByRole('cell', { name: 'tech' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('slider', { name: /tax rate/i }), { target: { value: '1' } });
+    expect(talent).toHaveTextContent(
+      'Burn $5,488 (base $2,800 · talent ×1.7500 · talent cost ×1.12)'
+    );
+    expect(screen.getByText(/Burn\/mo: \$5,488/)).toBeInTheDocument();
+    expect(talent).not.toHaveTextContent('talent ×1.9600');
   });
 });

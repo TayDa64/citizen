@@ -1,5 +1,5 @@
 /**
- * Employee talent multiplier for burn. Matches OpenAPI 0.5.0 on PR #6.
+ * Employee talent multiplier for burn. Field names match OpenAPI 0.6.0.
  *
  * Per employee: departmentWeight * skillFactor.
  * skillFactor = 1 + 0.8 * (clamp(skill, 0, 1) - 0.5).
@@ -19,18 +19,21 @@
  * then other names A–Z, then null.
  *
  * API mode uses company.talentMultiplier when it is present and 1 when it
- * is missing. It does not derive the multiplier from talent cost.
+ * is missing. That field stays employee-only. It does not absorb talent cost.
  * There is no baselines.talentMultiplier.
  *
- * burnRate = round(2000 * (1 + taxRate * 0.4) * talentMultiplier), rounded
+ * talentCostFactor = talentCost / baselines.talentCost. It is 1 when there
+ * is no trigger, or when the baseline is missing or 0. effectiveMultiplier
+ * is talentMultiplier × talentCostFactor.
+ * burnRate = round(2000 * (1 + taxRate * 0.4) * effectiveMultiplier), rounded
  * once. baseBurnRate = round(2000 * (1 + taxRate * 0.4)).
  *
- * OPEN DECISION: APPLY_TALENT_COST_TO_BURN. The backend does not let
- * effect.talentCost scale burn. When the flag is true, the multiplier is
- * also multiplied by talentCost / baselines.talentCost.
+ * APPLY_TALENT_COST_TO_BURN is on. A 0.6.0 company may send talentCostFactor
+ * and effectiveMultiplier. A 0.5.0 company omits them and the client computes
+ * both. Server values, when present, stay put across ticks and tax changes.
  */
 
-export const APPLY_TALENT_COST_TO_BURN = false;
+export const APPLY_TALENT_COST_TO_BURN = true;
 
 export const DEPARTMENT_WEIGHTS = Object.freeze({
   tech: 1.25,
@@ -203,10 +206,8 @@ export function scaleTalentMultiplier(profile, triggerFactor) {
   return { talentMultiplier, talentMix };
 }
 
-export function composeTalentMultiplier({ employees, triggerFactor = 1 } = {}) {
-  const profile = profileFromEmployees(employees);
-  if (!APPLY_TALENT_COST_TO_BURN) return profile;
-  return scaleTalentMultiplier(profile, triggerFactor);
+export function composeTalentMultiplier({ employees } = {}) {
+  return profileFromEmployees(employees);
 }
 
 export function computeTalentMultiplierFromEmployees(employees) {
@@ -307,37 +308,47 @@ export function formatTalentReadout(multiplier) {
   return value.toFixed(4);
 }
 
-function triggerFactorOf(state) {
-  return talentCostFactor(state?.company?.talentCost, state?.baselines?.talentCost);
+export function formatTalentCostFactor(factor) {
+  const value = Number(factor);
+  if (!Number.isFinite(value)) return '1.00';
+  let text = roundTo(value, 4).toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
+  if (!text.includes('.')) text = `${text}.00`;
+  else if (text.split('.')[1].length < 2) text = `${text}0`;
+  return text;
+}
+
+export function readOptionalFactor(value, label) {
+  if (value == null) return null;
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    throw new TypeError(`${label} must be a finite number >= 0`);
+  }
+  return value;
 }
 
 export function talentMultiplierOf(state) {
-  if (state?.dataSource === 'api') {
-    const base = readTalentMultiplier(state?.talentMultiplier);
-    if (!APPLY_TALENT_COST_TO_BURN) return base;
-    return roundTo(base * triggerFactorOf(state), 4);
-  }
-  return composeTalentMultiplier({
-    employees: state?.employees,
-    triggerFactor: triggerFactorOf(state),
-  }).talentMultiplier;
+  if (state?.dataSource === 'api') return readTalentMultiplier(state?.talentMultiplier);
+  return composeTalentMultiplier({ employees: state?.employees }).talentMultiplier;
 }
 
 export function talentMixOf(state) {
-  if (state?.dataSource === 'api') {
-    const mix = Array.isArray(state.talentMix) ? state.talentMix : [];
-    if (!APPLY_TALENT_COST_TO_BURN) return mix;
-    return scaleTalentMultiplier(
-      { talentMultiplier: readTalentMultiplier(state?.talentMultiplier), talentMix: mix },
-      triggerFactorOf(state)
-    ).talentMix;
-  }
-  return composeTalentMultiplier({
-    employees: state?.employees,
-    triggerFactor: triggerFactorOf(state),
-  }).talentMix;
+  if (state?.dataSource === 'api') return Array.isArray(state.talentMix) ? state.talentMix : [];
+  return composeTalentMultiplier({ employees: state?.employees }).talentMix;
+}
+
+export function talentCostFactorOf(state) {
+  if (!APPLY_TALENT_COST_TO_BURN) return 1;
+  if (state?.dataSource === 'api' && state.talentCostFactor != null) return state.talentCostFactor;
+  return talentCostFactor(state?.company?.talentCost, state?.baselines?.talentCost);
+}
+
+export function effectiveMultiplierOf(state) {
+  const employee = talentMultiplierOf(state);
+  if (!APPLY_TALENT_COST_TO_BURN) return employee;
+  if (state?.dataSource === 'api' && state.effectiveMultiplier != null) return state.effectiveMultiplier;
+  return employee * talentCostFactorOf(state);
 }
 
 export function effectiveBurnRate(state) {
-  return burnRateFromMultiplier(state?.taxRate ?? 0, talentMultiplierOf(state));
+  const taxRate = Number.isFinite(state?.taxRate) ? state.taxRate : 0;
+  return Math.round(2000 * (1 + taxRate * 0.4) * effectiveMultiplierOf(state));
 }

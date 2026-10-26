@@ -49,7 +49,7 @@ test('applying, clearing, and toggling a world event removes the chart marker', 
   expect(mentionsPolicy(state), JSON.stringify(state)).toBe(false);
 
   await page.getByRole('button', { name: /advance month/i }).click();
-  await expect(page.getByText(/Burn\/mo: \$2200/)).toBeVisible();
+  await expect(page.getByText(/Burn\/mo: \$2,200/)).toBeVisible();
   await expect(page.locator('.metrics-chart .highcharts-plot-line')).toHaveCount(0);
   await expect(page.locator('.metrics-chart .highcharts-plot-band')).toHaveCount(0);
   state = await chartMarkup(page);

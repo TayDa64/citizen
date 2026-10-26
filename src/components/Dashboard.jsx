@@ -2,15 +2,17 @@ import { useEffect, useState } from 'react';
 import { Chart, Title } from '@highcharts/react';
 import { LineSeries } from '@highcharts/react/series/Line';
 import { talentCostShowsDollars } from '../dataSource';
-import { baselineBurnRate, previewBurnRate } from '../simulation';
+import { previewBurnRate } from '../simulation';
 import {
   formatTalentReadout,
   talentMixOf,
-  talentMultiplierOf,
 } from '../talentMultiplier';
 import {
   deltaPhrase,
   describeTrigger,
+  clampHype,
+  clampTalentCost,
+  formatBurnBreakdown,
   formatCurrency,
   formatHypePercent,
   formatTalentDollars,
@@ -33,6 +35,16 @@ function ReadoutRow({ label, value }) {
       <dd>{value}</dd>
     </div>
   );
+}
+
+function shownHype(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? clampHype(numeric) : 0;
+}
+
+function shownTalent(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? clampTalentCost(numeric) : 0;
 }
 
 function formatTalentValue(value, dataSource) {
@@ -69,20 +81,12 @@ function TalentMixTable({ rows }) {
 }
 
 function TalentBurnSummary({ state }) {
-  const multiplier = talentMultiplierOf(state);
-  const effective = previewBurnRate(state);
-  const base = baselineBurnRate(state);
-  const direction = effective > base ? 'up' : effective < base ? 'down' : 'unchanged';
   const mix = talentMixOf(state);
 
   return (
     <section className="talent-burn" aria-labelledby="talent-burn-heading">
       <h3 id="talent-burn-heading">Talent and burn</h3>
-      <p>
-        Effective burn {formatCurrency(effective)}{' '}
-        <span>×{formatTalentReadout(multiplier)} talent</span>
-        {`, ${direction} from base burn ${formatCurrency(base)}.`}
-      </p>
+      <p>{formatBurnBreakdown(state)}</p>
       {mix.length > 0 ? (
         <TalentMixTable rows={mix} />
       ) : (
@@ -97,8 +101,12 @@ function WorldEventEffect({ state }) {
   if (active.length === 0) return null;
 
   const dataSource = state.dataSource === 'api' ? 'api' : 'local';
-  const before = state.baselines ?? { hype: state.company.hype, talentCost: 1 };
-  const after = { hype: state.company.hype, talentCost: state.company.talentCost ?? 1 };
+  const rawBefore = state.baselines ?? { hype: state.company.hype, talentCost: 1 };
+  const before = { hype: shownHype(rawBefore.hype), talentCost: shownTalent(rawBefore.talentCost) };
+  const after = {
+    hype: shownHype(state.company.hype),
+    talentCost: shownTalent(state.company.talentCost ?? before.talentCost),
+  };
 
   return (
     <section className="trigger-readout" aria-labelledby="world-event-effect-heading">
@@ -159,7 +167,7 @@ export default function Dashboard({ state }) {
     <div className="dashboard" style={{ padding: '1rem', background: '#12121f', color: '#e0e0e0' }}>
       <h3 style={{ margin: '0 0 0.5rem' }}>Company Metrics (Slice 1)</h3>
       <p>
-        Cash: ${state.company.cash.toFixed(0)} | Burn/mo: ${state.company.burnRate} | Tax: {(state.taxRate * 100).toFixed(0)}%
+        Cash: ${state.company.cash.toFixed(0)} | Burn/mo: {formatCurrency(previewBurnRate(state))} | Tax: {(state.taxRate * 100).toFixed(0)}%
       </p>
       <TalentBurnSummary state={state} />
       <WorldEventEffect state={state} />
@@ -211,7 +219,7 @@ export default function Dashboard({ state }) {
               color="#f87171"
               options={{
                 accessibility: {
-                  description: 'Monthly burn rate in dollars. Talent-cost events change burn on the following month.',
+                  description: 'Monthly burn rate in dollars after tax, the employee talent multiplier, and the talent-cost factor. A talent-cost event is included in this series on the following month.',
                 },
               }}
             />

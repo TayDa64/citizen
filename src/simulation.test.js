@@ -8,6 +8,7 @@ import {
   hydrateFromApi,
   initialState,
   previewBurnRate,
+  readApiSnapshot,
   removeTrigger,
   setTaxRate,
 } from './simulation';
@@ -73,12 +74,13 @@ describe('applyTrigger', () => {
     expect(next.taxRate).toBe(0.25);
     expect(next.activeTriggers.map((trigger) => trigger.id)).toEqual([policy.id]);
     expect(next.activeTriggers[0].appliedAtIndex).toBe(0);
-    expect(next.lastTriggerChange.announcement).toBe('Policy change: talent cost +12%');
+    expect(next.lastTriggerChange.announcement).toBe('Policy change: talent cost +12%, burn $2,464');
     expect(next.lastTriggerChange.before).toEqual({ hype: 0.3, talentCost: 1 });
     expect(next.lastTriggerChange.after.hype).toBe(0.3);
     expect(next.lastTriggerChange.after.talentCost).toBeCloseTo(1.12);
-    expect(previewBurnRate(next)).toBe(2200);
+    expect(previewBurnRate(next)).toBe(2464);
     expect(previewBurnRate(initialState)).toBe(2200);
+    expect(next.talentMultiplier).toBe(1);
   });
 
   test('reapplying the same id replaces the effect instead of stacking it', () => {
@@ -128,24 +130,35 @@ describe('applyTrigger', () => {
     expect(() => applyTrigger(initialState, { id: 'nope' })).toThrow(TypeError);
   });
 
-  test('with the trigger flag off, the next month ignores talent cost', () => {
+  test('the next month includes the talent-cost factor in burn', () => {
     const baseline = applyEffects(initialState);
     const triggered = applyEffects(applyTrigger(initialState, policy));
 
     expect(baseline.company.burnRate).toBe(2200);
-    expect(triggered.company.burnRate).toBe(2200);
-    expect(triggered.company.cash).toBe(baseline.company.cash);
+    expect(triggered.company.burnRate).toBe(2464);
+    expect(triggered.company.cash).toBeCloseTo(15000 - 2464 / 12);
     expect(triggered.history.cash[0]).toBe(15000);
-    expect(triggered.history.burnRate).toEqual([2000, 2200]);
+    expect(triggered.history.burnRate).toEqual([2000, 2464]);
+    expect(triggered.talentMultiplier).toBe(1);
     expect(baseline.history.burnRate).toEqual([2000, 2200]);
   });
 
-  test('a later tax tick does not scale burn by talent cost', () => {
+  test('a later tax tick scales burn by the talent-cost factor once', () => {
     const state = applyEffects(setTaxRate(applyTrigger(initialState, policy), 0.5));
     expect(state.taxRate).toBe(0.5);
     expect(state.company.talentCost).toBeCloseTo(1.12);
-    expect(state.company.burnRate).toBe(slice1Burn(0.5));
-    expect(state.company.burnRate).not.toBe(Math.round(slice1Burn(0.5) * 1.12));
+    expect(state.talentMultiplier).toBe(1);
+    expect(state.company.burnRate).toBe(Math.round(2000 * (1 + 0.5 * 0.4) * 1.12));
+    expect(state.company.burnRate).toBe(2688);
+  });
+
+  test('no employees plus a policy burns 2240 at tax 0 and 2464 at 25%', () => {
+    const policyState = applyTrigger(initialState, policy);
+    const atZero = setTaxRate(policyState, 0);
+    expect(previewBurnRate(atZero)).toBe(2240);
+    expect(applyEffects(atZero).company.burnRate).toBe(2240);
+    expect(previewBurnRate(policyState)).toBe(2464);
+    expect(applyEffects(policyState).company.burnRate).toBe(2464);
   });
 
   test('the chart marker stays inside the 24-month window', () => {
@@ -194,18 +207,20 @@ describe('removeTrigger and clearTriggers', () => {
     expect(apiState.activeTriggers[0].appliedAtIndex).toBe(0);
     expect(apiState.activeTriggers[0].appliedAtIndex).not.toBeUndefined();
     expect(Object.keys(apiState.activeTriggers[0])).not.toContain('chartNote');
-    expect(previewBurnRate(apiState)).toBe(2200);
+    expect(previewBurnRate(apiState)).toBe(2464);
     expect(baselineBurnRate(apiState)).toBe(2200);
-    expect(applyEffects(apiState).company.burnRate).toBe(2200);
-    expect(applyEffects(apiState).history.burnRate).toEqual([2000, 2200]);
+    expect(applyEffects(apiState).company.burnRate).toBe(2464);
+    expect(applyEffects(apiState).history.burnRate).toEqual([2000, 2464]);
     expect(apiState.talentMultiplier).toBe(1);
+    expect(apiState.talentCostFactor).toBeNull();
+    expect(apiState.effectiveMultiplier).toBeNull();
     expect(computeBurnRate(0.25, 1)).toBe(2200);
     expect(computeBurnRate(0.25, 1.12)).toBe(2464);
 
     const stacked = applyTrigger(apiState, market);
     expect(stacked.baselines.talentCost).toBe(4000);
     expect(stacked.company.talentCost).toBeCloseTo(4480 * 0.92, 5);
-    expect(previewBurnRate(stacked)).toBe(2200);
+    expect(previewBurnRate(stacked)).toBe(2267);
   });
 
   test('hydrate keeps client cash and burn and takes only hype, talent cost, and baselines', () => {
@@ -237,7 +252,7 @@ describe('removeTrigger and clearTriggers', () => {
     expect(refreshed.company.hype).toBe(0.55);
     expect(refreshed.company.talentCost).toBe(4480);
     expect(firstLoad.talentMultiplier).toBe(1);
-    expect(previewBurnRate(firstLoad)).toBe(2200);
+    expect(previewBurnRate(firstLoad)).toBe(2464);
   });
 
   test('a supplied talentMultiplier scales burn and an invalid one is rejected', () => {
@@ -259,8 +274,8 @@ describe('removeTrigger and clearTriggers', () => {
     expect(scaled.company.burnRate).toBe(2000);
     expect(scaled.talentMultiplier).toBe(1.28);
     expect(scaled.talentMix[0].department).toBe('tech');
-    expect(previewBurnRate(scaled)).toBe(2816);
-    expect(applyEffects(scaled).company.burnRate).toBe(2816);
+    expect(previewBurnRate(scaled)).toBe(3154);
+    expect(applyEffects(scaled).company.burnRate).toBe(3154);
     expect(applyEffects(scaled).talentMultiplier).toBe(1.28);
     expect(applyEffects(scaled).history.cash[0]).toBe(15000);
 
@@ -297,7 +312,12 @@ describe('removeTrigger and clearTriggers', () => {
     const triggered = applyTrigger(taxed, policy);
     expect(triggered.company.talentCost).toBeCloseTo(1.12, 5);
     expect(triggered.company.burnRate).toBe(4900);
-    expect(previewBurnRate(triggered)).toBe(4900);
+    expect(triggered.talentMultiplier).toBe(1.75);
+    expect(previewBurnRate(triggered)).toBe(5488);
+    const withPolicy = applyEffects(triggered);
+    expect(withPolicy.company.burnRate).toBe(5488);
+    expect(withPolicy.company.talentMultiplier).toBe(1.75);
+    expect(withPolicy.talentMultiplier).toBe(1.75);
   });
 
   test('API mode keeps a loaded 1.75 multiplier across a tick and a tax change', () => {
@@ -328,7 +348,9 @@ describe('removeTrigger and clearTriggers', () => {
     expect(loaded.employees).toEqual(employees);
     expect(loaded.company.cash).toBe(15000);
     expect(loaded.company.burnRate).toBe(2000);
-    expect(previewBurnRate(loaded)).toBe(3850);
+    expect(previewBurnRate(loaded)).toBe(4312);
+    expect(loaded.talentCostFactor).toBeNull();
+    expect(loaded.effectiveMultiplier).toBeNull();
 
     const ticked = applyEffects(loaded);
     expect(ticked.talentMultiplier).toBe(1.75);
@@ -336,8 +358,8 @@ describe('removeTrigger and clearTriggers', () => {
     expect(ticked.talentMix).toEqual(talentMix);
     expect(ticked.employees).toEqual(employees);
     expect(ticked.company.baseBurnRate).toBe(2200);
-    expect(ticked.company.burnRate).toBe(3850);
-    expect(ticked.company.cash).toBeCloseTo(15000 - 3850 / 12);
+    expect(ticked.company.burnRate).toBe(4312);
+    expect(ticked.company.cash).toBeCloseTo(15000 - 4312 / 12);
 
     const taxed = applyEffects(setTaxRate(ticked, 1));
     expect(taxed.taxRate).toBe(1);
@@ -346,8 +368,8 @@ describe('removeTrigger and clearTriggers', () => {
     expect(taxed.talentMix).toEqual(talentMix);
     expect(taxed.employees).toEqual(employees);
     expect(taxed.company.baseBurnRate).toBe(2800);
-    expect(taxed.company.burnRate).toBe(4900);
-    expect(taxed.company.cash).toBeCloseTo(15000 - 3850 / 12 - 4900 / 12);
+    expect(taxed.company.burnRate).toBe(5488);
+    expect(taxed.company.cash).toBeCloseTo(15000 - 4312 / 12 - 5488 / 12);
 
     const refreshed = hydrateFromApi(taxed, {
       company: {
@@ -366,6 +388,8 @@ describe('removeTrigger and clearTriggers', () => {
     expect(refreshed.company.burnRate).toBe(taxed.company.burnRate);
     expect(refreshed.talentMultiplier).toBe(1.05);
     expect(refreshed.employees).toEqual([]);
+    expect(refreshed.talentCostFactor).toBeNull();
+    expect(refreshed.effectiveMultiplier).toBeNull();
     expect(previewBurnRate(refreshed)).toBe(Math.round(2800 * 1.05));
   });
 
@@ -446,5 +470,117 @@ describe('API payload guards', () => {
       company: { hype: null, talentCost: null, baselines: { hype: null, talentCost: 4000 } },
       triggers: [policy],
     })).toThrow(TypeError);
+  });
+
+  test('clamps out-of-range hype and talent cost', () => {
+    const low = readApiSnapshot(initialState, {
+      company: {
+        id: 'company-1',
+        hype: -5,
+        talentCost: -1,
+        baselines: { hype: 0.3, talentCost: 4000 },
+      },
+      triggers: [],
+    });
+    expect(low.state.company.hype).toBe(0);
+    expect(low.state.company.talentCost).toBe(0);
+    expect(low.clampedHype).toBe(true);
+    expect(low.clampedTalent).toBe(true);
+
+    const huge = readApiSnapshot(initialState, {
+      company: {
+        id: 'company-1',
+        hype: 0.3,
+        talentCost: 1e308,
+        baselines: { hype: 0.3, talentCost: 4000 },
+      },
+      triggers: [],
+    });
+    expect(huge.state.company.talentCost).toBe(9999999999.99);
+    expect(huge.clampedTalent).toBe(true);
+    expect(huge.clampedHype).toBe(false);
+  });
+});
+
+describe('company payload shapes', () => {
+  test('a 0.5.0 payload computes the talent-cost factor and keeps the employee multiplier', () => {
+    const loaded = hydrateFromApi(initialState, {
+      company: {
+        id: 'company-1',
+        cash: 1,
+        burnRate: 9,
+        hype: 0.3,
+        talentCost: 4480,
+        baselines: { hype: 0.3, talentCost: 4000 },
+        talentMultiplier: 1,
+      },
+      triggers: [policy],
+    });
+
+    expect(loaded.talentCostFactor).toBeNull();
+    expect(loaded.effectiveMultiplier).toBeNull();
+    expect(loaded.talentMultiplier).toBe(1);
+    expect(previewBurnRate(loaded)).toBe(2464);
+    expect(previewBurnRate(setTaxRate(loaded, 0))).toBe(2240);
+
+    const ticked = applyEffects(loaded);
+    expect(ticked.talentMultiplier).toBe(1);
+    expect(ticked.company.burnRate).toBe(2464);
+    expect(ticked.talentCostFactor).toBeNull();
+    expect(ticked.effectiveMultiplier).toBeNull();
+  });
+
+  test('a 0.6.0 payload prefers server factors across a tick and a tax change', () => {
+    const loaded = hydrateFromApi(setTaxRate(initialState, 1), {
+      company: {
+        id: 'company-1',
+        cash: 1,
+        burnRate: 9,
+        hype: 0.3,
+        talentCost: 999,
+        baselines: { hype: 0.3, talentCost: 4000 },
+        talentMultiplier: 1.75,
+        talentCostFactor: 1.12,
+        effectiveMultiplier: 1.96,
+        talentMix: [{ department: 'tech', headcount: 4, avgSkill: 1, weight: 1.25, contribution: 1.75 }],
+        employees: [{ id: 'm1', department: 'marketing', skillMarketing: 0.5 }],
+      },
+      triggers: [policy],
+    });
+
+    expect(loaded.talentMultiplier).toBe(1.75);
+    expect(loaded.talentCostFactor).toBe(1.12);
+    expect(loaded.effectiveMultiplier).toBe(1.96);
+    expect(previewBurnRate(loaded)).toBe(5488);
+
+    const ticked = applyEffects(loaded);
+    expect(ticked.talentMultiplier).toBe(1.75);
+    expect(ticked.talentCostFactor).toBe(1.12);
+    expect(ticked.effectiveMultiplier).toBe(1.96);
+    expect(ticked.company.burnRate).toBe(5488);
+    expect(ticked.employees).toEqual([{ id: 'm1', department: 'marketing', skillMarketing: 0.5 }]);
+
+    const taxed = applyEffects(setTaxRate(ticked, 0.25));
+    expect(taxed.talentMultiplier).toBe(1.75);
+    expect(taxed.talentCostFactor).toBe(1.12);
+    expect(taxed.effectiveMultiplier).toBe(1.96);
+    expect(taxed.company.baseBurnRate).toBe(2200);
+    expect(taxed.company.burnRate).toBe(4312);
+
+    const disagreed = hydrateFromApi(setTaxRate(initialState, 1), {
+      company: {
+        id: 'company-1',
+        hype: 0.3,
+        talentCost: 4000,
+        baselines: { hype: 0.3, talentCost: 4000 },
+        talentMultiplier: 1.75,
+        talentCostFactor: 1.12,
+        effectiveMultiplier: 2,
+      },
+      triggers: [],
+    });
+    expect(previewBurnRate(disagreed)).toBe(5600);
+    expect(applyEffects(disagreed).effectiveMultiplier).toBe(2);
+    expect(applyEffects(disagreed).talentCostFactor).toBe(1.12);
   });
 });

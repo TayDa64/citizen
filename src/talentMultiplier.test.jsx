@@ -13,9 +13,13 @@ import {
   formatTalentReadout,
   readTalentMix,
   readTalentMultiplier,
+  effectiveBurnRate,
+  effectiveMultiplierOf,
   scaleTalentMultiplier,
   skillFactor,
+  talentCostFactorOf,
   talentMixFromEmployees,
+  talentMultiplierOf,
 } from './talentMultiplier';
 
 describe('department weights and skill', () => {
@@ -165,8 +169,8 @@ describe('burn rate', () => {
     expect(baseBurnRate(taxRate)).toBe(Math.round(2000 * (1 + taxRate * 0.4)));
   });
 
-  test('trigger talent cost stays off and can be turned on', () => {
-    expect(APPLY_TALENT_COST_TO_BURN).toBe(false);
+  test('trigger talent cost scales burn and the employee multiplier stays unscaled', () => {
+    expect(APPLY_TALENT_COST_TO_BURN).toBe(true);
     const tech = composeTalentMultiplier({
       employees: [{ department: 'tech', skillTech: 1 }],
       triggerFactor: 2,
@@ -176,23 +180,84 @@ describe('burn rate', () => {
     expect(scaled.talentMultiplier).toBe(1.96);
     expect(scaled.talentMix[0].contribution).toBe(1.96);
 
-    const off = burnRateFromMultiplier(0.25, burnMultiplier({
+    const on = burnRateFromMultiplier(0.25, burnMultiplier({
       talentMultiplier: 1,
       talentCostFactor: 1.12,
       affectsBurn: APPLY_TALENT_COST_TO_BURN,
     }));
-    const on = burnRateFromMultiplier(0.25, burnMultiplier({
-      talentMultiplier: 1,
-      talentCostFactor: 1.12,
-      affectsBurn: true,
-    }));
-    expect(off).toBe(2200);
     expect(on).toBe(2464);
     expect(burnRateFromMultiplier(0.25, burnMultiplier({
       talentMultiplier: 1,
       talentCostFactor: 4480 / 4000,
       affectsBurn: true,
     }))).toBe(2464);
+    expect(burnRateFromMultiplier(0.25, burnMultiplier({
+      talentMultiplier: 1,
+      talentCostFactor: 1.12,
+      affectsBurn: false,
+    }))).toBe(2200);
+  });
+
+  test('rounds base times the effective multiplier once', () => {
+    const quiet = {
+      dataSource: 'local',
+      employees: [],
+      company: { talentCost: 1 },
+      baselines: { talentCost: 1 },
+    };
+    expect(effectiveBurnRate({ ...quiet, taxRate: 0 })).toBe(2000);
+    expect(effectiveBurnRate({ ...quiet, taxRate: 0.25 })).toBe(2200);
+    expect(effectiveBurnRate({ ...quiet, taxRate: 1 })).toBe(2800);
+
+    const policy = {
+      ...quiet,
+      company: { talentCost: 1.12 },
+    };
+    expect(effectiveBurnRate({ ...policy, taxRate: 0 })).toBe(2240);
+    expect(effectiveBurnRate({ ...policy, taxRate: 0.25 })).toBe(2464);
+
+    const tech = [
+      { department: 'tech', skillTech: 1 },
+      { department: 'tech', skillTech: 1 },
+      { department: 'tech', skillTech: 1 },
+      { department: 'tech', skillTech: 1 },
+    ];
+    const staffed = {
+      dataSource: 'local',
+      taxRate: 1,
+      employees: tech,
+      company: { talentCost: 1.12 },
+      baselines: { talentCost: 1 },
+    };
+    expect(talentMultiplierOf(staffed)).toBe(1.75);
+    expect(talentCostFactorOf(staffed)).toBeCloseTo(1.12);
+    expect(effectiveMultiplierOf(staffed)).toBeCloseTo(1.96);
+    expect(effectiveBurnRate(staffed)).toBe(5488);
+
+    const server = {
+      dataSource: 'api',
+      taxRate: 1,
+      talentMultiplier: 1.75,
+      talentCostFactor: 1.12,
+      effectiveMultiplier: 1.96,
+      company: { talentCost: 999 },
+      baselines: { talentCost: 4000 },
+    };
+    expect(talentCostFactorOf(server)).toBe(1.12);
+    expect(effectiveMultiplierOf(server)).toBe(1.96);
+    expect(effectiveBurnRate(server)).toBe(5488);
+    expect(effectiveBurnRate({ ...server, effectiveMultiplier: 2 })).toBe(5600);
+
+    const legacy = {
+      dataSource: 'api',
+      talentMultiplier: 1,
+      company: { talentCost: 4480 },
+      baselines: { talentCost: 4000 },
+    };
+    expect(talentCostFactorOf(legacy)).toBeCloseTo(1.12);
+    expect(effectiveMultiplierOf(legacy)).toBeCloseTo(1.12);
+    expect(effectiveBurnRate({ ...legacy, taxRate: 0 })).toBe(2240);
+    expect(effectiveBurnRate({ ...legacy, taxRate: 0.25 })).toBe(2464);
   });
 });
 
@@ -215,9 +280,9 @@ describe('talent burn readout', () => {
     );
 
     const section = screen.getByRole('region', { name: 'Talent and burn' });
-    expect(section).toHaveTextContent('Effective burn $2,816');
-    expect(section).toHaveTextContent('×1.2800 talent');
-    expect(section).toHaveTextContent(/base burn \$2,200/i);
+    expect(section).toHaveTextContent(
+      'Burn $2,816 (base $2,200 · talent ×1.2800 · talent cost ×1.00)'
+    );
     expect(formatTalentReadout(1)).toBe('1.0000');
     expect(formatTalentReadout(1.28)).toBe('1.2800');
     expect(formatTalentReadout(1.75)).toBe('1.7500');
@@ -249,6 +314,8 @@ describe('talent burn readout', () => {
     expect(screen.getByRole('region', { name: 'Talent and burn' })).toHaveTextContent(
       'No employees. Talent multiplier is 1.0000.'
     );
-    expect(screen.getByRole('region', { name: 'Talent and burn' })).toHaveTextContent('×1.0000 talent');
+    expect(screen.getByRole('region', { name: 'Talent and burn' })).toHaveTextContent(
+      'Burn $2,200 (base $2,200 · talent ×1.0000 · talent cost ×1.00)'
+    );
   });
 });

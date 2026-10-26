@@ -12,6 +12,9 @@ export const LOADING_NOTE = 'Loading company and world events.';
 export const CONNECTED_NOTE = 'Connected to the Citizen service. Talent cost is shown in dollars.';
 export const MISSING_HYPE_NOTE = 'Hype was missing, so the baseline is shown.';
 export const MISSING_TALENT_COST_NOTE = 'Talent cost was missing, so the baseline is shown.';
+export const CLAMPED_HYPE_NOTE = 'Hype was outside 0% to 100%, so it is shown clamped.';
+export const CLAMPED_TALENT_COST_NOTE =
+  'Talent cost was outside $0 to $9,999,999,999.99, so it is shown clamped.';
 
 function finiteNumber(value) {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;

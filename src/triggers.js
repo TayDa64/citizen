@@ -1,10 +1,34 @@
 import {
   baseBurnRate,
   effectiveBurnRate,
+  formatTalentCostFactor,
   formatTalentReadout,
+  talentCostFactorOf,
   talentMixOf,
   talentMultiplierOf,
 } from './talentMultiplier';
+
+export const HYPE_MIN = 0;
+export const HYPE_MAX = 1;
+export const TALENT_COST_MIN = 0;
+export const TALENT_COST_MAX = 9999999999.99;
+
+export function clampHype(value) {
+  return Math.min(HYPE_MAX, Math.max(HYPE_MIN, value));
+}
+
+export function clampTalentCost(value) {
+  return Math.min(TALENT_COST_MAX, Math.max(TALENT_COST_MIN, value));
+}
+
+export function hypeOutOfRange(value) {
+  return typeof value === 'number' && Number.isFinite(value) && (value < HYPE_MIN || value > HYPE_MAX);
+}
+
+export function talentCostOutOfRange(value) {
+  return typeof value === 'number' && Number.isFinite(value)
+    && (value < TALENT_COST_MIN || value > TALENT_COST_MAX);
+}
 
 /**
  * RealWorldTrigger API contract (v1).
@@ -30,9 +54,9 @@ import {
  *   appliedAtIndex before POST. The API trims label and source and stores
  *   timestamp with Date#toISOString().
  *
- * Announcement grammar (talent cost first, then hype):
- *   "{label}: talent cost ±N%, hype ±N%"
- *   Example: "Policy change: talent cost +12%"
+ * Announcement grammar (talent cost first, then hype, then the effective burn):
+ *   "{label}: talent cost ±N%, hype ±N%, burn $N"
+ *   Example: "Policy change: talent cost +12%, burn $2,464"
  *
  * Stacking, applied by the simulation from company baselines:
  * - hype deltas add, then clamp to 0..1
@@ -199,14 +223,16 @@ export function describeTrigger(trigger) {
   return `${trigger.label}: ${parts.join(', ')}`;
 }
 
-export function announceTrigger(trigger, mode) {
+export function announceTrigger(trigger, mode, burn) {
   const description = describeTrigger(trigger);
+  const burnText = Number.isFinite(burn) ? `, burn ${formatCurrency(burn)}` : '';
   switch (mode) {
     case 'apply':
-      return description;
+      return `${description}${burnText}`;
     case 'remove': {
       const detail = description.slice(trigger.label.length + 2);
-      return `${trigger.label} removed: ${detail}.`;
+      const restored = Number.isFinite(burn) ? ` Burn ${formatCurrency(burn)}.` : '';
+      return `${trigger.label} removed: ${detail}.${restored}`;
     }
     default: {
       const neverMode = mode;
@@ -222,7 +248,9 @@ export function deltaPhrase(fraction) {
 }
 
 export function formatHypePercent(value) {
-  return `${Math.round(value * 100)}%`;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return '0%';
+  return `${Math.round(clampHype(numeric) * 100)}%`;
 }
 
 export function formatTalentMultiplier(value) {
@@ -231,18 +259,23 @@ export function formatTalentMultiplier(value) {
 
 export function projectedTalentDollars(baseline, delta) {
   if (!Number.isFinite(baseline) || !Number.isFinite(delta)) return null;
-  return roundTo(Math.max(0, baseline * (1 + delta)), 2);
+  return roundTo(clampTalentCost(baseline * (1 + delta)), 2);
 }
 
 export function formatCurrency(value) {
-  const amount = roundTo(Number(value), 2);
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return '$0';
+  const capped = Math.sign(numeric) * Math.min(Math.abs(numeric), TALENT_COST_MAX);
+  const amount = roundTo(capped, 2);
   if (!Number.isFinite(amount)) return '$0';
   const body = USD_CURRENCY.format(Math.abs(amount)).replace(/\.00$/, '');
   return amount < 0 ? `-${body}` : body;
 }
 
 export function formatTalentDollars(value) {
-  return formatCurrency(value);
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return formatCurrency(0);
+  return formatCurrency(clampTalentCost(numeric));
 }
 
 export function formatDollars(value) {
@@ -253,6 +286,12 @@ export function formatTriggerDate(timestamp) {
   const date = new Date(timestamp);
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   return `${months[date.getUTCMonth()]} ${date.getUTCDate()}, ${date.getUTCFullYear()}`;
+}
+
+export function formatBurnBreakdown(state) {
+  const taxRate = Number.isFinite(state?.taxRate) ? state.taxRate : 0.25;
+  const priced = { ...state, taxRate };
+  return `Burn ${formatCurrency(effectiveBurnRate(priced))} (base ${formatCurrency(baseBurnRate(taxRate))} · talent ×${formatTalentReadout(talentMultiplierOf(priced))} · talent cost ×${formatTalentCostFactor(talentCostFactorOf(priced))})`;
 }
 
 export function triggerDiagramOverlay(state) {
@@ -280,10 +319,8 @@ export function triggerDiagramOverlay(state) {
     ? 'no employees'
     : mix.map((group) => `${group.department ?? 'unassigned'} ${group.headcount}`).join(', ');
   const taxRate = Number.isFinite(state.taxRate) ? state.taxRate : 0.25;
-  const effective = effectiveBurnRate({ ...state, taxRate });
-  const base = baseBurnRate(taxRate);
   nodeLabels[3] = `Hire Staff\n(Tech / Marketing / Sales)\nTalent ×${formatTalentReadout(multiplier)}\n${headcounts}`;
-  nodeLabels[7] = `Launch / Market / Sell\nTrack Runway & Hype\nBurn: ${formatCurrency(effective)} (base ${formatCurrency(base)})`;
+  nodeLabels[7] = `Launch / Market / Sell\nTrack Runway & Hype\n${formatBurnBreakdown({ ...state, taxRate })}`;
 
   if (active.length === 0) {
     if (multiplierText) {

@@ -5,6 +5,8 @@ import TriggerPanel from './components/TriggerPanel';
 import {
   CONNECTED_NOTE,
   LOADING_NOTE,
+  CLAMPED_HYPE_NOTE,
+  CLAMPED_TALENT_COST_NOTE,
   MISSING_HYPE_NOTE,
   MISSING_TALENT_COST_NOTE,
   SAMPLE_DATA_NOTE,
@@ -24,6 +26,7 @@ import {
   removeTrigger,
 } from './simulation';
 import { CLEARED_ANNOUNCEMENT, announceTrigger } from './triggers';
+import { effectiveBurnRate } from './talentMultiplier';
 
 function removalBlockedMessage(error, label) {
   const hostAlert = hostHeaderAlert(error);
@@ -54,6 +57,8 @@ function sourceNotes(reading) {
   const notes = [CONNECTED_NOTE];
   if (reading.missingHype) notes.push(MISSING_HYPE_NOTE);
   if (reading.missingTalent) notes.push(MISSING_TALENT_COST_NOTE);
+  if (reading.clampedHype) notes.push(CLAMPED_HYPE_NOTE);
+  if (reading.clampedTalent) notes.push(CLAMPED_TALENT_COST_NOTE);
   return notes.join(' ');
 }
 
@@ -138,12 +143,16 @@ function App() {
     const active = (state.activeTriggers ?? []).some((item) => item.id === trigger.id);
     if (state.dataSource !== 'api' || !apiBase) {
       if (active) {
-        setState((prev) => removeTrigger(prev, trigger.id));
-        setAnnouncement(announceTrigger(trigger, 'remove'));
+        const next = removeTrigger(stateRef.current, trigger.id);
+        setState(next);
+        stateRef.current = next;
+        setAnnouncement(announceTrigger(trigger, 'remove', effectiveBurnRate(next)));
         return;
       }
-      setState((prev) => applyTrigger(prev, trigger));
-      setAnnouncement(announceTrigger(trigger, 'apply'));
+      const next = applyTrigger(stateRef.current, trigger);
+      setState(next);
+      stateRef.current = next;
+      setAnnouncement(announceTrigger(trigger, 'apply', effectiveBurnRate(next)));
       return;
     }
 
@@ -179,17 +188,17 @@ function App() {
           : applyTrigger(stateRef.current, trigger);
         setState(next);
         stateRef.current = next;
-        setAnnouncement(announceTrigger(trigger, active ? 'remove' : 'apply'));
+        setAnnouncement(announceTrigger(trigger, active ? 'remove' : 'apply', effectiveBurnRate(next)));
         return;
       }
       const listed = reading.state.activeTriggers.find((item) => item.id === trigger.id);
       const alerts = [];
       if (reading.skipped > 0) alerts.push(skippedTriggerAlert(reading.skipped));
       if (listed) {
-        setAnnouncement(announceTrigger(listed, 'apply'));
+        setAnnouncement(announceTrigger(listed, 'apply', effectiveBurnRate(reading.state)));
         if (active) alerts.push(`${listed.label} is still listed by the service.`);
       } else if (active) {
-        setAnnouncement(announceTrigger(trigger, 'remove'));
+        setAnnouncement(announceTrigger(trigger, 'remove', effectiveBurnRate(reading.state)));
       } else {
         alerts.push(`${trigger.label} is not listed by the service.`);
         setAnnouncement('');
