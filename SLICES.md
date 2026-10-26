@@ -25,3 +25,7 @@ npm install
 npm run dev
 ```
 Drag the tax slider, click “Advance Month”, watch the chart.
+
+## Merge train
+
+Which slices land in which order, and what is already verified, is tracked in [STATE.md](STATE.md).
