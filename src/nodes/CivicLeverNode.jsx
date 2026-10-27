@@ -8,6 +8,8 @@ export default function CivicLeverNode({ data }) {
       color: 'white',
       borderRadius: 8,
       minWidth: 180,
+      width: 200,
+      boxSizing: 'border-box',
       fontSize: 12
     }}>
       <Handle type="target" position={Position.Top} />
