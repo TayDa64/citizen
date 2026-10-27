@@ -51,22 +51,23 @@ Slice 3 (authoritative turns) — see below and [STATE.md](STATE.md) Phase 1.
 
 ### What works
 - Shared turn engine in `src/turnEngine.js` / `src/simulationCore.js` (effect order documented in the engine header).
-- TurnCommands: `set_tax`, `advance_turn`, `apply_trigger`, `remove_trigger`, `clear_triggers`.
-- Client Advance Month / tax slider dispatch through the engine (`src/turnCommands.js`, `src/App.jsx`).
+- TurnCommands: `set_tax`, `advance_turn`, `apply_trigger`, `remove_trigger`, `clear_triggers`, `hire_employee`.
+- Client Advance Month / tax slider / Hire (diagram node `3`) dispatch through the engine (`src/turnCommands.js`, `src/App.jsx`).
 - Migration `004_campaign_turns.sql` + `POST /api/campaigns`, `GET /api/campaigns/{id}`, `POST|GET /api/campaigns/{id}/turns` for atomic commit + reload.
 - Offline determinism tests under `src/turnEngine.test.js`; Postgres atomicity under `test/api/campaign-turns.api.js`.
+- First lifecycle hire: `hire_employee` appends to GameState roster, recomputes talent multiplier / burn preview; cash drains only on `advance_turn`.
 
 ### Invariants preserved
-- Node id `civic-tax`; Slice 1 burn baselines 2000 / 2200 / 2800; Slice 2 trigger → hype / talent → burn factor.
+- Node id `civic-tax`; Slice 1 burn baselines 2000 / 2200 / 2800 with no employees/triggers; Slice 2 trigger → hype / talent → burn factor.
 - `GET /api/companies` cash / burnRate are still never copied onto the client sim.
-- Campaign `TurnResult` is the write path for cash / burn history / tax / turn when a campaign is active.
-- No hire / funding / exit interactivity; no Firecrawl.
+- Campaign `TurnResult` is the write path for cash / burn history / tax / turn when a campaign is active; after hire it also owns the employee roster / talent mix.
+- No funding / exit / product-launch revenue / civic-infra interactivity; no Firecrawl.
 
 ### API dependency
 
-Live company and world-event data comes from Citizen API OpenAPI **0.8.0** (campaign turns + prior 0.7.1 talent fields). Trigger contract paths below still apply.
+Live company and world-event data comes from Citizen API OpenAPI **0.8.1** (hire TurnCommand + campaign turns + prior 0.7.1 talent fields). Trigger contract paths below still apply.
 
-**Authority boundary:** The companies service is the source of truth for hype, talent cost, baselines, and talent multiplier / mix / factors. `hydrateFromApi` / `readApiSnapshot` never copy `company.cash` or `company.burnRate` from the companies payload. Cash / burn history / tax / turn commit through the turn engine and, when connected, `POST /api/campaigns/{id}/turns`. Advance Month never POSTs to `/api/companies`.
+**Authority boundary:** The companies service is the source of truth for hype, talent cost, baselines, and (until a campaign hire) talent multiplier / mix / factors. After `hire_employee`, campaign GameState owns the roster. `hydrateFromApi` / `readApiSnapshot` never copy `company.cash` or `company.burnRate` from the companies payload. Cash / burn history / tax / turn / hire commit through the turn engine and, when connected, `POST /api/campaigns/{id}/turns`. Advance Month never POSTs to `/api/companies`.
 
 - `GET /api/triggers` and `POST /api/triggers` use `{ id, type, label, source, timestamp, effect: { hype?, talentCost? } }`. `type` is `news_spike`, `policy_change`, or `market_shift`. At least one effect is non-zero. Unknown top-level fields are rejected, so the client strips `appliedAtIndex` and any other client-only key before POST.
 - `effect.hype` is a finite absolute delta from -1 to 1. `effect.talentCost` is a finite relative delta from -100 to 100. Both allow at most 4 decimal places. The service trims `label` and `source` and stores `timestamp` with `Date#toISOString()`.
@@ -84,7 +85,19 @@ Live company and world-event data comes from Citizen API OpenAPI **0.8.0** (camp
 
 `APPLY_TALENT_COST_TO_BURN` in `src/talentMultiplier.js` is on. Trigger talent cost scales burn in local mode and API mode. `talentMultiplier` stays employee-only.
 
-OpenAPI **0.8.0** (campaign turns; builds on 0.7.1 talent fields from PR #6 / Slice 2 via PR #7) includes `talentCostFactor` and `effectiveMultiplier` on `GET /api/companies`, plus campaign GameState / TurnCommand routes. `talentMultiplier` remains employee-only. A 0.5.0 payload omits the new talent fields and the client computes them. Parsing stays in `src/talentMultiplier.js`. A missing Host is 400 `Host required`, two Host headers are 400 `Duplicate host`, and any other host is 403 `Forbidden host`. Those alerts keep the current numbers. Hype outside 0–1 and talent cost outside $0–$9,999,999,999.99 are clamped, and the status says so.
+OpenAPI **0.8.1** (hire_employee + campaign turns; builds on 0.8.0 / 0.7.1) includes `talentCostFactor` and `effectiveMultiplier` on `GET /api/companies`, plus campaign GameState / TurnCommand routes (`hire_employee` refreshes talent / burn preview without draining cash). `talentMultiplier` remains employee-only. A 0.5.0 payload omits the new talent fields and the client computes them. Parsing stays in `src/talentMultiplier.js`. A missing Host is 400 `Host required`, two Host headers are 400 `Duplicate host`, and any other host is 403 `Forbidden host`. Those alerts keep the current numbers. Hype outside 0–1 and talent cost outside $0–$9,999,999,999.99 are clamped, and the status says so.
+
+## Slice lifecycle hire (P0 business lifecycle — first PR)
+
+**Hire Staff on diagram node `3` is interactive through the turn engine.**
+
+### What works
+- TurnCommand `hire_employee` `{ department, skill? }` → append employee → recompute `talentMultiplier` / burn preview.
+- UI: Hire control on node `3` (`HireStaffNode`); Dashboard talent / burn update immediately; Advance Month cash path differs.
+- Campaign persist: same `POST /api/campaigns/{id}/turns` path (no parallel hire HTTP).
+
+### Explicit non-goals (still)
+Funding, exit, product launch revenue, civic-infra/regs, morale, Firecrawl, wiring unrelated edges as rules.
 
 ## Merge train
 

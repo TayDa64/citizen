@@ -10,9 +10,10 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import CivicLeverNode from './nodes/CivicLeverNode';
+import HireStaffNode from './nodes/HireStaffNode';
 import { triggerDiagramOverlay } from './triggers';
 
-const nodeTypes = { civicLever: CivicLeverNode };
+const nodeTypes = { civicLever: CivicLeverNode, hireStaff: HireStaffNode };
 
 // Default React Flow nodes use a light fill; App sets color:white on ancestors,
 // so labels need an explicit readable color (and fill) here.
@@ -35,7 +36,7 @@ const HYPE_NODE_STYLE = {
   border: '2px solid #fde68a',
 };
 
-function applyOverlayToNodes(nodes, taxRate, overlay) {
+function applyOverlayToNodes(nodes, taxRate, overlay, hireMeta = null) {
   const existingHype = nodes.find((node) => node.id === 'hype');
   let changed = false;
   const next = [];
@@ -45,6 +46,30 @@ function applyOverlayToNodes(nodes, taxRate, overlay) {
     if (node.id === 'civic-tax' && node.data.value !== taxRate) {
       changed = true;
       next.push({ ...node, data: { ...node.data, value: taxRate } });
+      continue;
+    }
+    if (node.id === '3' && hireMeta) {
+      // Hire node owns its readout + control; overlay aria still updates.
+      const headcountChanged = node.data.headcount !== hireMeta.headcount;
+      const multiplierChanged = node.data.talentMultiplier !== hireMeta.talentMultiplier;
+      const rosterChanged = node.data.rosterSummary !== hireMeta.rosterSummary;
+      const ariaLabel = overlay.nodeAriaLabels?.[node.id];
+      const ariaChanged = ariaLabel !== undefined && ariaLabel !== node.ariaLabel;
+      if (headcountChanged || multiplierChanged || rosterChanged || ariaChanged) {
+        changed = true;
+        next.push({
+          ...node,
+          ariaLabel: ariaLabel ?? node.ariaLabel,
+          data: {
+            ...node.data,
+            headcount: hireMeta.headcount,
+            talentMultiplier: hireMeta.talentMultiplier,
+            rosterSummary: hireMeta.rosterSummary,
+          },
+        });
+        continue;
+      }
+      next.push(node);
       continue;
     }
     const label = overlay.nodeLabels[node.id];
@@ -119,11 +144,25 @@ function applyOverlayToEdges(edges, overlay) {
   return changed ? next : edges;
 }
 
-export default function WorkflowDiagram({ state, setState, onTick }) {
+export default function WorkflowDiagram({ state, setState, onTick, onHire }) {
   const initialNodes = [
     { id: '1', type: 'input', data: { label: 'Found Startup\n(Citizen)' }, position: { x: 300, y: 0 }, style: DEFAULT_NODE_STYLE },
     { id: '2', data: { label: 'Choose Idea\n+ Target Market' }, position: { x: 300, y: 100 }, style: DEFAULT_NODE_STYLE },
-    { id: '3', data: { label: 'Hire Staff\n(Tech / Marketing / Sales)' }, position: { x: 80, y: 220 }, style: DEFAULT_NODE_STYLE },
+    {
+      id: '3',
+      type: 'hireStaff',
+      initialWidth: 200,
+      initialHeight: 140,
+      data: {
+        label: 'Hire Staff\n(Tech / Marketing / Sales)',
+        headcount: Array.isArray(state.employees) ? state.employees.length : 0,
+        talentMultiplier: state.talentMultiplier ?? 1,
+        rosterSummary: 'no employees',
+        onHire,
+      },
+      position: { x: 80, y: 220 },
+      style: DEFAULT_NODE_STYLE,
+    },
     { id: '4', data: { label: 'Assign Tasks\nDevelop Product' }, position: { x: 520, y: 220 }, style: DEFAULT_NODE_STYLE },
     { id: 'morale', data: { label: 'Employee Morale\n& Happiness' }, position: { x: 80, y: 340 }, style: STYLED_NODE.morale },
     { id: '5', data: { label: 'Real-World Triggers\n(Firecrawl + Events)' }, position: { x: 300, y: 360 }, style: STYLED_NODE.triggers },
@@ -192,10 +231,21 @@ export default function WorkflowDiagram({ state, setState, onTick }) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
-  // Keep the tax lever and any world-event labels in sync with simulation state.
+  // Keep the tax lever, hire readout, and world-event labels in sync.
   useEffect(() => {
     const overlay = triggerDiagramOverlay(state);
-    setNodes((nds) => applyOverlayToNodes(nds, state.taxRate, overlay));
+    const hireLines = String(overlay.nodeLabels?.[3] ?? '').split('\n');
+    const rosterSummary = hireLines.length >= 4
+      ? hireLines.slice(3).join('\n')
+      : (Array.isArray(state.employees) && state.employees.length > 0
+        ? `${state.employees.length} employee${state.employees.length === 1 ? '' : 's'}`
+        : 'no employees');
+    const hireMeta = {
+      headcount: Array.isArray(state.employees) ? state.employees.length : 0,
+      talentMultiplier: state.talentMultiplier ?? 1,
+      rosterSummary,
+    };
+    setNodes((nds) => applyOverlayToNodes(nds, state.taxRate, overlay, hireMeta));
     setEdges((eds) => applyOverlayToEdges(eds, overlay));
   }, [
     state.taxRate,

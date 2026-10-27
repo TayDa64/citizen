@@ -87,23 +87,39 @@ export function baselineBurnRate(state) {
   return taxOnlyBurnRate(state.taxRate);
 }
 
-export function applyEffects(state) {
-  const next = structuredClone(state);
-  // API mode keeps the fetched multiplier, mix, employees, and any
-  // talentCostFactor or effectiveMultiplier. Burn changes with tax. An empty
-  // employee list must not reset the server multiplier. Those fields update
-  // on the next fetch. Local mode recomputes the employee multiplier only.
+function refreshTalentFromEmployees(state) {
+  const profile = composeTalentMultiplier({ employees: state.employees });
+  const next = state;
+  next.talentMultiplier = profile.talentMultiplier;
+  next.talentMix = profile.talentMix;
   if (next.dataSource !== 'api') {
-    const profile = composeTalentMultiplier({ employees: next.employees });
-    next.talentMultiplier = profile.talentMultiplier;
-    next.talentMix = profile.talentMix;
     next.talentCostFactor = null;
     next.effectiveMultiplier = null;
+  } else {
+    // Keep API talentCostFactor; clear cached effective so readers recompute.
+    next.effectiveMultiplier = null;
   }
-  next.company.talentMultiplier = next.talentMultiplier;
-  next.company.talentMix = next.talentMix;
+  next.company.talentMultiplier = profile.talentMultiplier;
+  next.company.talentMix = profile.talentMix;
   next.company.baseBurnRate = baselineBurnRate(next);
   next.company.burnRate = previewBurnRate(next);
+  return next;
+}
+
+export function applyEffects(state) {
+  const next = structuredClone(state);
+  // API mode keeps the fetched multiplier, mix, and any talentCostFactor.
+  // An empty (or mismatched) employee list must not reset the server
+  // multiplier — hire_employee writes talent fields explicitly. Local mode
+  // recomputes the employee multiplier only.
+  if (next.dataSource !== 'api') {
+    refreshTalentFromEmployees(next);
+  } else {
+    next.company.talentMultiplier = next.talentMultiplier;
+    next.company.talentMix = next.talentMix;
+    next.company.baseBurnRate = baselineBurnRate(next);
+    next.company.burnRate = previewBurnRate(next);
+  }
   next.company.cash = Math.max(0, next.company.cash - next.company.burnRate / 12);
   next.history.cash.push(Math.round(next.company.cash));
   next.history.burnRate.push(next.company.burnRate);
@@ -120,6 +136,39 @@ export function applyEffects(state) {
 
 export function setTaxRate(state, taxRate) {
   return { ...state, taxRate: Math.max(0, Math.min(1, taxRate)) };
+}
+
+const HIRE_DEPARTMENTS = Object.freeze(['tech', 'marketing', 'sales']);
+
+/**
+ * Append one employee and refresh talent multiplier / burn preview.
+ * Does not drain cash (same pattern as set_tax / triggers).
+ */
+export function hireEmployee(state, { department = 'tech', skill = 1, id = null } = {}) {
+  const dept = typeof department === 'string' ? department.trim().toLowerCase() : '';
+  if (!HIRE_DEPARTMENTS.includes(dept)) {
+    throw new TypeError(`department must be one of: ${HIRE_DEPARTMENTS.join(', ')}`);
+  }
+  const skillValue = Number(skill);
+  if (!Number.isFinite(skillValue)) {
+    throw new TypeError('skill must be a finite number');
+  }
+  const clampedSkill = Math.min(1, Math.max(0, skillValue));
+  const next = structuredClone(state);
+  if (!Array.isArray(next.employees)) next.employees = [];
+  const hireId = typeof id === 'string' && id.trim() !== ''
+    ? id.trim()
+    : `hire-${dept}-${next.employees.length + 1}`;
+  const employee = {
+    id: hireId,
+    department: dept,
+    isActive: true,
+  };
+  if (dept === 'tech') employee.skillTech = clampedSkill;
+  else if (dept === 'marketing') employee.skillMarketing = clampedSkill;
+  else employee.skillSales = clampedSkill;
+  next.employees = [...next.employees, employee];
+  return refreshTalentFromEmployees(next);
 }
 
 function cloneTriggerState(state) {
@@ -227,10 +276,23 @@ export function readApiSnapshot(prev, snapshot) {
     return storeTrigger(trigger, prior?.appliedAtIndex ?? index);
   });
 
-  const talentMultiplier = readTalentMultiplier(company.talentMultiplier);
-  const talentMix = readTalentMix(company.talentMix);
+  const apiEmployees = readProvidedEmployees(snapshot, company);
+  // Campaign GameState owns the roster after hire_employee. Do not wipe hires
+  // when refreshing companies/triggers.
+  const campaignOwnsRoster = Boolean(prev.campaignId)
+    && Array.isArray(prev.employees)
+    && prev.employees.length > 0;
+  const employees = campaignOwnsRoster ? prev.employees.map((row) => ({ ...row })) : apiEmployees;
+  const talentMultiplier = campaignOwnsRoster
+    ? readTalentMultiplier(prev.talentMultiplier)
+    : readTalentMultiplier(company.talentMultiplier);
+  const talentMix = campaignOwnsRoster
+    ? (Array.isArray(prev.talentMix) ? prev.talentMix.map((row) => ({ ...row })) : [])
+    : readTalentMix(company.talentMix);
   const talentCostFactor = readOptionalFactor(company.talentCostFactor, 'talentCostFactor');
-  const effectiveMultiplier = readOptionalFactor(company.effectiveMultiplier, 'effectiveMultiplier');
+  const effectiveMultiplier = campaignOwnsRoster
+    ? null
+    : readOptionalFactor(company.effectiveMultiplier, 'effectiveMultiplier');
   const talentCostFactorClamped = typeof company.talentCostFactorClamped === 'boolean'
     ? company.talentCostFactorClamped
     : null;
@@ -244,7 +306,7 @@ export function readApiSnapshot(prev, snapshot) {
       dataSource: 'api',
       baselines: { hype: baselineHypeReading.value, talentCost: baselineTalentReading.value },
       activeTriggers,
-      employees: readProvidedEmployees(snapshot, company),
+      employees,
       talentMultiplier,
       talentMix,
       talentCostFactor,

@@ -25,6 +25,7 @@ import {
   applyEffects as coreApplyEffects,
   applyTrigger as coreApplyTrigger,
   clearTriggers as coreClearTriggers,
+  hireEmployee as coreHireEmployee,
   removeTrigger as coreRemoveTrigger,
   setTaxRate as coreSetTaxRate,
 } from './simulationCore.js';
@@ -52,6 +53,16 @@ export function clearTriggers(state) {
   return applyTurnCommand(state, { type: 'clear_triggers' }).state;
 }
 
+/** Hire one employee; refreshes talent/burn preview, no cash drain. Prefer TurnCommand `hire_employee`. */
+export function hireEmployee(state, options = {}) {
+  return applyTurnCommand(state, {
+    type: 'hire_employee',
+    department: options.department ?? 'tech',
+    skill: options.skill ?? 1,
+    ...(options.id != null ? { id: options.id } : {}),
+  }).state;
+}
+
 /** Escape hatch for callers that need the pre-engine mutation only. */
 export const __core = {
   applyEffects: coreApplyEffects,
@@ -59,4 +70,5 @@ export const __core = {
   applyTrigger: coreApplyTrigger,
   removeTrigger: coreRemoveTrigger,
   clearTriggers: coreClearTriggers,
+  hireEmployee: coreHireEmployee,
 };
