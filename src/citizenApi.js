@@ -203,6 +203,16 @@ export function createCitizenApi({ fetchImpl = globalThis.fetch, baseUrl } = {})
         body: JSON.stringify({ scenario }),
       });
     },
+    /**
+     * Run the real-world pipeline (fixture by default) and persist active
+     * contract triggers. Same-id replace — no compounding.
+     */
+    ingestWorldEvents(body = { adapter: 'fixture', fixtureId: 'civic-wage-bulletin' }) {
+      return send('/api/triggers/ingest', {
+        method: 'POST',
+        body: JSON.stringify(body ?? {}),
+      });
+    },
     async deleteTrigger(id) {
       assertTriggerId(id);
       try {

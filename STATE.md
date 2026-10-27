@@ -45,11 +45,17 @@ Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/
 - Engine executes the rule on `set_tax`; `previewPathway` + TurnResult explanation
 - Diagram edge `ecivic-hype` derived from the registry (graph = view of the rule)
 
-### Phase 5 — Campaign turn ledger / replay (P1-1) — this PR
+### Phase 5 — Campaign turn ledger / replay (P1-1) — landed (PR #17)
 - Append-only ledger: command, applied effects, before/after metrics, explanations, turn/seq
 - Dual path: offline engine shaping + `GET /api/campaigns/{id}/turns` (turn_commits)
 - Dashboard Turn ledger panel; chart 24-month buffer remains display-only
 - OpenAPI **0.8.3**
+
+### Phase 6 — Real-world event pipeline (P1-2) — this PR
+- Observation → interpretation → validated TRIGGER_CONTRACT effect with provenance
+- Lifecycle: discovered/normalized → pending/active → expired|cleared; supersession without compounding
+- Fixture adapter (`civic-wage-bulletin`) + http_stub plug-in point; `POST /api/triggers/ingest`
+- OpenAPI **0.8.4**
 
 ## Next Highest-Priority Phases
 ### Phase 2 continued — Complete business lifecycle (P0)
@@ -57,17 +63,14 @@ Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/
 - Separate employee productivity from cost
 - Acceptance: player can form company → hire → build → launch → see revenue or insolvency
 
-### Phase 6 — Real-world event pipeline (P1)
-- Separate observation → interpretation → effect
-- Event lifecycle (discovered → active → expired)
-- Provenance retained
-- Acceptance: one live source produces a validated, replayable effect
+### Phase 7 — Executable causal graph (P1-3)
+- Rule registry is truth; React Flow is a view; unknown effect keys stay rejected
 
 ## Definition of Done for current slice
-A player can advance turns and see an append-only ledger of commands / effects / before-after metrics / explanations; reload via `GET .../turns` reproduces the ledger when the API is available; offline tests lock engine→ledger shaping; Slice 1/2 + hire + coherence + civic pathway invariants hold.
+Fixture (or http_stub) observations flow through observation → interpretation → contract-valid effect with lifecycle + provenance; supersession/clear never compound; apply/clear + campaign restack stay coherent; Slice 1/2 + hire + pathway + ledger invariants hold; OpenAPI 0.8.4 documents ingest.
 
 ## Open items
 - A1: resolved. Axe is 0 on 5f4f021.
 - P2-M1 (info): the down migration only reverts 003/002, so a full re-run after rollback fails at 001. (004 adds campaigns/turn_commits down.)
 
-Last updated: 2026-10-27, Phase 5 turn ledger off `main` @ `855211f`.
+Last updated: 2026-10-27, Phase 6 real-world pipeline off `main` @ `aa9efd0`.

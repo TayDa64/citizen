@@ -192,7 +192,8 @@ button:focus-visible {
   color: #fef3c7;
 }
 
-.trigger-clear {
+.trigger-clear,
+.trigger-ingest {
   margin-top: 0.75rem;
   min-height: 44px;
   padding: 0.5rem 0.9rem;
@@ -200,10 +201,44 @@ button:focus-visible {
   color: #f8fafc;
   border: 1px solid #cbd5e1;
   border-radius: 10px;
+  font: inherit;
+  cursor: pointer;
 }
 
-.trigger-clear:hover {
+.trigger-clear:hover,
+.trigger-ingest:hover {
   background: #273549;
+}
+
+.trigger-ingest:disabled {
+  cursor: not-allowed;
+  border-style: dashed;
+}
+
+.trigger-pipeline {
+  margin-top: 0.85rem;
+}
+
+.trigger-pipeline__list {
+  margin: 0.55rem 0 0;
+  padding-left: 1.1rem;
+  color: #cbd5e1;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  max-width: 72ch;
+}
+
+.trigger-pipeline__lifecycle {
+  display: inline-block;
+  min-width: 5.5rem;
+  font-weight: 700;
+  color: #fde68a;
+  text-transform: lowercase;
+}
+
+.trigger-pipeline__evidence,
+.trigger-pipeline__provenance {
+  color: #94a3b8;
 }
 
 .delta--up {
