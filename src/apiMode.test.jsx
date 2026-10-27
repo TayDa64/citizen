@@ -85,11 +85,19 @@ describe('authority boundary (API mode)', () => {
     expect(screen.getByText(/Burn\/mo: \$2,200/)).toBeInTheDocument();
 
     const mutating = calls.filter((call) => call.method !== 'GET');
-    expect(mutating.every((call) => String(call.path).includes('/api/triggers'))).toBe(true);
-    expect(mutating.some((call) => /cash|burn/i.test(String(call.body ?? '')))).toBe(false);
+    expect(
+      mutating.every((call) => {
+        const path = String(call.path);
+        return path.includes('/api/triggers') || path.includes('/api/campaigns');
+      }),
+    ).toBe(true);
+    expect(mutating.some((call) => call.method === 'POST' && String(call.path).endsWith('/api/companies'))).toBe(false);
+    // Companies payload cash:1 must never be written back; campaign seed may
+    // include the client-owned starting cash (15000), which is allowed.
+    expect(mutating.some((call) => /"cash"\s*:\s*1\b/.test(String(call.body ?? '')))).toBe(false);
   });
 
-  test('Advance Month drains local cash and never POSTs cash or companies', async () => {
+  test('Advance Month drains cash via turn engine and never copies companies cash', async () => {
     vi.stubEnv('VITE_CITIZEN_API', 'http://127.0.0.1:8787');
     const calls = [];
     vi.stubGlobal('fetch', vi.fn(async (url, options = {}) => {
@@ -100,6 +108,7 @@ describe('authority boundary (API mode)', () => {
         return jsonResponse([{ ...apiCompany, cash: 1, burnRate: 9 }]);
       }
       if (path.endsWith('/api/triggers')) return jsonResponse([]);
+      // Campaign routes absent → local engine fallback (Slice 1/2 still playable).
       return jsonResponse({ error: 'Not found' }, 404);
     }));
 
@@ -111,9 +120,10 @@ describe('authority boundary (API mode)', () => {
 
     await user.click(screen.getByRole('button', { name: /advance month/i }));
     expect(screen.getByText(/Cash: \$14817/)).toBeInTheDocument();
-    expect(calls.slice(beforeCount)).toEqual([]);
-    expect(calls.every((call) => call.method === 'GET')).toBe(true);
-    expect(calls.some((call) => call.method === 'POST' && String(call.path).endsWith('/api/companies'))).toBe(false);
+    const after = calls.slice(beforeCount);
+    expect(after.every((call) => !String(call.path).endsWith('/api/companies') || call.method === 'GET')).toBe(true);
+    expect(after.some((call) => call.method === 'POST' && String(call.path).endsWith('/api/companies'))).toBe(false);
+    expect(after.some((call) => /"cash"\s*:\s*1/.test(String(call.body ?? '')))).toBe(false);
   });
 });
 

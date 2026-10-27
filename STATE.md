@@ -10,6 +10,8 @@
 
 Sequence complete. Post-merge regression on main 5f4f021: PASS (trace diag-20261026-8e1cd230), CI green.
 
+Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/Playwright. Tip for this work: `main` @ `a34f5be` (PR #11).
+
 **Rule:** Each PR must be green, rebased clean on main, and meet its acceptance criteria before the next is merged. Update this file after every merge.
 
 ## Invariants (must hold after every merge)
@@ -18,14 +20,17 @@ Sequence complete. Post-merge regression on main 5f4f021: PASS (trace diag-20261
 - Trigger talent-cost factor clamped 0.1×–3× and feeds burn
 - Slice 1 tax-to-burn base formula unchanged
 - Additive only; no breaking changes to existing schema or UI nodes
+- GET /api/companies cash/burnRate never copied onto the client sim
+- Same seed + TurnCommand sequence → same metrics (turn engine)
 
-## Next Highest-Priority Phases (after current sequence lands)
-### Phase 1 — Authoritative Game State (P0)
-- Versioned GameState, TurnCommand, TurnResult
-- Atomic turn commit on the server
+## Active phase
+### Phase 1 — Authoritative Game State (P0) — in progress
+- Versioned GameState, TurnCommand, TurnResult (`src/turnEngine.js`)
+- Atomic turn commit on the server (`migrations/004_campaign_turns.sql`, `server/campaigns.js`)
 - Campaign save/reload/replay with deterministic seed
-- Acceptance: reload reproduces last committed state; failed commit leaves no partial state
+- Acceptance: reload reproduces last committed state; failed commit leaves no partial state; offline engine determinism under `npm test`
 
+## Next Highest-Priority Phases (after Phase 1 lands)
 ### Phase 2 — Complete one business lifecycle (P0)
 - Hiring, product development, launch, funding, runway, exit as real mechanics
 - Separate employee productivity from cost
@@ -43,10 +48,10 @@ Sequence complete. Post-merge regression on main 5f4f021: PASS (trace diag-20261
 - Acceptance: one live source produces a validated, replayable effect
 
 ## Definition of Done for current slice
-A player can change the tax lever, advance months, see type-weighted talent + clamped trigger effects on burn and cash, clear events, reload, and still match the Slice 1 baseline when no employees or triggers are present.
+A player can change the tax lever, advance months through the turn engine, see type-weighted talent + clamped trigger effects on burn and cash, clear events, reload a committed campaign when the API is up, and still match the Slice 1 baseline when no employees or triggers are present.
 
 ## Open items
 - A1: resolved. Axe is 0 on 5f4f021.
-- P2-M1 (info): the down migration only reverts 003/002, so a full re-run after rollback fails at 001.
+- P2-M1 (info): the down migration only reverts 003/002, so a full re-run after rollback fails at 001. (004 adds campaigns/turn_commits down.)
 
-Last updated: 2026-10-27, main `5f70182` (PR #7 merged), merge sequence complete.
+Last updated: 2026-10-27, Phase 1 authoritative turns in progress off `main` @ `a34f5be`.

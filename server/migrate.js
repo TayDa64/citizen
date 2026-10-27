@@ -43,10 +43,12 @@ export async function applyMigration(client, filePath, direction) {
 export const UP_MIGRATIONS = Object.freeze([
   'migrations/001_initial_schema.sql',
   'migrations/002_real_world_trigger_effects.sql',
-  'migrations/003_trigger_contract_v1.sql'
+  'migrations/003_trigger_contract_v1.sql',
+  'migrations/004_campaign_turns.sql'
 ]);
 
 export const DOWN_MIGRATIONS = Object.freeze([
+  'migrations/004_campaign_turns.sql',
   'migrations/003_trigger_contract_v1.sql',
   'migrations/002_real_world_trigger_effects.sql'
 ]);

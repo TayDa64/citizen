@@ -18,7 +18,6 @@ import {
   skippedTriggerAlert,
 } from './citizenApi';
 import {
-  applyEffects,
   applyTrigger,
   clearTriggers,
   initialState,
@@ -27,6 +26,7 @@ import {
 } from './simulation';
 import { CLEARED_ANNOUNCEMENT, announceTrigger, composeLiveAnnouncement } from './triggers';
 import { effectiveBurnRate, talentCostFactorClampOf } from './talentMultiplier';
+import { applyCommandsLocally, dispatchTurnCommands } from './turnCommands';
 
 function removalBlockedMessage(error, label) {
   const hostAlert = hostHeaderAlert(error);
@@ -72,13 +72,65 @@ function App() {
   const [sourceBusy, setSourceBusy] = useState(Boolean(configuredBase));
   const [actionError, setActionError] = useState('');
   const [apiBase, setApiBase] = useState(configuredBase);
+  const campaignIdRef = useRef(null);
 
   const showSampleData = (note) => {
     setState(initialState);
     stateRef.current = initialState;
     setApiBase(null);
+    campaignIdRef.current = null;
     setSourceNote(note);
     setActionError('');
+  };
+
+  const ensureCampaign = async (baseUrl, simState) => {
+    try {
+      const api = createCitizenApi({ baseUrl });
+      const created = await api.createCampaign({
+        seed: simState.seed ?? 'ui-default',
+        state: {
+          taxRate: simState.taxRate,
+          turn: simState.turn ?? 0,
+          company: {
+            cash: simState.company.cash,
+            burnRate: simState.company.burnRate,
+            hype: simState.company.hype,
+            productQuality: simState.company.productQuality,
+            talentCost: simState.company.talentCost,
+          },
+          history: simState.history,
+          baselines: simState.baselines,
+          activeTriggers: [],
+        },
+      });
+      if (created?.id) {
+        campaignIdRef.current = created.id;
+        return created.id;
+      }
+    } catch {
+      campaignIdRef.current = null;
+    }
+    return null;
+  };
+
+  const commitCommands = (commands) => {
+    const prev = stateRef.current;
+    // Local engine stays synchronous so tax slider / Advance Month update
+    // immediately (Slice 1/2 UX + existing UI tests). Campaign API is async.
+    if (!apiBase || !campaignIdRef.current) {
+      const local = applyCommandsLocally(prev, commands);
+      setState(local.state);
+      stateRef.current = local.state;
+      return Promise.resolve({ state: local.state, mode: 'local', result: local.result });
+    }
+    return dispatchTurnCommands(prev, commands, {
+      api: createCitizenApi({ baseUrl: apiBase }),
+      campaignId: campaignIdRef.current,
+    }).then((dispatched) => {
+      setState(dispatched.state);
+      stateRef.current = dispatched.state;
+      return dispatched;
+    });
   };
 
   // Read the payload before setState. A throw inside an updater runs during
@@ -95,13 +147,16 @@ function App() {
   useEffect(() => {
     let cancelled = false;
     loadCitizenWorld()
-      .then((result) => {
+      .then(async (result) => {
         if (cancelled) return;
         if (result.mode === 'api' && result.snapshot) {
           try {
             const reading = commitSnapshot(result.snapshot);
             setApiBase(result.baseUrl);
             setActionError(reading.skipped > 0 ? skippedTriggerAlert(reading.skipped) : (result.alert || ''));
+            // Best-effort campaign for authoritative turns. Missing route/migration
+            // keeps Slice 1/2 playable on the local engine.
+            await ensureCampaign(result.baseUrl, stateRef.current);
           } catch (error) {
             if (error?.code === 'unreadable-company') {
               showSampleData(UNREADABLE_COMPANY_NOTE);
@@ -123,17 +178,22 @@ function App() {
     };
   }, []);
 
+  // Tax slider: set_tax then advance_turn through the turn engine (and campaign
+  // API when a campaign is active). Never copy GET /api/companies cash/burn.
   const handleSetState = (updater) => {
-    setState((prev) => {
-      const next = typeof updater === 'function' ? updater(prev) : updater;
-      return applyEffects(next);
-    });
+    const prev = stateRef.current;
+    const patched = typeof updater === 'function' ? updater(prev) : updater;
+    const taxRate = patched?.taxRate;
+    void commitCommands([
+      { type: 'set_tax', taxRate },
+      { type: 'advance_turn' },
+    ]);
   };
 
-  // Advance Month is client-only: applyEffects drains local cash/burn history.
-  // Never POST cash or burn to the Citizen service (authority boundary).
+  // Advance Month via TurnCommand. Uses campaign commit when connected;
+  // otherwise the local deterministic engine. Never POSTs to /api/companies.
   const onTick = () => {
-    setState((prev) => applyEffects(prev));
+    void commitCommands([{ type: 'advance_turn' }]);
   };
 
   const refreshApi = async (baseUrl) => {

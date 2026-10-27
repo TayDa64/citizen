@@ -1,11 +1,13 @@
 import { readTalentMix, readTalentMultiplier } from './talentMultiplier';
 import { TRIGGER_TYPES, assertTriggerId, assertValidTrigger } from './triggers';
 
-// HTTP client for world events + company read model.
-// Authority boundary: this module has no cash / burn write. Trigger create,
-// mock, delete, and clear only mutate world events; loadWorld re-reads
-// companies for hype / talent / baselines / talent mix. Client simulation
-// owns cash and Advance Month ticks (see simulation.js).
+// HTTP client for world events, company read model, and campaign turns.
+// Authority boundary:
+// - Trigger create/mock/delete/clear only mutate world events.
+// - loadWorld re-reads companies for hype / talent / baselines / talent mix.
+// - GET /api/companies cash/burnRate must never be copied onto the client sim.
+// - Campaign TurnResult (POST /api/campaigns/:id/turns) is the authoritative
+//   write path for cash, burn history, tax, and turn when a campaign is active.
 
 const TRIGGER_FIELDS = ['id', 'type', 'label', 'source', 'timestamp', 'effect'];
 const EFFECT_FIELDS = new Set(['hype', 'talentCost']);
@@ -211,6 +213,30 @@ export function createCitizenApi({ fetchImpl = globalThis.fetch, baseUrl } = {})
     },
     deleteTriggers() {
       return send('/api/triggers', { method: 'DELETE' });
+    },
+    createCampaign(body = {}) {
+      return send('/api/campaigns', { method: 'POST', body: JSON.stringify(body) });
+    },
+    getCampaign(id) {
+      if (typeof id !== 'string' || id.trim() === '') {
+        throw new TypeError('campaign id is required');
+      }
+      return send(`/api/campaigns/${encodeURIComponent(id)}`);
+    },
+    commitTurn(id, command) {
+      if (typeof id !== 'string' || id.trim() === '') {
+        throw new TypeError('campaign id is required');
+      }
+      return send(`/api/campaigns/${encodeURIComponent(id)}/turns`, {
+        method: 'POST',
+        body: JSON.stringify(command),
+      });
+    },
+    listTurns(id) {
+      if (typeof id !== 'string' || id.trim() === '') {
+        throw new TypeError('campaign id is required');
+      }
+      return send(`/api/campaigns/${encodeURIComponent(id)}/turns`);
     },
   };
 }

@@ -11,10 +11,17 @@ import {
   listTriggers
 } from './triggers.js';
 import {
+  commitTurn,
+  createCampaign,
+  getCampaign,
+  listTurnCommits
+} from './campaigns.js';
+import {
   mockTriggerPayload,
   TriggerValidationError,
   validateMockRequest
 } from '../src/triggerContract.js';
+import { TurnCommandError } from '../src/turnEngine.js';
 
 const MAX_BODY_BYTES = 16 * 1024;
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
@@ -168,10 +175,76 @@ async function handleRequest(req, res, pool) {
     sendJson(res, 201, await createTrigger(pool, parsed), origin);
     return;
   }
+
+  if (req.method === 'POST' && pathname === '/api/campaigns') {
+    const raw = await readBody(req);
+    const contentType = req.headers['content-type'] || '';
+    if (raw.trim() && !contentType.includes('application/json')) {
+      const error = new Error('Content-Type must be application/json');
+      error.status = 415;
+      throw error;
+    }
+    const parsed = raw.trim() ? parseJson(raw) : {};
+    sendJson(res, 201, await createCampaign(pool, parsed ?? {}), origin);
+    return;
+  }
+
+  const campaignPath = pathname.match(/^\/api\/campaigns\/([^/]+)$/);
+  if (req.method === 'GET' && campaignPath) {
+    let id;
+    try {
+      id = decodeURIComponent(campaignPath[1]);
+    } catch {
+      const error = new Error('Invalid campaign id');
+      error.status = 400;
+      error.issues = [{ path: 'id', code: 'invalid_value', message: 'id is not valid URL encoding' }];
+      throw error;
+    }
+    sendJson(res, 200, await getCampaign(pool, id), origin);
+    return;
+  }
+
+  const campaignTurnsPath = pathname.match(/^\/api\/campaigns\/([^/]+)\/turns$/);
+  if (campaignTurnsPath) {
+    let id;
+    try {
+      id = decodeURIComponent(campaignTurnsPath[1]);
+    } catch {
+      const error = new Error('Invalid campaign id');
+      error.status = 400;
+      error.issues = [{ path: 'id', code: 'invalid_value', message: 'id is not valid URL encoding' }];
+      throw error;
+    }
+    if (req.method === 'GET') {
+      sendJson(res, 200, await listTurnCommits(pool, id), origin);
+      return;
+    }
+    if (req.method === 'POST') {
+      const raw = await readBody(req);
+      const contentType = req.headers['content-type'] || '';
+      if (!contentType.includes('application/json')) {
+        const error = new Error('Content-Type must be application/json');
+        error.status = 415;
+        throw error;
+      }
+      const parsed = parseJson(raw);
+      try {
+        sendJson(res, 201, await commitTurn(pool, id, parsed), origin);
+      } catch (error) {
+        if (error instanceof TurnCommandError) throw error;
+        throw error;
+      }
+      return;
+    }
+  }
+
   if (
     pathname === '/api/triggers' ||
     pathname === '/api/triggers/mock' ||
-    pathname === '/api/companies'
+    pathname === '/api/companies' ||
+    pathname === '/api/campaigns' ||
+    /^\/api\/campaigns\/[^/]+$/.test(pathname) ||
+    /^\/api\/campaigns\/[^/]+\/turns$/.test(pathname)
   ) {
     sendJson(res, 405, { error: 'Method not allowed', issues: [] }, origin);
     return;
