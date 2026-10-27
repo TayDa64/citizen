@@ -33,6 +33,90 @@ function jsonResponse(body, status = 200) {
   };
 }
 
+describe('authority boundary (API mode)', () => {
+  test('hydrate ignores payload cash/burn; apply and clear leave client cash unchanged', async () => {
+    vi.stubEnv('VITE_CITIZEN_API', 'http://127.0.0.1:8787');
+    const calls = [];
+    let triggers = [];
+    let talentCost = 4000;
+    vi.stubGlobal('fetch', vi.fn(async (url, options = {}) => {
+      const path = String(url);
+      const method = options.method || 'GET';
+      calls.push({ path, method, body: options.body });
+      if (method === 'POST' && path.endsWith('/api/triggers/mock')) {
+        triggers = [policy];
+        talentCost = 4480;
+        return jsonResponse(policy, 201);
+      }
+      if (method === 'DELETE' && path.endsWith('/api/triggers')) {
+        triggers = [];
+        talentCost = 4000;
+        return { ok: true, status: 204, json: async () => null };
+      }
+      if (path.endsWith('/api/companies')) {
+        return jsonResponse([{
+          ...apiCompany,
+          cash: 1,
+          burnRate: 9,
+          talentCost,
+          baselines: { hype: 0.3, talentCost: 4000 },
+        }]);
+      }
+      if (path.endsWith('/api/triggers')) return jsonResponse(triggers);
+      return jsonResponse({ error: 'Not found' }, 404);
+    }));
+
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByRole('status', { name: /citizen service/i });
+    expect(screen.getByText(/Cash: \$15000/)).toBeInTheDocument();
+    expect(screen.getByText(/Burn\/mo: \$2,200/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /^Policy change / }));
+    await screen.findByRole('region', { name: 'World event effect' });
+    expect(screen.getByText(/Cash: \$15000/)).toBeInTheDocument();
+    expect(screen.getByText(/Burn\/mo: \$2,464/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Clear world events' }));
+    expect(within(screen.getByRole('region', { name: 'World events' })).getByRole('status')).toHaveTextContent(
+      'World events cleared. Hype and talent cost returned to baseline.'
+    );
+    expect(screen.getByText(/Cash: \$15000/)).toBeInTheDocument();
+    expect(screen.getByText(/Burn\/mo: \$2,200/)).toBeInTheDocument();
+
+    const mutating = calls.filter((call) => call.method !== 'GET');
+    expect(mutating.every((call) => String(call.path).includes('/api/triggers'))).toBe(true);
+    expect(mutating.some((call) => /cash|burn/i.test(String(call.body ?? '')))).toBe(false);
+  });
+
+  test('Advance Month drains local cash and never POSTs cash or companies', async () => {
+    vi.stubEnv('VITE_CITIZEN_API', 'http://127.0.0.1:8787');
+    const calls = [];
+    vi.stubGlobal('fetch', vi.fn(async (url, options = {}) => {
+      const path = String(url);
+      const method = options.method || 'GET';
+      calls.push({ path, method, body: options.body });
+      if (path.endsWith('/api/companies')) {
+        return jsonResponse([{ ...apiCompany, cash: 1, burnRate: 9 }]);
+      }
+      if (path.endsWith('/api/triggers')) return jsonResponse([]);
+      return jsonResponse({ error: 'Not found' }, 404);
+    }));
+
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByRole('status', { name: /citizen service/i });
+    const beforeCount = calls.length;
+    expect(screen.getByText(/Cash: \$15000/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /advance month/i }));
+    expect(screen.getByText(/Cash: \$14817/)).toBeInTheDocument();
+    expect(calls.slice(beforeCount)).toEqual([]);
+    expect(calls.every((call) => call.method === 'GET')).toBe(true);
+    expect(calls.some((call) => call.method === 'POST' && String(call.path).endsWith('/api/companies'))).toBe(false);
+  });
+});
+
 describe('API talent cost display', () => {
   test('shows the policy sample as $4,480 and a +12% delta from the company baseline', () => {
     const state = hydrateFromApi(initialState, { company: apiCompany, triggers: [] });

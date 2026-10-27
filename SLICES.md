@@ -29,11 +29,11 @@ Slice 2 landed on `main` (PRs #1–#6). See **Next suggested slice** under Slice
 - The dashboard draws a dashed Highcharts plot line and band at the trigger month, with a before/after hype and talent-cost readout.
 - World-event buttons are keyboard operable and announce the effect in an `aria-live="polite"` region.
 
-### Acceptance (Brainiac)
-- [ ] Mock trigger (`SAMPLE_TRIGGERS` / `source: mock:local`) updates `company.hype` and/or talent cost via data-driven effects.
-- [ ] Change appears on React Flow node `5` (and related overlay) and in the Dashboard readout/chart markers.
-- [ ] Node id `civic-tax` still present; with no world event, tax → burn matches Slice 1 (2200 at 25% tax).
-- [ ] Local test steps below still pass.
+### Acceptance (Brainiac) — verified; PR #7 merged
+- [x] Mock trigger (`SAMPLE_TRIGGERS` / `source: mock:local`) updates `company.hype` and/or talent cost via data-driven effects.
+- [x] Change appears on React Flow node `5` (and related overlay) and in the Dashboard readout/chart markers.
+- [x] Node id `civic-tax` still present; with no world event, tax → burn matches Slice 1 (2200 at 25% tax).
+- [x] Local test steps below still pass.
 
 ### Local test
 ```bash
@@ -48,7 +48,9 @@ Authoritative game state (versioned GameState / turn commit) — see [STATE.md](
 
 ### API dependency
 
-Live company and world-event data comes from Citizen API OpenAPI 0.4.0 on PR #2 (`003_trigger_contract_v1`, head `7efcba4b`).
+Live company and world-event data comes from Citizen API OpenAPI **0.7.1** (PR #6 talent fields + clamp; PR #2 `003_trigger_contract_v1`; Slice 2 checklist PR #7). Contract paths and trigger shape below still apply.
+
+**Authority boundary:** The service is the source of truth for hype, talent cost, baselines, and talent multiplier / mix / factors. Cash and simulation burn stay on the client. `hydrateFromApi` / `readApiSnapshot` never copy `company.cash` or `company.burnRate` from the payload. Advance Month ticks never POST cash.
 
 - `GET /api/triggers` and `POST /api/triggers` use `{ id, type, label, source, timestamp, effect: { hype?, talentCost? } }`. `type` is `news_spike`, `policy_change`, or `market_shift`. At least one effect is non-zero. Unknown top-level fields are rejected, so the client strips `appliedAtIndex` and any other client-only key before POST.
 - `effect.hype` is a finite absolute delta from -1 to 1. `effect.talentCost` is a finite relative delta from -100 to 100. Both allow at most 4 decimal places. The service trims `label` and `source` and stores `timestamp` with `Date#toISOString()`.
@@ -66,7 +68,7 @@ Live company and world-event data comes from Citizen API OpenAPI 0.4.0 on PR #2 
 
 `APPLY_TALENT_COST_TO_BURN` in `src/talentMultiplier.js` is on. Trigger talent cost scales burn in local mode and API mode. `talentMultiplier` stays employee-only.
 
-OpenAPI 0.6.0 (PR #6, not pushed yet) adds `talentCostFactor` and `effectiveMultiplier` on `GET /api/companies`. `talentMultiplier` remains employee-only. A 0.5.0 payload omits the new fields and the client computes them. Parsing stays in `src/talentMultiplier.js`. A missing Host is 400 `Host required`, two Host headers are 400 `Duplicate host`, and any other host is 403 `Forbidden host`. Those alerts keep the current numbers. Hype outside 0–1 and talent cost outside $0–$9,999,999,999.99 are clamped, and the status says so.
+OpenAPI **0.7.1** (PR #6 merged; Slice 2 complete via PR #7) includes `talentCostFactor` and `effectiveMultiplier` on `GET /api/companies`. `talentMultiplier` remains employee-only. A 0.5.0 payload omits the new fields and the client computes them. Parsing stays in `src/talentMultiplier.js`. A missing Host is 400 `Host required`, two Host headers are 400 `Duplicate host`, and any other host is 403 `Forbidden host`. Those alerts keep the current numbers. Hype outside 0–1 and talent cost outside $0–$9,999,999,999.99 are clamped, and the status says so.
 
 ## Merge train
 

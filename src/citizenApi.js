@@ -1,6 +1,12 @@
 import { readTalentMix, readTalentMultiplier } from './talentMultiplier';
 import { TRIGGER_TYPES, assertTriggerId, assertValidTrigger } from './triggers';
 
+// HTTP client for world events + company read model.
+// Authority boundary: this module has no cash / burn write. Trigger create,
+// mock, delete, and clear only mutate world events; loadWorld re-reads
+// companies for hype / talent / baselines / talent mix. Client simulation
+// owns cash and Advance Month ticks (see simulation.js).
+
 const TRIGGER_FIELDS = ['id', 'type', 'label', 'source', 'timestamp', 'effect'];
 const EFFECT_FIELDS = new Set(['hype', 'talentCost']);
 

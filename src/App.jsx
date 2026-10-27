@@ -130,6 +130,8 @@ function App() {
     });
   };
 
+  // Advance Month is client-only: applyEffects drains local cash/burn history.
+  // Never POST cash or burn to the Citizen service (authority boundary).
   const onTick = () => {
     setState((prev) => applyEffects(prev));
   };

@@ -6,8 +6,13 @@
 // Burn is round(baseBurnRate * talentMultiplier * talentCostFactor), once.
 // talentMultiplier is employee-only and is not clamped. talentCostFactor is
 // round4(clamp(talentCost / baselines.talentCost, 0.1, 3)).
-// The service is the source of truth for hype, talentCost, baselines, and
-// talentMultiplier. Cash and burn stay on the client simulation.
+//
+// Authority boundary (dual-owner until GameState / turns):
+// - API owns: hype, talentCost, baselines, talentMultiplier / mix / factors.
+// - Client owns: cash, simulation burnRate, taxRate, history, Advance Month.
+// - readApiSnapshot / hydrateFromApi never copy company.cash or company.burnRate
+//   from the payload; ticks (applyEffects) never POST cash to the service.
+//
 // `appliedAtIndex` on an active trigger is client runtime for the chart, not
 // part of the RealWorldTrigger payload in triggers.js.
 
@@ -222,6 +227,8 @@ export function readApiSnapshot(prev, snapshot) {
     : null;
   const resolvedHype = hype ?? baselineHypeReading.value;
   const resolvedTalent = talentCost ?? baselineTalentReading.value;
+  // Keep client cash / burnRate / productQuality / history. Ignore any
+  // company.cash or company.burnRate on the API payload (authority boundary).
   return {
     state: {
       ...prev,
@@ -236,6 +243,8 @@ export function readApiSnapshot(prev, snapshot) {
       effectiveMultiplier,
       company: {
         ...prev.company,
+        cash: prev.company.cash,
+        burnRate: prev.company.burnRate,
         hype: resolvedHype,
         talentCost: resolvedTalent,
         talentMultiplier,
