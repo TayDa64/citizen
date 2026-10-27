@@ -13,6 +13,7 @@ import {
   emptyPipelineRegistry,
   ingestObservationsIntoRegistry,
 } from '../src/eventPipeline.js';
+import { stampTriggerJurisdictions } from '../src/jurisdictionNest.js';
 import { TriggerValidationError } from '../src/triggerContract.js';
 import { createTrigger } from './triggers.js';
 
@@ -218,6 +219,8 @@ export async function ingestAndPersist(pool, request) {
       stored.push(await createTrigger(pool, trigger));
     }
     const triggerClientIds = stored.map((trigger) => trigger.id);
+    // CIT-80: stamp known fixture jurisdictions (wage → mv) without contract change.
+    await stampTriggerJurisdictions(pool, triggerClientIds);
     await insertIngestRun(pool, {
       startedAt,
       finishedAt: new Date(),
