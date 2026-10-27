@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react';
 import { Chart, Title } from '@highcharts/react';
 import { LineSeries } from '@highcharts/react/series/Line';
 import {
+  CIVIC_HYPE_PATHWAY_ID,
   computeCivicFromTax,
   formatBudgetHeadroom,
   formatHypeBias,
 } from '../civicFeedback';
+import { PATHWAY_BUDGET_HEADROOM_TO_HYPE, previewPathway } from '../pathways';
 import { talentCostShowsDollars } from '../dataSource';
 import { BASE_TALENT_COST, previewBurnRate } from '../simulation';
 import {
@@ -119,11 +121,18 @@ function TalentBurnSummary({ state }) {
 
 function CivicFeedbackReadout({ state }) {
   const civic = state.civic ?? computeCivicFromTax(state.taxRate);
+  const pathway = PATHWAY_BUDGET_HEADROOM_TO_HYPE;
+  const preview = previewPathway(pathway, state, state.taxRate);
   return (
     <section className="civic-feedback" aria-labelledby="civic-feedback-heading">
       <h3 id="civic-feedback-heading">Civic feedback</h3>
       <p>
-        Tax moves city budget headroom; headroom folds into company hype (bias 0 at 25% tax so tax-only burn baselines stay put).
+        Tax moves city budget headroom; registered pathway{' '}
+        <code data-testid="civic-pathway-id">{CIVIC_HYPE_PATHWAY_ID}</code>
+        {' '}folds headroom into company hype (bias 0 at 25% tax so tax-only burn baselines stay put).
+      </p>
+      <p data-testid="civic-pathway-preview" className="civic-feedback__preview">
+        Pathway preview: {preview.summary}
       </p>
       <dl className="civic-feedback__stats">
         <ReadoutRow

@@ -11,6 +11,11 @@ import {
 import '@xyflow/react/dist/style.css';
 import CivicLeverNode from './nodes/CivicLeverNode';
 import HireStaffNode from './nodes/HireStaffNode';
+import {
+  PATHWAY_BUDGET_HEADROOM_TO_HYPE,
+  diagramEdgeFromPathway,
+  pathwayDiagramOverlay,
+} from './pathways';
 import { triggerDiagramOverlay } from './triggers';
 
 const nodeTypes = { civicLever: CivicLeverNode, hireStaff: HireStaffNode };
@@ -35,6 +40,17 @@ const HYPE_NODE_STYLE = {
   color: '#f8fafc',
   border: '2px solid #fde68a',
 };
+
+function mergeHypeOverlay(triggerOverlay, pathwayOverlay) {
+  // Pathway always owns a hype endpoint; trigger overlay may refine the label.
+  if (triggerOverlay?.hypeNode) {
+    return {
+      ...triggerOverlay.hypeNode,
+      fromPathway: pathwayOverlay.hypeNode.fromPathway,
+    };
+  }
+  return pathwayOverlay.hypeNode;
+}
 
 function applyOverlayToNodes(nodes, taxRate, overlay, hireMeta = null, civicMeta = null) {
   const existingHype = nodes.find((node) => node.id === 'hype');
@@ -125,14 +141,16 @@ function applyOverlayToNodes(nodes, taxRate, overlay, hireMeta = null, civicMeta
   return changed ? next : nodes;
 }
 
-function applyOverlayToEdges(edges, overlay) {
+function applyOverlayToEdges(edges, overlay, pathwayOverlay = null, triggerHypeEdge = null) {
   const existingHype = edges.find((edge) => edge.id === 'e5-hype');
+  const pathwayEdgeId = PATHWAY_BUDGET_HEADROOM_TO_HYPE.diagram.edgeId;
   let changed = false;
   const next = [];
 
   for (const edge of edges) {
     if (edge.id === 'e5-hype') continue;
-    const label = overlay.edgeLabels[edge.id];
+    const pathwayLabel = pathwayOverlay?.edgeLabels?.[edge.id];
+    const label = pathwayLabel ?? overlay.edgeLabels[edge.id];
     if (label !== undefined && label !== edge.label) {
       changed = true;
       next.push({ ...edge, label });
@@ -141,8 +159,28 @@ function applyOverlayToEdges(edges, overlay) {
     next.push(edge);
   }
 
-  if (overlay.hypeNode) {
-    const label = overlay.hypeNode.edgeLabel;
+  // Pathway edge is always present (derived from registry); refresh label.
+  if (pathwayOverlay?.edgeLabels?.[pathwayEdgeId]) {
+    const pathwayLabel = pathwayOverlay.edgeLabels[pathwayEdgeId];
+    const idx = next.findIndex((edge) => edge.id === pathwayEdgeId);
+    if (idx >= 0) {
+      if (next[idx].label !== pathwayLabel) {
+        changed = true;
+        next[idx] = { ...next[idx], label: pathwayLabel };
+      }
+    } else {
+      changed = true;
+      next.push(
+        diagramEdgeFromPathway(PATHWAY_BUDGET_HEADROOM_TO_HYPE, {
+          label: pathwayLabel,
+        }),
+      );
+    }
+  }
+
+  // Trigger→hype edge only when world events move hype (separate from pathway).
+  if (triggerHypeEdge) {
+    const label = triggerHypeEdge.edgeLabel;
     if (!existingHype || existingHype.label !== label) changed = true;
     next.push(
       existingHype
@@ -228,6 +266,9 @@ export default function WorkflowDiagram({ state, setState, onTick, onHire }) {
     labelBgBorderRadius: 4,
   };
 
+  // Pathway edge is derived from the rule registry (not a parallel hardcode).
+  const pathwayEdge = diagramEdgeFromPathway(PATHWAY_BUDGET_HEADROOM_TO_HYPE, civicEdgeLabel);
+
   const initialEdges = [
     { id: 'e1-2', source: '1', target: '2', animated: true },
     { id: 'e2-3', source: '2', target: '3' },
@@ -241,6 +282,8 @@ export default function WorkflowDiagram({ state, setState, onTick, onHire }) {
     { id: 'e5-civic-reg', source: '5', target: 'civic-reg' },
     { id: 'efunding-7', source: 'funding', target: '7' },
     { id: 'etax-7', source: 'civic-tax', target: '7', label: 'burn rate', ...civicEdgeLabel },
+    // Typed civic↔hype pathway (engine rule → diagram view).
+    pathwayEdge,
     { id: 'einfra-7', source: 'civic-infra', target: '7', label: 'talent cost', ...civicEdgeLabel },
     { id: 'ereg-7', source: 'civic-reg', target: '7', label: 'compliance', ...civicEdgeLabel },
     { id: 'e7-8', source: '7', target: '8' },
@@ -250,9 +293,15 @@ export default function WorkflowDiagram({ state, setState, onTick, onHire }) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
-  // Keep the tax lever, hire readout, civic metric, and world-event labels in sync.
+  // Keep the tax lever, hire readout, civic metric, pathway edge, and world-event labels in sync.
   useEffect(() => {
-    const overlay = triggerDiagramOverlay(state);
+    const triggerOverlay = triggerDiagramOverlay(state);
+    const pathwayOverlay = pathwayDiagramOverlay(state);
+    const overlay = {
+      ...triggerOverlay,
+      // Pathway always supplies a hype endpoint; triggers may refine the label.
+      hypeNode: mergeHypeOverlay(triggerOverlay, pathwayOverlay),
+    };
     const hireLines = String(overlay.nodeLabels?.[3] ?? '').split('\n');
     const rosterSummary = hireLines.length >= 4
       ? hireLines.slice(3).join('\n')
@@ -269,7 +318,12 @@ export default function WorkflowDiagram({ state, setState, onTick, onHire }) {
       hypeBias: state.civic?.hypeBias,
     };
     setNodes((nds) => applyOverlayToNodes(nds, state.taxRate, overlay, hireMeta, civicMeta));
-    setEdges((eds) => applyOverlayToEdges(eds, overlay));
+    setEdges((eds) => applyOverlayToEdges(
+      eds,
+      overlay,
+      pathwayOverlay,
+      triggerOverlay.hypeNode,
+    ));
   }, [
     state.taxRate,
     state.civic?.budgetHeadroom,

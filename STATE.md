@@ -46,9 +46,10 @@ Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/
 - Separate employee productivity from cost
 - Acceptance: player can form company → hire → build → launch → see revenue or insolvency
 
-### Phase 4 — Connect civic ↔ business pathways (P0-5)
-- One typed rule linking civic metric ↔ company field in the turn engine
-- Preview before commit / explanation after
+### Phase 4 — Connect civic ↔ business pathways (P0-5) — this PR
+- Typed rule registry in `src/pathways.js` (`pathway.budgetHeadroom→company.hype`)
+- Engine executes the rule on `set_tax`; `previewPathway` + TurnResult explanation
+- Diagram edge `ecivic-hype` derived from the registry (graph = view of the rule)
 
 ### Phase 5 — Real-world event pipeline (P1)
 - Separate observation → interpretation → effect
@@ -57,10 +58,10 @@ Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/
 - Acceptance: one live source produces a validated, replayable effect
 
 ## Definition of Done for current slice
-A player can change tax, see city `budgetHeadroom` move, see company hype move by the civic bias in the same `set_tax` TurnCommand, keep Slice 1 burn baselines (2000 / 2200 / 2800), keep hire on node `3` working, and see headroom + hype on Dashboard / diagram.
+A player can change tax, the registered pathway moves `budgetHeadroom` → company hype on the committed turn path, preview/explanation name the pathway id, the diagram shows edge `ecivic-hype` from that rule, Slice 1 burn baselines (2000 / 2200 / 2800) hold, hire + trigger coherence + authority boundary stay green.
 
 ## Open items
 - A1: resolved. Axe is 0 on 5f4f021.
 - P2-M1 (info): the down migration only reverts 003/002, so a full re-run after rollback fails at 001. (004 adds campaigns/turn_commits down.)
 
-Last updated: 2026-10-27, Phase 3 civic feedback off `main` @ `1fd81ac`.
+Last updated: 2026-10-27, Phase 4 pathways off `main` @ `7adfce6`.

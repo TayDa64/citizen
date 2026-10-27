@@ -118,7 +118,20 @@ company.hype   = clamp(stackedTriggerHype + hypeBias)
 - Campaign merge rebases API hype with the new civic bias when tax commits.
 
 ### Explicit non-goals
-Funding / exit / Firecrawl; full civic-infra / civic-reg levers; large civic sim; typed pathway registry (P0-5).
+Funding / exit / Firecrawl; full civic-infra / civic-reg levers; large civic sim.
+
+## Slice connect pathways (P0-5 — typed civic↔business rule)
+
+**One registered pathway links a civic metric to a company field; the turn engine executes it; the diagram edge is a view of the rule.**
+
+### Registry (`src/pathways.js`)
+- Id: `pathway.budgetHeadroom→company.hype`
+- Source: `civic.budgetHeadroom` → target: `company.hype` via `linear_bias` (neutral 0.75, scale 0.2)
+- Diagram edge `ecivic-hype` (`civic-tax` → `hype`) derived from the rule
+- `previewPathway` before commit; TurnResult `pathwayPreview` + `pathway.civic_hype` effect after
+
+### Explicit non-goals
+Funding / exit / Firecrawl; multi-rule causal graph (P1); civic-infra / civic-reg as interactive levers.
 
 ## Merge train
 
