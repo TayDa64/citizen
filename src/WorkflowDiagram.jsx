@@ -14,8 +14,9 @@ import HireStaffNode from './nodes/HireStaffNode';
 import {
   PATHWAY_BUDGET_HEADROOM_TO_HYPE,
   diagramEdgeFromPathway,
-  pathwayDiagramOverlay,
-} from './pathways';
+  staticDiagramEdgesFromRegistry,
+} from './causalGraph';
+import { pathwayDiagramOverlay } from './pathways';
 import { triggerDiagramOverlay } from './triggers';
 
 const nodeTypes = { civicLever: CivicLeverNode, hireStaff: HireStaffNode };
@@ -266,8 +267,8 @@ export default function WorkflowDiagram({ state, setState, onTick, onHire }) {
     labelBgBorderRadius: 4,
   };
 
-  // Pathway edge is derived from the rule registry (not a parallel hardcode).
-  const pathwayEdge = diagramEdgeFromPathway(PATHWAY_BUDGET_HEADROOM_TO_HYPE, civicEdgeLabel);
+  // Executable causal edges (tax→burn, pathway, talentCost) come from the registry.
+  const causalEdges = staticDiagramEdgesFromRegistry(civicEdgeLabel);
 
   const initialEdges = [
     { id: 'e1-2', source: '1', target: '2', animated: true },
@@ -281,10 +282,7 @@ export default function WorkflowDiagram({ state, setState, onTick, onHire }) {
     { id: 'e5-civic-infra', source: '5', target: 'civic-infra' },
     { id: 'e5-civic-reg', source: '5', target: 'civic-reg' },
     { id: 'efunding-7', source: 'funding', target: '7' },
-    { id: 'etax-7', source: 'civic-tax', target: '7', label: 'burn rate', ...civicEdgeLabel },
-    // Typed civic↔hype pathway (engine rule → diagram view).
-    pathwayEdge,
-    { id: 'einfra-7', source: 'civic-infra', target: '7', label: 'talent cost', ...civicEdgeLabel },
+    ...causalEdges,
     { id: 'ereg-7', source: 'civic-reg', target: '7', label: 'compliance', ...civicEdgeLabel },
     { id: 'e7-8', source: '7', target: '8' },
     { id: 'efunding-8', source: 'funding', target: '8', animated: true },

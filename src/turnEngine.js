@@ -35,6 +35,10 @@ import {
   removeTrigger as simRemoveTrigger,
   setTaxRate as simSetTaxRate,
 } from './simulationCore.js';
+import {
+  assertCausalEffect,
+  previewCausalEffect,
+} from './causalGraph.js';
 import { computeCivicFromTax } from './civicFeedback.js';
 import {
   PATHWAY_BUDGET_HEADROOM_TO_HYPE,
@@ -44,6 +48,12 @@ import {
 
 export { GAME_STATE_VERSION, RULE_VERSION };
 export { PATHWAY_BUDGET_HEADROOM_TO_HYPE, PATHWAY_RULES, previewPathway } from './pathways.js';
+export {
+  CAUSAL_RULES,
+  assertCausalEffect,
+  previewCausalEffect,
+  staticDiagramEdgesFromRegistry,
+} from './causalGraph.js';
 
 export const TURN_COMMAND_TYPES = Object.freeze([
   'set_tax',
@@ -210,6 +220,18 @@ export function parseTurnCommand(raw) {
       if (raw.trigger == null || typeof raw.trigger !== 'object' || Array.isArray(raw.trigger)) {
         throw new TurnCommandError('apply_trigger requires trigger', [
           issue('trigger', 'required', 'trigger is required'),
+        ]);
+      }
+      // Causal registry rejects unknown effect keys before the engine stacks them.
+      try {
+        if (raw.trigger.effect != null) {
+          assertCausalEffect(raw.trigger.effect);
+          previewCausalEffect(raw.trigger.effect);
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        throw new TurnCommandError(message, [
+          issue('trigger.effect', 'unknown_field', message),
         ]);
       }
       return { type, trigger: raw.trigger };

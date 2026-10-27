@@ -161,6 +161,19 @@ Full campaign-loop acceptance suite (P1-4); rewriting the UI as a pure read-mode
 ### Explicit non-goals
 Live Firecrawl; many data sources; AI-generated arbitrary rules; political systems.
 
+## Slice causal graph (P1-3 — rule registry is truth; diagram is a view)
+
+**Executable causal / effect edges live in one registry; React Flow reads them; unknown effect keys stay rejected.**
+
+### Registry
+- Umbrella: `src/causalGraph.js` (`CAUSAL_RULES`) extends the pathway registry pattern.
+- Effect allow-list: `src/effectKeys.js` (`hype`, `talentCost`) — shared by triggers, contract, and engine.
+- Includes: `rule.tax→company.burnRate` (`etax-7`), `pathway.budgetHeadroom→company.hype` (`ecivic-hype`), `effect.talentCost` (`einfra-7`); ephemeral `effect.hype` (`e5-hype`) when triggers move hype.
+- Apply / preview (`assertValidTrigger`, `parseTurnCommand` / `previewCausalEffect`) reject unknown effect keys.
+
+### Explicit non-goals
+Funding / exit / Firecrawl; AI-generated rules; wiring cosmetic edges as mechanics; multi-rule civic catalogs.
+
 ## Merge train
 
 Which slices land in which order, and what is already verified, is tracked in [STATE.md](STATE.md).

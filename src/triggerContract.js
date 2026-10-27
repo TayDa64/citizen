@@ -20,6 +20,8 @@
 // [0.1, 3]. The stored and displayed dollar talentCost stays raw, including 0.
 // A missing, zero, negative, or non-finite baseline makes the factor 1.
 
+import { KNOWN_EFFECT_KEYS } from './effectKeys.js';
+
 export const TRIGGER_CONTRACT_VERSION = 1;
 export const TRIGGER_FIELDS = Object.freeze([
   'id',
@@ -61,7 +63,8 @@ export const MAX_ID_LENGTH = 200;
 export const MAX_TIMESTAMP_LENGTH = 64;
 
 const TRIGGER_KEYS = new Set(TRIGGER_FIELDS);
-const EFFECT_KEYS = new Set(['hype', 'talentCost']);
+/** Allow-list from causal effectKeys registry (not a parallel hardcode). */
+const EFFECT_KEYS = new Set(KNOWN_EFFECT_KEYS);
 const CONTROL_CHARS = /[\u0000-\u001F\u007F]/;
 
 function freezeTrigger(trigger) {

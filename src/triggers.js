@@ -1,4 +1,8 @@
 import {
+  assertKnownEffectKeys,
+  effectFieldsFromRegistry,
+} from './effectKeys.js';
+import {
   baseBurnRate,
   effectiveBurnRate,
   effectiveMultiplierOf,
@@ -75,10 +79,8 @@ export const TRIGGER_CONTRACT = Object.freeze({
   version: 1,
   fields: Object.freeze(['id', 'type', 'label', 'source', 'timestamp', 'effect']),
   types: Object.freeze(['news_spike', 'policy_change', 'market_shift']),
-  effectFields: Object.freeze({
-    hype: 'Absolute delta on the 0 to 1 hype scale. 0.1 raises hype by 10 percentage points.',
-    talentCost: 'Relative delta applied as a multiplier. 0.12 multiplies talent cost by 1.12.',
-  }),
+  /** Derived from effectKeys registry (causal graph allow-list). */
+  effectFields: effectFieldsFromRegistry(),
   stacking: Object.freeze({
     hype: 'Add deltas to the baseline, then clamp to the range 0 through 1.',
     talentCost: 'Multiply the dollar baseline by (1 + delta) for each active trigger, floor at 0, and round to cents once. The burn factor clamps that ratio to 0.10× through 3.00×.',
@@ -187,12 +189,8 @@ export function assertValidTrigger(trigger) {
     throw new TypeError('Trigger.effect must be an object');
   }
 
-  const effectKeys = Object.keys(trigger.effect);
-  for (const key of effectKeys) {
-    if (!Object.prototype.hasOwnProperty.call(TRIGGER_CONTRACT.effectFields, key)) {
-      throw new TypeError(`Trigger.effect.${key} is not part of the contract`);
-    }
-  }
+  // Registry is truth: unknown effect keys are rejected here (and at preview).
+  assertKnownEffectKeys(trigger.effect);
   if (Object.prototype.hasOwnProperty.call(trigger.effect, 'hype')) {
     assertDelta(trigger.effect.hype, 'hype', -1, 1);
   }
