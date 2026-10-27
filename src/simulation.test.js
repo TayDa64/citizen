@@ -65,6 +65,64 @@ describe('Slice 1 baseline with no trigger', () => {
     expect(high.history.cash).toEqual([15000]);
     expect(high.company.burnRate).toBe(2000);
   });
+
+  test('no employees + no triggers → burn 2000 / 2200 / 2800 at tax 0 / 0.25 / 1', () => {
+    expect(computeBurnRate(0, 1)).toBe(2000);
+    expect(computeBurnRate(0.25, 1)).toBe(2200);
+    expect(computeBurnRate(1, 1)).toBe(2800);
+    expect(previewBurnRate(setTaxRate(initialState, 0))).toBe(2000);
+    expect(previewBurnRate(initialState)).toBe(2200);
+    expect(previewBurnRate(setTaxRate(initialState, 1))).toBe(2800);
+    expect(applyEffects(setTaxRate(initialState, 0)).company.burnRate).toBe(2000);
+    expect(applyEffects(initialState).company.burnRate).toBe(2200);
+    expect(applyEffects(setTaxRate(initialState, 1)).company.burnRate).toBe(2800);
+  });
+});
+
+describe('authority boundary', () => {
+  test('readApiSnapshot never copies cash or burnRate from the company payload', () => {
+    const ticking = applyEffects(setTaxRate(initialState, 1));
+    const reading = readApiSnapshot(ticking, {
+      company: {
+        id: 'company-1',
+        name: 'Northwind',
+        cash: 1,
+        burnRate: 9,
+        hype: 0.55,
+        talentCost: 4480,
+        baselines: { hype: 0.3, talentCost: 4000 },
+        talentMultiplier: 1.28,
+      },
+      triggers: [policy],
+    });
+
+    expect(reading.state.company.cash).toBe(ticking.company.cash);
+    expect(reading.state.company.burnRate).toBe(ticking.company.burnRate);
+    expect(reading.state.history).toEqual(ticking.history);
+    expect(reading.state.company.cash).not.toBe(1);
+    expect(reading.state.company.burnRate).not.toBe(9);
+    expect(reading.state.company.hype).toBe(0.55);
+    expect(reading.state.company.talentCost).toBe(4480);
+    expect(reading.state.talentMultiplier).toBe(1.28);
+  });
+
+  test('local trigger apply and clear leave client cash and stored burn untouched', () => {
+    const cash = 12876.5;
+    const seeded = {
+      ...initialState,
+      company: { ...initialState.company, cash, burnRate: 2200 },
+      history: { cash: [15000, 12877], burnRate: [2000, 2200] },
+    };
+    const applied = applyTrigger(seeded, policy);
+    expect(applied.company.cash).toBe(cash);
+    expect(applied.company.burnRate).toBe(2200);
+    expect(applied.history).toEqual(seeded.history);
+
+    const cleared = clearTriggers(applied);
+    expect(cleared.company.cash).toBe(cash);
+    expect(cleared.company.burnRate).toBe(2200);
+    expect(cleared.history).toEqual(seeded.history);
+  });
 });
 
 describe('applyTrigger', () => {

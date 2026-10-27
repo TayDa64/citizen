@@ -49,4 +49,4 @@ A player can change the tax lever, advance months, see type-weighted talent + cl
 - A1: resolved. Axe is 0 on 5f4f021.
 - P2-M1 (info): the down migration only reverts 003/002, so a full re-run after rollback fails at 001.
 
-Last updated: 2026-10-27, main `c612958`, merge sequence complete.
+Last updated: 2026-10-27, main `5f70182` (PR #7 merged), merge sequence complete.
