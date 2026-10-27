@@ -5,12 +5,46 @@ body {
   color: #e0e0e0;
 }
 
+.workflow-diagram {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.workflow-diagram__title {
+  text-align: center;
+  margin: 8px 0;
+  color: #e0e0e0;
+}
+
+/* Size only the canvas; heading + Advance Month stay outside so they never
+   collide with .data-source below. */
+.workflow-diagram__canvas {
+  width: 100%;
+  height: 60vh;
+  min-height: 280px;
+}
+
+.workflow-diagram__tick {
+  text-align: center;
+  margin: 0.5rem 0 0.75rem;
+}
+
 .react-flow__node {
   border-radius: 8px;
   padding: 10px;
   font-size: 13px;
   text-align: center;
   white-space: pre-line;
+}
+
+/* Guard against ancestor color:white making default xyflow labels invisible. */
+.react-flow__node-default,
+.react-flow__node-input,
+.react-flow__node-output {
+  color: #f8fafc;
+  background-color: #1e293b;
+  border: 1px solid #64748b;
 }
 
 button:focus-visible {
