@@ -10,7 +10,7 @@
 
 Sequence complete. Post-merge regression on main 5f4f021: PASS (trace diag-20261026-8e1cd230), CI green.
 
-Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/Playwright. Tip for this work: `main` @ `a34f5be` (PR #11).
+Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/Playwright; PR #12 authoritative turns; PR #13 campaign↔trigger coherence. Tip for lifecycle hire: `main` @ `e6e5cdb` (PR #13).
 
 **Rule:** Each PR must be green, rebased clean on main, and meet its acceptance criteria before the next is merged. Update this file after every merge.
 
@@ -24,15 +24,20 @@ Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/
 - Same seed + TurnCommand sequence → same metrics (turn engine)
 
 ## Active phase
-### Phase 1 — Authoritative Game State (P0) — in progress
+### Phase 1 — Authoritative Game State (P0) — landed (PR #12 / #13)
 - Versioned GameState, TurnCommand, TurnResult (`src/turnEngine.js`)
 - Atomic turn commit on the server (`migrations/004_campaign_turns.sql`, `server/campaigns.js`)
-- Campaign save/reload/replay with deterministic seed
+- Campaign↔trigger restack before advance (PR #13)
 - Acceptance: reload reproduces last committed state; failed commit leaves no partial state; offline engine determinism under `npm test`
 
-## Next Highest-Priority Phases (after Phase 1 lands)
-### Phase 2 — Complete one business lifecycle (P0)
-- Hiring, product development, launch, funding, runway, exit as real mechanics
+### Phase 2 — Minimum business lifecycle (P0) — in progress (first hire)
+- TurnCommand `hire_employee` + Hire UI on diagram node `3`
+- Talent multiplier / burn preview update; cash drains on `advance_turn`; optional cash floor at 0
+- Still visual-only: funding, exit, product launch revenue, civic-infra/regs, morale, Firecrawl
+
+## Next Highest-Priority Phases
+### Phase 2 continued — Complete business lifecycle (P0)
+- Product development, launch, funding, runway, exit as real mechanics
 - Separate employee productivity from cost
 - Acceptance: player can form company → hire → build → launch → see revenue or insolvency
 
@@ -48,10 +53,10 @@ Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/
 - Acceptance: one live source produces a validated, replayable effect
 
 ## Definition of Done for current slice
-A player can change the tax lever, advance months through the turn engine, see type-weighted talent + clamped trigger effects on burn and cash, clear events, reload a committed campaign when the API is up, and still match the Slice 1 baseline when no employees or triggers are present.
+A player can hire ≥1 employee on node `3`, see talent multiplier and burn preview change, advance months through the turn engine (cash path differs; cash floors at 0), keep tax + world-event Slice 1/2 baselines with no employees/triggers, and persist hire via campaign turns when the API is up.
 
 ## Open items
 - A1: resolved. Axe is 0 on 5f4f021.
 - P2-M1 (info): the down migration only reverts 003/002, so a full re-run after rollback fails at 001. (004 adds campaigns/turn_commits down.)
 
-Last updated: 2026-10-27, Phase 1 authoritative turns in progress off `main` @ `a34f5be`.
+Last updated: 2026-10-27, Phase 2 first hire off `main` @ `e6e5cdb`.

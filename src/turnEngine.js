@@ -6,15 +6,17 @@
  *
  * Effect order for every command:
  *  1. Validate / normalize the TurnCommand.
- *  2. Apply command mutation (tax clamp, trigger stack, or none).
- *  3. On `advance_turn` only: refresh local talent profile, recompute burn,
+ *  2. Apply command mutation (tax clamp, trigger stack, hire, or none).
+ *  3. On `advance_turn` only: refresh talent profile, recompute burn,
  *     drain cash by burn/12, append history (24-month window), bump `turn`.
  *  4. Build metric deltas, applied-effects list, and short explanations.
  *
- * `set_tax` / trigger commands do not drain cash (matches Slice 1/2). The UI
- * tax slider still advances a month by issuing `set_tax` then `advance_turn`.
+ * `set_tax` / trigger / `hire_employee` commands do not drain cash (matches
+ * Slice 1/2). The UI tax slider still advances a month by issuing `set_tax`
+ * then `advance_turn`. Hire refreshes talent multiplier + burn preview only.
  *
  * Authority: campaign TurnResult owns cash/burn history when committed.
+ * After hire, campaign GameState also owns the employee roster / talent mix.
  * GET /api/companies cash/burnRate must never be copied onto the client sim.
  */
 
@@ -24,6 +26,7 @@ import {
   applyEffects as tickEffects,
   applyTrigger as simApplyTrigger,
   clearTriggers as simClearTriggers,
+  hireEmployee as simHireEmployee,
   initialState,
   removeTrigger as simRemoveTrigger,
   setTaxRate as simSetTaxRate,
@@ -37,7 +40,10 @@ export const TURN_COMMAND_TYPES = Object.freeze([
   'apply_trigger',
   'remove_trigger',
   'clear_triggers',
+  'hire_employee',
 ]);
+
+const HIRE_DEPARTMENTS = Object.freeze(['tech', 'marketing', 'sales']);
 
 export class TurnCommandError extends Error {
   constructor(message, issues = []) {
@@ -105,6 +111,9 @@ export function normalizeGameState(raw) {
         : 4000,
     },
     employees: Array.isArray(raw.employees) ? raw.employees.map((row) => ({ ...row })) : [],
+    talentMultiplier: Number.isFinite(Number(raw.talentMultiplier))
+      ? Number(raw.talentMultiplier)
+      : raw.talentMultiplier ?? 1,
     activeTriggers: Array.isArray(raw.activeTriggers)
       ? raw.activeTriggers.map((row) => ({ ...row, effect: { ...row.effect } }))
       : [],
@@ -132,6 +141,8 @@ export function toGameStateView(state) {
     talentMultiplier: normalized.talentMultiplier ?? 1,
     talentCostFactor: normalized.talentCostFactor ?? null,
     effectiveMultiplier: normalized.effectiveMultiplier ?? null,
+    employees: (normalized.employees ?? []).map((row) => ({ ...row })),
+    talentMix: (normalized.talentMix ?? []).map((row) => ({ ...row })),
     activeTriggers: (normalized.activeTriggers ?? []).map((trigger) => ({
       id: trigger.id,
       type: trigger.type,
@@ -187,6 +198,35 @@ export function parseTurnCommand(raw) {
     }
     case 'clear_triggers':
       return { type };
+    case 'hire_employee': {
+      const departmentRaw = raw.department == null ? 'tech' : raw.department;
+      if (typeof departmentRaw !== 'string' || departmentRaw.trim() === '') {
+        throw new TurnCommandError('hire_employee requires department', [
+          issue('department', 'required', 'department must be a non-empty string'),
+        ]);
+      }
+      const department = departmentRaw.trim().toLowerCase();
+      if (!HIRE_DEPARTMENTS.includes(department)) {
+        throw new TurnCommandError('hire_employee department is invalid', [
+          issue(
+            'department',
+            'invalid_value',
+            `department must be one of: ${HIRE_DEPARTMENTS.join(', ')}`,
+          ),
+        ]);
+      }
+      const skill = raw.skill == null ? 1 : Number(raw.skill);
+      if (!Number.isFinite(skill)) {
+        throw new TurnCommandError('hire_employee requires a finite skill', [
+          issue('skill', 'invalid_type', 'skill must be a finite number'),
+        ]);
+      }
+      const command = { type, department, skill: Math.min(1, Math.max(0, skill)) };
+      if (typeof raw.id === 'string' && raw.id.trim() !== '') {
+        command.id = raw.id.trim();
+      }
+      return command;
+    }
     default: {
       const neverType = type;
       throw new TurnCommandError(`Unhandled TurnCommand type: ${String(neverType)}`);
@@ -202,6 +242,8 @@ function metricSnapshot(state) {
     burnRate: state.company.burnRate,
     hype: state.company.hype,
     talentCost: state.company.talentCost,
+    talentMultiplier: Number(state.talentMultiplier) || 1,
+    employeeCount: Array.isArray(state.employees) ? state.employees.length : 0,
     activeTriggerCount: (state.activeTriggers ?? []).length,
   };
 }
@@ -214,6 +256,8 @@ function deltasBetween(before, after) {
     burnRate: after.burnRate - before.burnRate,
     hype: after.hype - before.hype,
     talentCost: after.talentCost - before.talentCost,
+    talentMultiplier: after.talentMultiplier - before.talentMultiplier,
+    employeeCount: after.employeeCount - before.employeeCount,
     activeTriggerCount: after.activeTriggerCount - before.activeTriggerCount,
   };
 }
@@ -245,6 +289,11 @@ function explanationsFor(command, before, after, appliedEffects) {
       break;
     case 'clear_triggers':
       lines.push('Cleared world events; hype and talent cost returned toward baseline.');
+      break;
+    case 'hire_employee':
+      lines.push(
+        `Hired ${command.department} (skill ${command.skill}). Talent ×${Number(after.talentMultiplier).toFixed(4)}; burn preview ${formatMoney(after.burnRate)}/mo.`,
+      );
       break;
     default: {
       const neverType = command.type;
@@ -278,6 +327,12 @@ function applyCommandMutation(state, command) {
       return simRemoveTrigger(state, command.triggerId);
     case 'clear_triggers':
       return simClearTriggers(state);
+    case 'hire_employee':
+      return simHireEmployee(state, {
+        department: command.department,
+        skill: command.skill,
+        id: command.id,
+      });
     default: {
       const neverType = command.type;
       throw new TurnCommandError(`Unhandled TurnCommand type: ${String(neverType)}`);
@@ -306,6 +361,12 @@ function appliedEffectsFor(command, before, after) {
         summary: `hype ${before.hype} → ${after.hype}; talentCost ${before.talentCost} → ${after.talentCost}`,
       });
     }
+  }
+  if (command.type === 'hire_employee') {
+    effects.push({
+      kind: 'hire.employee',
+      summary: `employees ${before.employeeCount} → ${after.employeeCount}; talent ×${before.talentMultiplier.toFixed(4)} → ×${after.talentMultiplier.toFixed(4)}; burn ${formatMoney(before.burnRate)} → ${formatMoney(after.burnRate)}`,
+    });
   }
   return effects;
 }
@@ -352,6 +413,8 @@ export function stableMetrics(state) {
     burnRate: view.company.burnRate,
     hype: view.company.hype,
     talentCost: view.company.talentCost,
+    talentMultiplier: view.talentMultiplier,
+    employeeIds: (view.employees ?? []).map((row) => row.id).sort(),
     activeTriggerIds: view.activeTriggers.map((trigger) => trigger.id).sort(),
     historyCash: view.history.cash,
     historyBurn: view.history.burnRate,

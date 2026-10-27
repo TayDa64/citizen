@@ -59,4 +59,56 @@ describe('turn engine determinism', () => {
     expect(result.appliedEffects.some((effect) => effect.kind === 'burn.tick')).toBe(true);
     expect(result.explanations[0]).toMatch(/Advanced to turn 1/);
   });
+
+  test('hire_employee appends roster, refreshes talent/burn preview, drains cash only on advance', () => {
+    const cashBefore = initialState.company.cash;
+    const hired = applyTurnCommand(initialState, {
+      type: 'hire_employee',
+      department: 'tech',
+      skill: 1,
+    });
+    expect(hired.state.employees).toHaveLength(1);
+    expect(hired.state.employees[0]).toMatchObject({
+      id: 'hire-tech-1',
+      department: 'tech',
+      skillTech: 1,
+      isActive: true,
+    });
+    expect(hired.state.talentMultiplier).toBe(1.75);
+    expect(hired.state.company.burnRate).toBe(3850);
+    expect(hired.state.company.cash).toBe(cashBefore);
+    expect(hired.deltas.employeeCount).toBe(1);
+    expect(hired.deltas.cash).toBe(0);
+    expect(hired.appliedEffects.some((effect) => effect.kind === 'hire.employee')).toBe(true);
+
+    const advanced = applyTurnCommand(hired.state, { type: 'advance_turn' });
+    expect(advanced.state.company.burnRate).toBe(3850);
+    expect(advanced.state.company.cash).toBeCloseTo(cashBefore - 3850 / 12);
+    expect(advanced.state.turn).toBe(1);
+  });
+
+  test('hire then advance cash path differs from no-hire baseline; insolvency floors at 0', () => {
+    const baseline = applyTurnCommand(initialState, { type: 'advance_turn' }).state;
+    expect(baseline.company.burnRate).toBe(2200);
+
+    const hired = applyTurnCommand(initialState, {
+      type: 'hire_employee',
+      department: 'tech',
+      skill: 1,
+    }).state;
+    const withHire = applyTurnCommand(hired, { type: 'advance_turn' }).state;
+    expect(withHire.company.cash).toBeLessThan(baseline.company.cash);
+
+    const broke = createGameState({
+      company: { ...initialState.company, cash: 50 },
+      history: { cash: [50], burnRate: [2000] },
+    });
+    const hiredBroke = applyTurnCommand(broke, {
+      type: 'hire_employee',
+      department: 'tech',
+      skill: 1,
+    }).state;
+    const insolvent = applyTurnCommand(hiredBroke, { type: 'advance_turn' }).state;
+    expect(insolvent.company.cash).toBe(0);
+  });
 });

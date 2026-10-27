@@ -157,3 +157,32 @@ describe('product header', () => {
     expect(screen.queryByText(/Slice 1/i)).not.toBeInTheDocument();
   });
 });
+
+describe('hire on diagram node 3', () => {
+  test('Hire tech updates talent multiplier, burn preview, and Advance Month cash path', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    expect(screen.getByTestId('talent-multiplier-value')).toHaveTextContent(
+      'Talent multiplier: 1.0000'
+    );
+    expect(screen.getByTestId('burn-value')).toHaveTextContent('Burn/mo: $2,200');
+
+    await user.click(screen.getByRole('button', { name: /hire tech employee/i }));
+
+    expect(screen.getByTestId('talent-multiplier-value')).toHaveTextContent(
+      'Talent multiplier: 1.7500'
+    );
+    expect(screen.getByTestId('burn-value')).toHaveTextContent('Burn/mo: $3,850');
+    expect(screen.getByTestId('cash-value')).toHaveTextContent('Cash: $15000');
+    expect(screen.getByRole('region', { name: 'Talent and burn' })).toHaveTextContent(
+      'Burn $3,850 (base $2,200 · talent ×1.7500 · talent cost ×1.00)'
+    );
+    expect(document.querySelector('[data-id="3"]').textContent).toMatch(/tech 1|1 employee/);
+
+    await user.click(screen.getByRole('button', { name: /advance month/i }));
+
+    expect(screen.getByTestId('burn-value')).toHaveTextContent('Burn/mo: $3,850');
+    expect(screen.getByTestId('cash-value')).toHaveTextContent('Cash: $14679');
+  });
+});

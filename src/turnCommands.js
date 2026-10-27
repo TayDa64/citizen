@@ -2,7 +2,9 @@
  * Client helpers that apply TurnCommands locally or via the campaign API.
  * Preserves the companies-API authority boundary: never copy companies.cash /
  * companies.burnRate. When a campaign commit succeeds, cash/burn/tax/turn come
- * from TurnResult; API-owned hype/talent stay from the prior state.
+ * from TurnResult; API-owned hype / talent-cost / triggers stay from the prior
+ * state. After hire_employee, campaign GameState owns the employee roster and
+ * talentMultiplier / talentMix (taken from TurnResult when non-empty).
  *
  * Campaign GameState must carry the same activeTriggers stack the UI shows so
  * advance_turn burn/cash match the preview. Use buildTriggerRestackCommands
@@ -47,6 +49,15 @@ export function mergeCampaignTurnState(prev, turnState) {
       campaignId: turnState.campaignId ?? prev?.campaignId ?? null,
     };
   }
+  const turnRoster = Array.isArray(turnState?.employees) ? turnState.employees : [];
+  const campaignOwnsRoster = turnRoster.length > 0;
+  const employees = campaignOwnsRoster ? turnRoster : prev.employees;
+  const talentMultiplier = campaignOwnsRoster
+    ? (turnState.talentMultiplier ?? prev.talentMultiplier)
+    : prev.talentMultiplier;
+  const talentMix = campaignOwnsRoster
+    ? (turnState.talentMix ?? prev.talentMix)
+    : prev.talentMix;
   return {
     ...prev,
     ...turnState,
@@ -56,19 +67,20 @@ export function mergeCampaignTurnState(prev, turnState) {
     // Display stack stays API-owned; campaign cash/burn already used that stack
     // when restacked before advance_turn.
     activeTriggers: prev.activeTriggers,
-    employees: prev.employees,
-    talentMultiplier: prev.talentMultiplier,
-    talentMix: prev.talentMix,
+    employees,
+    talentMultiplier,
+    talentMix,
     talentCostFactor: prev.talentCostFactor,
     talentCostFactorClamped: prev.talentCostFactorClamped,
-    effectiveMultiplier: prev.effectiveMultiplier,
+    // Recompute from campaign talent × API cost factor after hire.
+    effectiveMultiplier: campaignOwnsRoster ? null : prev.effectiveMultiplier,
     lastTriggerChange: prev.lastTriggerChange,
     company: {
       ...turnState.company,
       hype: prev.company.hype,
       talentCost: prev.company.talentCost,
-      talentMultiplier: prev.company.talentMultiplier ?? prev.talentMultiplier,
-      talentMix: prev.company.talentMix ?? prev.talentMix,
+      talentMultiplier,
+      talentMix,
     },
   };
 }

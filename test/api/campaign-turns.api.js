@@ -135,4 +135,32 @@ describe('campaign turns persistence', { concurrency: 1, timeout: 120_000 }, () 
       await db.close();
     }
   });
+
+  test('hire_employee then advance_turn drains at hired burn and reloads roster', async () => {
+    const db = await createThrowawayDatabase();
+    try {
+      await migrateAll(db.pool);
+      const created = await createCampaign(db.pool, { seed: 'hire-1' });
+      const hired = await commitTurn(db.pool, created.id, {
+        type: 'hire_employee',
+        department: 'tech',
+        skill: 1,
+      });
+      assert.equal(hired.state.employees.length, 1);
+      assert.equal(hired.state.talentMultiplier, 1.75);
+      assert.equal(hired.state.company.burnRate, 3850);
+      assert.equal(hired.state.company.cash, 15000);
+
+      const advanced = await commitTurn(db.pool, created.id, { type: 'advance_turn' });
+      assert.equal(advanced.state.company.burnRate, 3850);
+      assert.equal(Math.round(advanced.state.company.cash), Math.round(15000 - 3850 / 12));
+
+      const reloaded = await getCampaign(db.pool, created.id);
+      assert.equal(reloaded.state.employees.length, 1);
+      assert.equal(reloaded.state.talentMultiplier, 1.75);
+      assert.equal(reloaded.state.company.burnRate, 3850);
+    } finally {
+      await db.close();
+    }
+  });
 });

@@ -99,4 +99,26 @@ describe('turnCommands', () => {
     expect(merged.activeTriggers).toEqual(prev.activeTriggers);
     expect(merged.dataSource).toBe('api');
   });
+
+  test('mergeCampaignTurnState takes campaign roster after hire_employee', () => {
+    const prev = {
+      ...initialState,
+      dataSource: 'api',
+      talentMultiplier: 1,
+      talentMix: [],
+      company: { ...initialState.company, hype: 0.55, talentCost: 4480 },
+    };
+    const hired = applyTurnCommand(createGameState({ seed: 'hire-merge' }), {
+      type: 'hire_employee',
+      department: 'tech',
+      skill: 1,
+    }).state;
+    const merged = mergeCampaignTurnState(prev, hired);
+    expect(merged.employees).toHaveLength(1);
+    expect(merged.talentMultiplier).toBe(1.75);
+    expect(merged.company.burnRate).toBe(3850);
+    expect(merged.company.hype).toBe(0.55);
+    expect(merged.company.talentCost).toBe(4480);
+    expect(merged.dataSource).toBe('api');
+  });
 });

@@ -110,6 +110,14 @@ function App() {
           activeTriggers: (simState.activeTriggers ?? []).map((trigger) =>
             toCampaignTrigger(trigger)
           ),
+          // Campaign owns roster after hire; seed any already-hired employees.
+          employees: Array.isArray(simState.employees)
+            ? simState.employees.map((row) => ({ ...row }))
+            : [],
+          talentMultiplier: simState.talentMultiplier ?? 1,
+          talentMix: Array.isArray(simState.talentMix)
+            ? simState.talentMix.map((row) => ({ ...row }))
+            : [],
         },
       });
       if (created?.id) {
@@ -217,6 +225,12 @@ function App() {
   // Restack campaign triggers first so burn/cash match the UI preview.
   const onTick = () => {
     void commitCommands([{ type: 'advance_turn' }], { restackTriggers: true });
+  };
+
+  // Hire via TurnCommand on diagram node 3. Refreshes talent/burn preview;
+  // cash drains only on advance_turn. Persists through campaign turns when live.
+  const onHire = ({ department = 'tech', skill = 1 } = {}) => {
+    void commitCommands([{ type: 'hire_employee', department, skill }]);
   };
 
   const refreshApi = async (baseUrl) => {
@@ -392,7 +406,7 @@ function App() {
         <p>Civic + Startup Simulation — tax policy and world events shape burn and hype</p>
       </header>
       <main>
-        <WorkflowDiagram state={state} setState={handleSetState} onTick={onTick} />
+        <WorkflowDiagram state={state} setState={handleSetState} onTick={onTick} onHire={onHire} />
         <p
           className="data-source"
           role="status"
