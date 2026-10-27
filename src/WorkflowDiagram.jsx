@@ -36,16 +36,33 @@ const HYPE_NODE_STYLE = {
   border: '2px solid #fde68a',
 };
 
-function applyOverlayToNodes(nodes, taxRate, overlay, hireMeta = null) {
+function applyOverlayToNodes(nodes, taxRate, overlay, hireMeta = null, civicMeta = null) {
   const existingHype = nodes.find((node) => node.id === 'hype');
   let changed = false;
   const next = [];
 
   for (const node of nodes) {
     if (node.id === 'hype') continue;
-    if (node.id === 'civic-tax' && node.data.value !== taxRate) {
-      changed = true;
-      next.push({ ...node, data: { ...node.data, value: taxRate } });
+    if (node.id === 'civic-tax') {
+      const headroom = civicMeta?.budgetHeadroom;
+      const bias = civicMeta?.hypeBias;
+      const taxChanged = node.data.value !== taxRate;
+      const headroomChanged = node.data.budgetHeadroom !== headroom;
+      const biasChanged = node.data.hypeBias !== bias;
+      if (taxChanged || headroomChanged || biasChanged) {
+        changed = true;
+        next.push({
+          ...node,
+          data: {
+            ...node.data,
+            value: taxRate,
+            budgetHeadroom: headroom,
+            hypeBias: bias,
+          },
+        });
+        continue;
+      }
+      next.push(node);
       continue;
     }
     if (node.id === '3' && hireMeta) {
@@ -171,10 +188,12 @@ export default function WorkflowDiagram({ state, setState, onTick, onHire }) {
       id: 'civic-tax',
       type: 'civicLever',
       initialWidth: 200,
-      initialHeight: 120,
+      initialHeight: 140,
       data: {
         label: 'Civic Lever:\nTax Policy',
         value: state.taxRate,
+        budgetHeadroom: state.civic?.budgetHeadroom,
+        hypeBias: state.civic?.hypeBias,
         onChange: (v) => setState((s) => ({ ...s, taxRate: v }))
       },
       // Civic band spaced horizontally; Launch sits slightly lower so edge
@@ -231,7 +250,7 @@ export default function WorkflowDiagram({ state, setState, onTick, onHire }) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
-  // Keep the tax lever, hire readout, and world-event labels in sync.
+  // Keep the tax lever, hire readout, civic metric, and world-event labels in sync.
   useEffect(() => {
     const overlay = triggerDiagramOverlay(state);
     const hireLines = String(overlay.nodeLabels?.[3] ?? '').split('\n');
@@ -245,10 +264,16 @@ export default function WorkflowDiagram({ state, setState, onTick, onHire }) {
       talentMultiplier: state.talentMultiplier ?? 1,
       rosterSummary,
     };
-    setNodes((nds) => applyOverlayToNodes(nds, state.taxRate, overlay, hireMeta));
+    const civicMeta = {
+      budgetHeadroom: state.civic?.budgetHeadroom,
+      hypeBias: state.civic?.hypeBias,
+    };
+    setNodes((nds) => applyOverlayToNodes(nds, state.taxRate, overlay, hireMeta, civicMeta));
     setEdges((eds) => applyOverlayToEdges(eds, overlay));
   }, [
     state.taxRate,
+    state.civic?.budgetHeadroom,
+    state.civic?.hypeBias,
     state.company.hype,
     state.company.talentCost,
     state.talentMultiplier,

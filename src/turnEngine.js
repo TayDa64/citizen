@@ -14,10 +14,13 @@
  * `set_tax` / trigger / `hire_employee` commands do not drain cash (matches
  * Slice 1/2). The UI tax slider still advances a month by issuing `set_tax`
  * then `advance_turn`. Hire refreshes talent multiplier + burn preview only.
+ * `set_tax` also updates civic.budgetHeadroom and folds civic hype bias into
+ * company.hype (first civic feedback loop) without changing burn baselines.
  *
  * Authority: campaign TurnResult owns cash/burn history when committed.
  * After hire, campaign GameState also owns the employee roster / talent mix.
- * GET /api/companies cash/burnRate must never be copied onto the client sim.
+ * Civic metrics travel with campaign GameState; GET /api/companies cash/burnRate
+ * must never be copied onto the client sim.
  */
 
 import {
@@ -31,6 +34,7 @@ import {
   removeTrigger as simRemoveTrigger,
   setTaxRate as simSetTaxRate,
 } from './simulationCore.js';
+import { computeCivicFromTax } from './civicFeedback.js';
 
 export { GAME_STATE_VERSION, RULE_VERSION };
 
@@ -91,6 +95,16 @@ export function normalizeGameState(raw) {
     ? raw.turn
     : Math.max(0, (Array.isArray(raw.history?.cash) ? raw.history.cash.length : 1) - 1);
   const stateVersion = Number.isInteger(raw.stateVersion) ? raw.stateVersion : GAME_STATE_VERSION;
+  const clampedTax = Math.max(0, Math.min(1, taxRate));
+  const derivedCivic = computeCivicFromTax(clampedTax);
+  const civic = {
+    budgetHeadroom: Number.isFinite(Number(raw.civic?.budgetHeadroom))
+      ? Number(raw.civic.budgetHeadroom)
+      : derivedCivic.budgetHeadroom,
+    hypeBias: Number.isFinite(Number(raw.civic?.hypeBias))
+      ? Number(raw.civic.hypeBias)
+      : derivedCivic.hypeBias,
+  };
   return {
     ...raw,
     stateVersion,
@@ -98,7 +112,7 @@ export function normalizeGameState(raw) {
     turn,
     seed: raw.seed == null ? null : String(raw.seed),
     ruleVersion: typeof raw.ruleVersion === 'string' ? raw.ruleVersion : RULE_VERSION,
-    taxRate: Math.max(0, Math.min(1, taxRate)),
+    taxRate: clampedTax,
     company: { ...company },
     history: {
       cash: Array.isArray(raw.history?.cash) ? [...raw.history.cash] : [Number(company.cash) || 0],
@@ -118,6 +132,7 @@ export function normalizeGameState(raw) {
       ? raw.activeTriggers.map((row) => ({ ...row, effect: { ...row.effect } }))
       : [],
     talentMix: Array.isArray(raw.talentMix) ? raw.talentMix.map((row) => ({ ...row })) : [],
+    civic,
   };
 }
 
@@ -152,6 +167,10 @@ export function toGameStateView(state) {
     history: {
       cash: [...normalized.history.cash],
       burnRate: [...normalized.history.burnRate],
+    },
+    civic: {
+      budgetHeadroom: normalized.civic.budgetHeadroom,
+      hypeBias: normalized.civic.hypeBias,
     },
   };
 }
@@ -245,6 +264,8 @@ function metricSnapshot(state) {
     talentMultiplier: Number(state.talentMultiplier) || 1,
     employeeCount: Array.isArray(state.employees) ? state.employees.length : 0,
     activeTriggerCount: (state.activeTriggers ?? []).length,
+    budgetHeadroom: Number(state.civic?.budgetHeadroom) || 0,
+    hypeBias: Number(state.civic?.hypeBias) || 0,
   };
 }
 
@@ -259,6 +280,8 @@ function deltasBetween(before, after) {
     talentMultiplier: after.talentMultiplier - before.talentMultiplier,
     employeeCount: after.employeeCount - before.employeeCount,
     activeTriggerCount: after.activeTriggerCount - before.activeTriggerCount,
+    budgetHeadroom: after.budgetHeadroom - before.budgetHeadroom,
+    hypeBias: after.hypeBias - before.hypeBias,
   };
 }
 
@@ -272,7 +295,9 @@ function explanationsFor(command, before, after, appliedEffects) {
   const lines = [];
   switch (command.type) {
     case 'set_tax':
-      lines.push(`Tax set to ${(after.taxRate * 100).toFixed(0)}%.`);
+      lines.push(
+        `Tax set to ${(after.taxRate * 100).toFixed(0)}%. Budget headroom ${(after.budgetHeadroom * 100).toFixed(0)}% → hype ${after.hype}.`,
+      );
       break;
     case 'advance_turn':
       lines.push(
@@ -347,6 +372,16 @@ function appliedEffectsFor(command, before, after) {
       kind: 'policy.tax',
       summary: `taxRate ${before.taxRate} → ${after.taxRate}`,
     });
+    effects.push({
+      kind: 'civic.budget',
+      summary: `budgetHeadroom ${before.budgetHeadroom} → ${after.budgetHeadroom}`,
+    });
+    if (before.hype !== after.hype || before.hypeBias !== after.hypeBias) {
+      effects.push({
+        kind: 'civic.hype',
+        summary: `civic hypeBias ${before.hypeBias} → ${after.hypeBias}; hype ${before.hype} → ${after.hype}`,
+      });
+    }
   }
   if (command.type === 'advance_turn') {
     effects.push({
@@ -418,5 +453,7 @@ export function stableMetrics(state) {
     activeTriggerIds: view.activeTriggers.map((trigger) => trigger.id).sort(),
     historyCash: view.history.cash,
     historyBurn: view.history.burnRate,
+    budgetHeadroom: view.civic.budgetHeadroom,
+    hypeBias: view.civic.hypeBias,
   };
 }

@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Chart, Title } from '@highcharts/react';
 import { LineSeries } from '@highcharts/react/series/Line';
+import {
+  computeCivicFromTax,
+  formatBudgetHeadroom,
+  formatHypeBias,
+} from '../civicFeedback';
 import { talentCostShowsDollars } from '../dataSource';
 import { BASE_TALENT_COST, previewBurnRate } from '../simulation';
 import {
@@ -108,6 +113,44 @@ function TalentBurnSummary({ state }) {
       ) : (
         <p>No employees. Talent multiplier is 1.0000.</p>
       )}
+    </section>
+  );
+}
+
+function CivicFeedbackReadout({ state }) {
+  const civic = state.civic ?? computeCivicFromTax(state.taxRate);
+  return (
+    <section className="civic-feedback" aria-labelledby="civic-feedback-heading">
+      <h3 id="civic-feedback-heading">Civic feedback</h3>
+      <p>
+        Tax moves city budget headroom; headroom folds into company hype (bias 0 at 25% tax so tax-only burn baselines stay put).
+      </p>
+      <dl className="civic-feedback__stats">
+        <ReadoutRow
+          label="Budget headroom"
+          value={
+            <span data-testid="civic-budget-headroom-value">
+              {formatBudgetHeadroom(civic.budgetHeadroom)}
+            </span>
+          }
+        />
+        <ReadoutRow
+          label="Civic hype bias"
+          value={
+            <span data-testid="civic-hype-bias-value">
+              {formatHypeBias(civic.hypeBias)}
+            </span>
+          }
+        />
+        <ReadoutRow
+          label="Company hype"
+          value={
+            <span data-testid="civic-company-hype-value">
+              {formatHypePercent(shownHype(state.company.hype))}
+            </span>
+          }
+        />
+      </dl>
     </section>
   );
 }
@@ -247,6 +290,7 @@ export default function Dashboard({ state }) {
         </div>
       </dl>
       <TalentBurnSummary state={state} />
+      <CivicFeedbackReadout state={state} />
       <WorldEventEffect state={state} />
       <figure className="metrics-chart" aria-busy={ChartAccessibility === undefined}>
         <figcaption id="metrics-chart-description" className="chart-caption">

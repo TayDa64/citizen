@@ -7,7 +7,9 @@ import { startServer } from '../../server/index.js';
 test('OpenAPI document publishes TRIGGER_CONTRACT v1', () => {
   const spec = JSON.parse(fs.readFileSync('openapi.json', 'utf8'));
   assert.equal(spec.openapi, '3.0.3');
-  assert.equal(spec.info.version, '0.8.1');
+  assert.equal(spec.info.version, '0.8.2');
+  assert.ok(spec.components.schemas.CivicMetrics);
+  assert.deepEqual(spec.components.schemas.CivicMetrics.required, ['budgetHeadroom', 'hypeBias']);
   assert.ok(spec.paths['/api/campaigns']);
   assert.ok(spec.paths['/api/campaigns/{id}']);
   assert.ok(spec.paths['/api/campaigns/{id}/turns']);

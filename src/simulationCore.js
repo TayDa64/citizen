@@ -37,13 +37,14 @@ import {
   readTalentMultiplier,
   baseBurnRate as taxOnlyBurnRate,
 } from './talentMultiplier.js';
+import { applyCivicFeedback, computeCivicFromTax } from './civicFeedback.js';
 
 export const BASE_BURN = 2000;
 export const BASE_HYPE = 0.3;
 export const BASE_TALENT_COST = 4000;
 
 export const GAME_STATE_VERSION = 1;
-export const RULE_VERSION = 'citizen-slice2-v1';
+export const RULE_VERSION = 'citizen-civic-v1';
 
 export const initialState = {
   stateVersion: GAME_STATE_VERSION,
@@ -73,6 +74,8 @@ export const initialState = {
   talentMix: [],
   activeTriggers: [],
   lastTriggerChange: null,
+  // Neutral tax 0.25 → headroom 0.75 → hypeBias 0 (Slice 1 default).
+  civic: computeCivicFromTax(0.25),
 };
 
 export function computeBurnRate(taxRate, talentMultiplier = 1) {
@@ -135,7 +138,10 @@ export function applyEffects(state) {
 }
 
 export function setTaxRate(state, taxRate) {
-  return { ...state, taxRate: Math.max(0, Math.min(1, taxRate)) };
+  const next = structuredClone(state);
+  next.taxRate = Math.max(0, Math.min(1, taxRate));
+  // Tax → budget headroom → hype bias (same committed turn path as set_tax).
+  return applyCivicFeedback(next);
 }
 
 const HIRE_DEPARTMENTS = Object.freeze(['tech', 'marketing', 'sales']);
@@ -300,32 +306,35 @@ export function readApiSnapshot(prev, snapshot) {
   const resolvedTalent = talentCost ?? baselineTalentReading.value;
   // Keep client cash / burnRate / productQuality / history. Ignore any
   // company.cash or company.burnRate on the API payload (authority boundary).
-  return {
-    state: {
-      ...prev,
-      dataSource: 'api',
-      baselines: { hype: baselineHypeReading.value, talentCost: baselineTalentReading.value },
-      activeTriggers,
-      employees,
+  // Fold civic hype bias from the client taxRate onto API stacked hype.
+  const hydrated = {
+    ...prev,
+    dataSource: 'api',
+    baselines: { hype: baselineHypeReading.value, talentCost: baselineTalentReading.value },
+    activeTriggers,
+    employees,
+    talentMultiplier,
+    talentMix,
+    talentCostFactor,
+    talentCostFactorClamped,
+    effectiveMultiplier,
+    company: {
+      ...prev.company,
+      cash: prev.company.cash,
+      burnRate: prev.company.burnRate,
+      hype: resolvedHype,
+      talentCost: resolvedTalent,
       talentMultiplier,
       talentMix,
-      talentCostFactor,
-      talentCostFactorClamped,
-      effectiveMultiplier,
-      company: {
-        ...prev.company,
-        cash: prev.company.cash,
-        burnRate: prev.company.burnRate,
-        hype: resolvedHype,
-        talentCost: resolvedTalent,
-        talentMultiplier,
-        talentMix,
-      },
     },
+  };
+  applyCivicFeedback(hydrated, resolvedHype);
+  return {
+    state: hydrated,
     skipped,
     missingHype: hype == null,
     missingTalent: talentCost == null,
-    clampedHype: hypeReading.clamped || baselineHypeReading.clamped || hypeOutOfRange(resolvedHype),
+    clampedHype: hypeReading.clamped || baselineHypeReading.clamped || hypeOutOfRange(hydrated.company.hype),
     clampedTalent: talentReading.clamped || baselineTalentReading.clamped || talentCostOutOfRange(resolvedTalent),
   };
 }
@@ -353,13 +362,14 @@ export function hydrateFromApi(prev, snapshot) {
 
 function applyActiveTriggers(next, before, change) {
   const after = combinedEffects(next.baselines, next.activeTriggers);
-  next.company.hype = after.hype;
   next.company.talentCost = after.talentCost;
+  // Stacked trigger hype, then civic bias from current tax (budget headroom).
+  applyCivicFeedback(next, after.hype);
   next.lastTriggerChange = change
     ? {
         ...change,
         before,
-        after: { hype: after.hype, talentCost: after.talentCost },
+        after: { hype: next.company.hype, talentCost: after.talentCost },
       }
     : null;
   return next;

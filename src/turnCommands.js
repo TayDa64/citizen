@@ -2,8 +2,10 @@
  * Client helpers that apply TurnCommands locally or via the campaign API.
  * Preserves the companies-API authority boundary: never copy companies.cash /
  * companies.burnRate. When a campaign commit succeeds, cash/burn/tax/turn come
- * from TurnResult; API-owned hype / talent-cost / triggers stay from the prior
- * state. After hire_employee, campaign GameState owns the employee roster and
+ * from TurnResult; API-owned trigger stack / talent-cost stay from the prior
+ * state. Civic budget headroom travels with the campaign turn; hype is
+ * rebiased (API stacked hype ± civic hypeBias) so tax→city→hype survives merge.
+ * After hire_employee, campaign GameState owns the employee roster and
  * talentMultiplier / talentMix (taken from TurnResult when non-empty).
  *
  * Campaign GameState must carry the same activeTriggers stack the UI shows so
@@ -13,6 +15,7 @@
  */
 
 import { toTriggerPayload } from './citizenApi.js';
+import { computeCivicFromTax, rebiasHype } from './civicFeedback.js';
 import { applyTurnCommand } from './turnEngine.js';
 
 export function toCampaignTrigger(trigger) {
@@ -58,6 +61,8 @@ export function mergeCampaignTurnState(prev, turnState) {
   const talentMix = campaignOwnsRoster
     ? (turnState.talentMix ?? prev.talentMix)
     : prev.talentMix;
+  const prevCivic = prev.civic ?? computeCivicFromTax(prev.taxRate);
+  const nextCivic = turnState.civic ?? computeCivicFromTax(turnState.taxRate ?? prev.taxRate);
   return {
     ...prev,
     ...turnState,
@@ -75,9 +80,11 @@ export function mergeCampaignTurnState(prev, turnState) {
     // Recompute from campaign talent × API cost factor after hire.
     effectiveMultiplier: campaignOwnsRoster ? null : prev.effectiveMultiplier,
     lastTriggerChange: prev.lastTriggerChange,
+    civic: nextCivic,
     company: {
       ...turnState.company,
-      hype: prev.company.hype,
+      // Keep API trigger-stacked hype, then fold campaign civic bias from tax.
+      hype: rebiasHype(prev.company.hype, prevCivic, nextCivic),
       talentCost: prev.company.talentCost,
       talentMultiplier,
       talentMix,

@@ -385,6 +385,10 @@ export function triggerDiagramOverlay(state) {
   const burn = effectiveBurnRate(priced);
   const base = baseBurnRate(taxRate);
   const hypeLabel = `Hype: ${formatHypePercent(state.company?.hype)}`;
+  const headroom = Number(state.civic?.budgetHeadroom);
+  const headroomText = Number.isFinite(headroom)
+    ? `budget ${Math.round(headroom * 100)}%`
+    : '';
   nodeLabels[3] = `Hire Staff\n(Tech / Marketing / Sales)\nTalent ×${formatTalentReadout(multiplier)}\n${headcounts}`;
   nodeLabels[7] = `Launch / Market / Sell\nTrack Runway & Hype\nBurn ${formatCurrency(burn)} (base ${formatCurrency(base)})\n${equation.visible}\n${hypeLabel}`;
   const nodeAriaLabels = {
@@ -392,8 +396,19 @@ export function triggerDiagramOverlay(state) {
     7: `Launch / Market / Sell. Burn ${formatCurrency(burn)}. Base burn ${formatCurrency(base)}. ${equation.name}. ${hypeLabel}.`,
   };
 
+  // Light civic-infra wiring: show city budget headroom from tax (readout only).
+  // Keep "talent cost" on the edge so civic-band smokes / Slice 2 labels stay findable.
+  if (headroomText) {
+    nodeLabels['civic-infra'] = multiplierText
+      ? `${ORIGINAL_INFRA_LABEL}\n${headroomText}\n${multiplierText}`
+      : `${ORIGINAL_INFRA_LABEL}\n${headroomText}`;
+    edgeLabels['einfra-7'] = multiplierText
+      ? `${headroomText} · ${multiplierText}`
+      : `${headroomText} · talent cost`;
+  }
+
   if (active.length === 0) {
-    if (multiplierText) {
+    if (multiplierText && !headroomText) {
       nodeLabels['civic-infra'] = `${ORIGINAL_INFRA_LABEL}\n${multiplierText}`;
       edgeLabels['einfra-7'] = multiplierText;
     }
@@ -407,11 +422,17 @@ export function triggerDiagramOverlay(state) {
     const talentText = multiplierText
       ? `talent cost ${formatSignedPercent(talentRatio)} · ${multiplierText}`
       : `talent cost ${formatSignedPercent(talentRatio)}`;
-    nodeLabels['civic-infra'] = `${ORIGINAL_INFRA_LABEL}\n${arrow} ${talentText}`;
-    edgeLabels['einfra-7'] = talentText;
+    nodeLabels['civic-infra'] = headroomText
+      ? `${ORIGINAL_INFRA_LABEL}\n${headroomText}\n${arrow} ${talentText}`
+      : `${ORIGINAL_INFRA_LABEL}\n${arrow} ${talentText}`;
+    edgeLabels['einfra-7'] = headroomText ? `${headroomText} · ${talentText}` : talentText;
   } else if (multiplierText) {
-    nodeLabels['civic-infra'] = `${ORIGINAL_INFRA_LABEL}\n${multiplierText}`;
-    edgeLabels['einfra-7'] = multiplierText;
+    nodeLabels['civic-infra'] = headroomText
+      ? `${ORIGINAL_INFRA_LABEL}\n${headroomText}\n${multiplierText}`
+      : `${ORIGINAL_INFRA_LABEL}\n${multiplierText}`;
+    edgeLabels['einfra-7'] = headroomText
+      ? `${headroomText} · ${multiplierText}`
+      : multiplierText;
   }
 
   if (Math.abs(hypeDelta) < 0.0005) {
