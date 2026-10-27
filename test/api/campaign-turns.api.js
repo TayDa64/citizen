@@ -82,4 +82,57 @@ describe('campaign turns persistence', { concurrency: 1, timeout: 120_000 }, () 
       await db.close();
     }
   });
+
+
+  test('apply_trigger then advance_turn drains at policy burn 2464', async () => {
+    const db = await createThrowawayDatabase();
+    try {
+      await migrateAll(db.pool);
+      const created = await createCampaign(db.pool, {
+        seed: 'trigger-coherence-1',
+        state: { activeTriggers: [] },
+      });
+      assert.equal(created.state.activeTriggers.length, 0);
+
+      const applied = await commitTurn(db.pool, created.id, {
+        type: 'apply_trigger',
+        trigger: policy,
+      });
+      assert.equal(applied.state.company.talentCost, 4480);
+      assert.equal(applied.state.activeTriggers.length, 1);
+
+      const advanced = await commitTurn(db.pool, created.id, { type: 'advance_turn' });
+      assert.equal(advanced.state.company.burnRate, 2464);
+      assert.equal(Math.round(advanced.state.company.cash), Math.round(15000 - 2464 / 12));
+
+      const reloaded = await getCampaign(db.pool, created.id);
+      assert.equal(reloaded.state.company.burnRate, 2464);
+      assert.equal(reloaded.state.activeTriggers.length, 1);
+      assert.equal(reloaded.state.activeTriggers[0].id, policy.id);
+    } finally {
+      await db.close();
+    }
+  });
+
+  test('restack empty campaign then advance matches UI policy preview burn', async () => {
+    const db = await createThrowawayDatabase();
+    try {
+      await migrateAll(db.pool);
+      // Campaign seeded without triggers while UI would already show policy.
+      const created = await createCampaign(db.pool, { seed: 'restack-1' });
+      const restack = [
+        { type: 'clear_triggers' },
+        { type: 'apply_trigger', trigger: policy },
+        { type: 'advance_turn' },
+      ];
+      let last = created;
+      for (const command of restack) {
+        last = await commitTurn(db.pool, created.id, command);
+      }
+      assert.equal(last.state.company.burnRate, 2464);
+      assert.ok(last.state.company.cash < 15000 - 2200 / 12);
+    } finally {
+      await db.close();
+    }
+  });
 });

@@ -26,7 +26,12 @@ import {
 } from './simulation';
 import { CLEARED_ANNOUNCEMENT, announceTrigger, composeLiveAnnouncement } from './triggers';
 import { effectiveBurnRate, talentCostFactorClampOf } from './talentMultiplier';
-import { applyCommandsLocally, dispatchTurnCommands } from './turnCommands';
+import {
+  applyCommandsLocally,
+  commandsWithTriggerRestack,
+  dispatchTurnCommands,
+  toCampaignTrigger,
+} from './turnCommands';
 
 function removalBlockedMessage(error, label) {
   const hostAlert = hostHeaderAlert(error);
@@ -100,7 +105,11 @@ function App() {
           },
           history: simState.history,
           baselines: simState.baselines,
-          activeTriggers: [],
+          // Seed the same stack the UI shows so Advance Month burn matches
+          // preview (not empty state_json vs /api/triggers).
+          activeTriggers: (simState.activeTriggers ?? []).map((trigger) =>
+            toCampaignTrigger(trigger)
+          ),
         },
       });
       if (created?.id) {
@@ -113,17 +122,20 @@ function App() {
     return null;
   };
 
-  const commitCommands = (commands) => {
+  const commitCommands = (commands, { restackTriggers = false } = {}) => {
     const prev = stateRef.current;
+    const list = Array.isArray(commands) ? commands : [commands];
     // Local engine stays synchronous so tax slider / Advance Month update
     // immediately (Slice 1/2 UX + existing UI tests). Campaign API is async.
+    // Only restack when a campaign is live — local state already owns the stack.
     if (!apiBase || !campaignIdRef.current) {
-      const local = applyCommandsLocally(prev, commands);
+      const local = applyCommandsLocally(prev, list);
       setState(local.state);
       stateRef.current = local.state;
       return Promise.resolve({ state: local.state, mode: 'local', result: local.result });
     }
-    return dispatchTurnCommands(prev, commands, {
+    const queued = restackTriggers ? commandsWithTriggerRestack(prev, list) : list;
+    return dispatchTurnCommands(prev, queued, {
       api: createCitizenApi({ baseUrl: apiBase }),
       campaignId: campaignIdRef.current,
     }).then((dispatched) => {
@@ -131,6 +143,13 @@ function App() {
       stateRef.current = dispatched.state;
       return dispatched;
     });
+  };
+
+  const syncCampaignTriggerCommand = (command) => {
+    if (!apiBase || !campaignIdRef.current || command == null) {
+      return Promise.resolve(null);
+    }
+    return commitCommands([command]);
   };
 
   // Read the payload before setState. A throw inside an updater runs during
@@ -184,16 +203,20 @@ function App() {
     const prev = stateRef.current;
     const patched = typeof updater === 'function' ? updater(prev) : updater;
     const taxRate = patched?.taxRate;
-    void commitCommands([
-      { type: 'set_tax', taxRate },
-      { type: 'advance_turn' },
-    ]);
+    void commitCommands(
+      [
+        { type: 'set_tax', taxRate },
+        { type: 'advance_turn' },
+      ],
+      { restackTriggers: true },
+    );
   };
 
   // Advance Month via TurnCommand. Uses campaign commit when connected;
   // otherwise the local deterministic engine. Never POSTs to /api/companies.
+  // Restack campaign triggers first so burn/cash match the UI preview.
   const onTick = () => {
-    void commitCommands([{ type: 'advance_turn' }]);
+    void commitCommands([{ type: 'advance_turn' }], { restackTriggers: true });
   };
 
   const refreshApi = async (baseUrl) => {
@@ -275,11 +298,21 @@ function App() {
           reading.state
         );
         if (active) alerts.push(`${listed.label} is still listed by the service.`);
+        else {
+          await syncCampaignTriggerCommand({
+            type: 'apply_trigger',
+            trigger: toCampaignTrigger(listed),
+          });
+        }
       } else if (active) {
         announceLive(
           announceTrigger(trigger, 'remove', effectiveBurnRate(reading.state), talentCostFactorClampOf(reading.state)),
           reading.state
         );
+        await syncCampaignTriggerCommand({
+          type: 'remove_trigger',
+          triggerId: trigger.id,
+        });
       } else {
         alerts.push(`${trigger.label} is not listed by the service.`);
         setAnnouncement('');
@@ -321,6 +354,7 @@ function App() {
         if (reading.skipped > 0) alerts.push(skippedTriggerAlert(reading.skipped));
         if (reading.state.activeTriggers.length === 0) {
           setAnnouncement(CLEARED_ANNOUNCEMENT);
+          await syncCampaignTriggerCommand({ type: 'clear_triggers' });
         } else {
           alerts.push('World events are still listed by the service.');
           setAnnouncement('');
