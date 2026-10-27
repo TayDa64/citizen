@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { runPipelineIngest, validateIngestRequest } from '../../server/eventIngest.js';
+import {
+  runPipelineIngest,
+  validateIngestRequest,
+} from '../../server/eventIngest.js';
+import { TriggerValidationError } from '../../src/triggerContract.js';
 
 test('validateIngestRequest defaults to fixture civic-wage-bulletin', () => {
   const result = validateIngestRequest(undefined);
@@ -14,6 +18,13 @@ test('validateIngestRequest defaults to fixture civic-wage-bulletin', () => {
 test('validateIngestRequest rejects unknown adapter and unknown fixture', () => {
   assert.equal(validateIngestRequest({ adapter: 'firecrawl' }).ok, false);
   assert.equal(validateIngestRequest({ adapter: 'fixture', fixtureId: 'nope' }).ok, false);
+});
+
+test('adapter firecrawl stays rejected at pipeline entry', () => {
+  assert.throws(
+    () => runPipelineIngest({ adapter: 'firecrawl' }),
+    (error) => error instanceof TriggerValidationError,
+  );
 });
 
 test('runPipelineIngest fixture produces one active contract trigger after supersession', () => {

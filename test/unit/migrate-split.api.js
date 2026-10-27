@@ -58,9 +58,11 @@ test('migration 003 is additive and reversible in source', () => {
     'migrations/001_initial_schema.sql',
     'migrations/002_real_world_trigger_effects.sql',
     'migrations/003_trigger_contract_v1.sql',
-    'migrations/004_campaign_turns.sql'
+    'migrations/004_campaign_turns.sql',
+    'migrations/005_ingest_runs.sql'
   ]);
   assert.deepEqual(DOWN_MIGRATIONS, [
+    'migrations/005_ingest_runs.sql',
     'migrations/004_campaign_turns.sql',
     'migrations/003_trigger_contract_v1.sql',
     'migrations/002_real_world_trigger_effects.sql'
@@ -75,6 +77,19 @@ test('migration 004 is additive and reversible in source', () => {
   assert.match(parts.down, /DROP TABLE IF EXISTS turn_commits/);
   assert.match(parts.down, /DROP TABLE IF EXISTS campaigns/);
   assert.doesNotMatch(parts.up, /DROP TABLE campaigns/i);
+});
+
+test('migration 005 ingest_runs is additive and reversible in source', () => {
+  const sql = fs.readFileSync('migrations/005_ingest_runs.sql', 'utf8');
+  const parts = splitMigration(sql);
+  assert.match(parts.up, /CREATE TABLE IF NOT EXISTS ingest_runs/);
+  assert.match(parts.up, /trigger_client_ids/);
+  assert.match(parts.up, /result_json/);
+  assert.match(parts.up, /changed/);
+  assert.match(parts.up, /'success', 'error'/);
+  assert.doesNotMatch(parts.up, /scheduled_meeting_id/);
+  assert.match(parts.down, /DROP TABLE IF EXISTS ingest_runs/);
+  assert.doesNotMatch(parts.up, /DROP TABLE/i);
 });
 
 test('node:test filenames stay outside the vitest default include', () => {

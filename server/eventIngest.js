@@ -2,6 +2,7 @@
  * Server-side real-world ingest: fixture (or http stub) → pipeline → createTrigger.
  * Network-free by default so CI stays deterministic. Firecrawl can later plug in
  * behind the same Observation → interpretation → TRIGGER_CONTRACT path.
+ * Every ingestAndPersist attempt inserts an ingest_runs audit row (CIT-68).
  */
 
 import { collectFixtureObservations, listFixtureIds } from '../src/adapters/fixtureAdapter.js';
@@ -17,6 +18,16 @@ import { createTrigger } from './triggers.js';
 
 function issue(path, code, message) {
   return { path, code, message };
+}
+
+function requestHints(request) {
+  if (request == null || typeof request !== 'object' || Array.isArray(request)) {
+    return { adapter: null, fixtureId: null };
+  }
+  return {
+    adapter: typeof request.adapter === 'string' ? request.adapter : null,
+    fixtureId: typeof request.fixtureId === 'string' ? request.fixtureId : null,
+  };
 }
 
 export function validateIngestRequest(input) {
@@ -123,20 +134,112 @@ export function runPipelineIngest(request) {
   };
 }
 
+function mapIngestRunRow(row) {
+  return {
+    id: row.id,
+    startedAt: row.started_at?.toISOString?.() ?? row.started_at,
+    finishedAt: row.finished_at?.toISOString?.() ?? row.finished_at,
+    adapter: row.adapter,
+    fixtureId: row.fixture_id,
+    status: row.status,
+    changed: row.changed,
+    error: row.error,
+    triggerClientIds: row.trigger_client_ids ?? [],
+    result: row.result_json,
+  };
+}
+
+export async function insertIngestRun(pool, fields) {
+  const result = await pool.query(
+    `INSERT INTO ingest_runs (
+       started_at, finished_at, adapter, fixture_id, status, changed, error,
+       trigger_client_ids, result_json
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::text[], $9::jsonb)
+     RETURNING id, started_at, finished_at, adapter, fixture_id, status, changed,
+               error, trigger_client_ids, result_json`,
+    [
+      fields.startedAt,
+      fields.finishedAt,
+      fields.adapter,
+      fields.fixtureId,
+      fields.status,
+      fields.changed,
+      fields.error,
+      fields.triggerClientIds ?? [],
+      fields.resultJson == null ? null : JSON.stringify(fields.resultJson),
+    ],
+  );
+  return mapIngestRunRow(result.rows[0]);
+}
+
+export async function listIngestRuns(pool, { limit = 50 } = {}) {
+  const capped = Math.max(1, Math.min(200, Number(limit) || 50));
+  const result = await pool.query(
+    `SELECT id, started_at, finished_at, adapter, fixture_id, status, changed,
+            error, trigger_client_ids, result_json
+     FROM ingest_runs
+     ORDER BY started_at DESC
+     LIMIT $1`,
+    [capped],
+  );
+  return result.rows.map(mapIngestRunRow);
+}
+
+async function recordErrorRun(pool, request, startedAt, error) {
+  const hints = requestHints(request);
+  try {
+    await insertIngestRun(pool, {
+      startedAt,
+      finishedAt: new Date(),
+      adapter: hints.adapter,
+      fixtureId: hints.fixtureId,
+      status: 'error',
+      changed: false,
+      error: error?.message || String(error),
+      triggerClientIds: [],
+      resultJson: Array.isArray(error?.issues) ? { issues: error.issues } : null,
+    });
+  } catch (recordError) {
+    console.error(recordError);
+  }
+}
+
 /**
  * Persist active pipeline triggers through the existing createTrigger path
  * (same-id replace, restack from baselines — no compounding).
+ * Always inserts an ingest_runs row; validation failure is status=error, not success.
  */
 export async function ingestAndPersist(pool, request) {
-  const result = runPipelineIngest(request);
-  const stored = [];
-  for (const trigger of result.triggers) {
-    stored.push(await createTrigger(pool, trigger));
+  const startedAt = new Date();
+  try {
+    const result = runPipelineIngest(request);
+    const stored = [];
+    for (const trigger of result.triggers) {
+      stored.push(await createTrigger(pool, trigger));
+    }
+    const triggerClientIds = stored.map((trigger) => trigger.id);
+    await insertIngestRun(pool, {
+      startedAt,
+      finishedAt: new Date(),
+      adapter: result.adapter,
+      fixtureId: result.fixtureId,
+      status: 'success',
+      changed: stored.length > 0,
+      error: null,
+      triggerClientIds,
+      resultJson: {
+        events: result.events,
+        triggerIds: triggerClientIds,
+      },
+    });
+    return {
+      adapter: result.adapter,
+      fixtureId: result.fixtureId,
+      events: result.events,
+      triggers: stored,
+    };
+  } catch (error) {
+    await recordErrorRun(pool, request, startedAt, error);
+    throw error;
   }
-  return {
-    adapter: result.adapter,
-    fixtureId: result.fixtureId,
-    events: result.events,
-    triggers: stored,
-  };
 }
