@@ -1,10 +1,11 @@
 /**
  * CIT-80 / migration 006 — jurisdiction nest filter.
+ * CIT-69 — tier sort before buildTriggerRestackCommands (federal → city).
  *
  * Applicable set for a campaign home city = that city + ancestors only.
  * Peers (same tier, different id) do not apply. NULL jurisdiction_id on a
  * trigger matches no campaign (fail closed). Chain filter runs before
- * buildTriggerRestackCommands (CIT-69); this module does not restack.
+ * buildTriggerRestackCommands (CIT-69); this module does not commit turns.
  */
 
 /** Checked-in seed matching migrations/006_jurisdiction_nest.sql. */
@@ -17,6 +18,14 @@ export const JURISDICTION_SEED = Object.freeze([
 ]);
 
 export const JURISDICTION_TIERS = Object.freeze(['federal', 'state', 'county', 'city']);
+
+/** Composition / snapshot order for talent factors (wave 2). */
+export const TIER_RESTACK_ORDER = Object.freeze({
+  federal: 0,
+  state: 1,
+  county: 2,
+  city: 3,
+});
 
 /** Wage bulletin client_id prefix — migration backfill + ingest stamp target. */
 export const WAGE_BULLETIN_CLIENT_ID_PREFIX = 'evt-pipeline-obs-civic-wage-bulletin-';
@@ -94,6 +103,53 @@ export function filterTriggersForHome(triggers, homeId, jurisdictions = JURISDIC
     if (jurisdictionId == null || jurisdictionId === '') return false;
     return chain.has(String(jurisdictionId));
   });
+}
+
+function tierRank(jurisdictionId, byId) {
+  if (jurisdictionId == null || jurisdictionId === '') {
+    return JURISDICTION_TIERS.length + 1;
+  }
+  const tier = byId.get(String(jurisdictionId))?.tier ?? null;
+  if (tier == null || !Object.prototype.hasOwnProperty.call(TIER_RESTACK_ORDER, tier)) {
+    return JURISDICTION_TIERS.length;
+  }
+  return TIER_RESTACK_ORDER[tier];
+}
+
+function triggerClientId(trigger) {
+  const id = trigger?.id ?? trigger?.client_id ?? trigger?.clientId ?? '';
+  return String(id);
+}
+
+/**
+ * Sort applicable triggers federal → state → county → city, then client_id.
+ * Stable snapshot / talent-factor composition order (wave 2).
+ */
+export function sortTriggersForRestack(triggers, jurisdictions = JURISDICTION_SEED) {
+  const list = Array.isArray(triggers) ? [...triggers] : [];
+  const byId = jurisdictionById(jurisdictions);
+  return list.sort((left, right) => {
+    const leftJurisdiction = left?.jurisdictionId ?? left?.jurisdiction_id ?? null;
+    const rightJurisdiction = right?.jurisdictionId ?? right?.jurisdiction_id ?? null;
+    const byTier = tierRank(leftJurisdiction, byId) - tierRank(rightJurisdiction, byId);
+    if (byTier !== 0) return byTier;
+    const leftId = triggerClientId(left);
+    const rightId = triggerClientId(right);
+    if (leftId < rightId) return -1;
+    if (leftId > rightId) return 1;
+    return 0;
+  });
+}
+
+/**
+ * Filter to home chain, then sort federal → city (client_id tie-break).
+ * Ready for buildTriggerRestackCommands (CIT-69).
+ */
+export function nestTriggersForRestack(triggers, homeId, jurisdictions = JURISDICTION_SEED) {
+  return sortTriggersForRestack(
+    filterTriggersForHome(triggers, homeId, jurisdictions),
+    jurisdictions,
+  );
 }
 
 /** Stamp known fixture client_ids onto a jurisdiction (server ingest / backfill). */

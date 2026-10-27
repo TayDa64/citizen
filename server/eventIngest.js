@@ -3,6 +3,8 @@
  * Network-free by default so CI stays deterministic. Firecrawl can later plug in
  * behind the same Observation → interpretation → TRIGGER_CONTRACT path.
  * Every ingestAndPersist attempt inserts an ingest_runs audit row (CIT-68).
+ * CIT-69: optional campaignId (default off) restacks one campaign after a
+ * changed ingest — nest filter before clear_triggers / apply_trigger.
  */
 
 import { collectFixtureObservations, listFixtureIds } from '../src/adapters/fixtureAdapter.js';
@@ -15,7 +17,14 @@ import {
 } from '../src/eventPipeline.js';
 import { stampTriggerJurisdictions } from '../src/jurisdictionNest.js';
 import { TriggerValidationError } from '../src/triggerContract.js';
+import {
+  restackCampaignTriggers,
+  shouldRestackAfterIngest,
+} from './campaignRestack.js';
 import { createTrigger } from './triggers.js';
+
+const CAMPAIGN_ID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function issue(path, code, message) {
   return { path, code, message };
@@ -23,17 +32,42 @@ function issue(path, code, message) {
 
 function requestHints(request) {
   if (request == null || typeof request !== 'object' || Array.isArray(request)) {
-    return { adapter: null, fixtureId: null };
+    return { adapter: null, fixtureId: null, campaignId: null };
   }
   return {
     adapter: typeof request.adapter === 'string' ? request.adapter : null,
     fixtureId: typeof request.fixtureId === 'string' ? request.fixtureId : null,
+    campaignId: typeof request.campaignId === 'string' ? request.campaignId : null,
   };
+}
+
+function parseOptionalCampaignId(input, issues) {
+  if (!Object.prototype.hasOwnProperty.call(input, 'campaignId')) {
+    return null;
+  }
+  if (input.campaignId == null) {
+    return null;
+  }
+  if (typeof input.campaignId !== 'string' || input.campaignId.trim() === '') {
+    issues.push(
+      issue('campaignId', 'invalid_type', 'campaignId must be a non-empty UUID string when set'),
+    );
+    return null;
+  }
+  const campaignId = input.campaignId.trim();
+  if (!CAMPAIGN_ID_RE.test(campaignId)) {
+    issues.push(issue('campaignId', 'invalid_value', 'campaignId must be a UUID'));
+    return null;
+  }
+  return campaignId;
 }
 
 export function validateIngestRequest(input) {
   if (input == null) {
-    return { ok: true, value: { adapter: 'fixture', fixtureId: 'civic-wage-bulletin' } };
+    return {
+      ok: true,
+      value: { adapter: 'fixture', fixtureId: 'civic-wage-bulletin', campaignId: null },
+    };
   }
   if (input === null || typeof input !== 'object' || Array.isArray(input)) {
     return {
@@ -42,7 +76,7 @@ export function validateIngestRequest(input) {
     };
   }
   const issues = [];
-  const allowed = new Set(['adapter', 'fixtureId', 'observations']);
+  const allowed = new Set(['adapter', 'fixtureId', 'observations', 'campaignId']);
   for (const key of Object.keys(input)) {
     if (!allowed.has(key)) {
       issues.push(issue(key, 'unknown_field', `Unknown field: ${key}`));
@@ -91,6 +125,8 @@ export function validateIngestRequest(input) {
     }
   }
 
+  const campaignId = parseOptionalCampaignId(input, issues);
+
   if (issues.length > 0) return { ok: false, issues };
   return {
     ok: true,
@@ -98,6 +134,7 @@ export function validateIngestRequest(input) {
       adapter,
       fixtureId: adapter === 'fixture' ? fixtureId : null,
       observations,
+      campaignId,
     },
   };
 }
@@ -207,12 +244,20 @@ async function recordErrorRun(pool, request, startedAt, error) {
 
 /**
  * Persist active pipeline triggers through the existing createTrigger path
- * (same-id replace, restack from baselines — no compounding).
+ * (same-id replace, company baseline restack — no compounding).
  * Always inserts an ingest_runs row; validation failure is status=error, not success.
+ * CIT-69: when campaignId is set and changed=true, nest-filter then commitTurn
+ * restack before marking the run successful. Failed restack keeps triggers and
+ * records status=error (does not delete real_world_triggers).
  */
 export async function ingestAndPersist(pool, request) {
   const startedAt = new Date();
   try {
+    const validated = validateIngestRequest(request);
+    if (!validated.ok) {
+      throw new TriggerValidationError('Invalid ingest request', validated.issues);
+    }
+    const campaignId = validated.value.campaignId;
     const result = runPipelineIngest(request);
     const stored = [];
     for (const trigger of result.triggers) {
@@ -221,18 +266,60 @@ export async function ingestAndPersist(pool, request) {
     const triggerClientIds = stored.map((trigger) => trigger.id);
     // CIT-80: stamp known fixture jurisdictions (wage → mv) without contract change.
     await stampTriggerJurisdictions(pool, triggerClientIds);
+    const changed = stored.length > 0;
+    let restack = null;
+    if (
+      shouldRestackAfterIngest({
+        campaignId,
+        changed,
+        triggerCount: stored.length,
+      })
+    ) {
+      try {
+        restack = await restackCampaignTriggers(pool, campaignId);
+      } catch (restackError) {
+        // Triggers stay; do not mark ingest success.
+        await insertIngestRun(pool, {
+          startedAt,
+          finishedAt: new Date(),
+          adapter: result.adapter,
+          fixtureId: result.fixtureId,
+          status: 'error',
+          changed: false,
+          error: restackError?.message || String(restackError),
+          triggerClientIds,
+          resultJson: {
+            events: result.events,
+            triggerIds: triggerClientIds,
+            restackFailed: true,
+            campaignId,
+          },
+        });
+        restackError.ingestRunRecorded = true;
+        throw restackError;
+      }
+    }
     await insertIngestRun(pool, {
       startedAt,
       finishedAt: new Date(),
       adapter: result.adapter,
       fixtureId: result.fixtureId,
       status: 'success',
-      changed: stored.length > 0,
+      changed,
       error: null,
       triggerClientIds,
       resultJson: {
         events: result.events,
         triggerIds: triggerClientIds,
+        ...(restack
+          ? {
+              restack: {
+                campaignId: restack.campaignId,
+                homeId: restack.homeId,
+                appliedTriggerIds: restack.appliedTriggerIds,
+              },
+            }
+          : {}),
       },
     });
     return {
@@ -240,9 +327,20 @@ export async function ingestAndPersist(pool, request) {
       fixtureId: result.fixtureId,
       events: result.events,
       triggers: stored,
+      ...(restack
+        ? {
+            restack: {
+              campaignId: restack.campaignId,
+              homeId: restack.homeId,
+              appliedTriggerIds: restack.appliedTriggerIds,
+            },
+          }
+        : {}),
     };
   } catch (error) {
-    await recordErrorRun(pool, request, startedAt, error);
+    if (!error?.ingestRunRecorded) {
+      await recordErrorRun(pool, request, startedAt, error);
+    }
     throw error;
   }
 }

@@ -12,12 +12,26 @@ test('validateIngestRequest defaults to fixture civic-wage-bulletin', () => {
   assert.deepEqual(result.value, {
     adapter: 'fixture',
     fixtureId: 'civic-wage-bulletin',
+    campaignId: null,
   });
 });
 
 test('validateIngestRequest rejects unknown adapter and unknown fixture', () => {
   assert.equal(validateIngestRequest({ adapter: 'firecrawl' }).ok, false);
   assert.equal(validateIngestRequest({ adapter: 'fixture', fixtureId: 'nope' }).ok, false);
+});
+
+test('validateIngestRequest accepts optional campaignId UUID (CIT-69 default off)', () => {
+  const without = validateIngestRequest({ adapter: 'fixture' });
+  assert.equal(without.ok, true);
+  assert.equal(without.value.campaignId, null);
+  const withId = validateIngestRequest({
+    adapter: 'fixture',
+    campaignId: '11111111-1111-4111-8111-111111111111',
+  });
+  assert.equal(withId.ok, true);
+  assert.equal(withId.value.campaignId, '11111111-1111-4111-8111-111111111111');
+  assert.equal(validateIngestRequest({ campaignId: 'not-a-uuid' }).ok, false);
 });
 
 test('adapter firecrawl stays rejected at pipeline entry', () => {

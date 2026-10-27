@@ -8,8 +8,14 @@ import {
   JURISDICTION_SEED,
   ancestorChainIds,
   filterTriggersForHome,
+  nestTriggersForRestack,
   resolveJurisdictionForClientId,
+  sortTriggersForRestack,
 } from './jurisdictionNest.js';
+import {
+  buildServerRestackCommands,
+  shouldRestackAfterIngest,
+} from '../server/campaignRestack.js';
 import { applyTrigger, clearTriggers, initialState } from './simulation.js';
 import { effectiveBurnRate } from './talentMultiplier.js';
 import { TriggerValidationError, stackTriggerEffects } from './triggerContract.js';
@@ -135,5 +141,67 @@ describe('CIT-80 jurisdiction nest filter', () => {
     expect(FILTER_TRIGGERS_FOR_HOME_SQL).toMatch(
       /jurisdiction_id IN \(SELECT id FROM chain\)/,
     );
+  });
+
+  test('CIT-69 sortTriggersForRestack is federal → state → county → city then client_id', () => {
+    const federal = {
+      id: 'evt-us-b',
+      jurisdictionId: 'us',
+      effect: { talentCost: 0.01 },
+    };
+    const federalEarlier = {
+      id: 'evt-us-a',
+      jurisdictionId: 'us',
+      effect: { hype: 0.02 },
+    };
+    const state = {
+      id: 'evt-ca',
+      jurisdictionId: 'ca',
+      effect: { talentCost: 0.01 },
+    };
+    const county = { ...countyStack };
+    const city = { ...mvWage };
+    const sorted = sortTriggersForRestack([city, county, federal, state, federalEarlier]);
+    expect(sorted.map((row) => row.id)).toEqual([
+      'evt-us-a',
+      'evt-us-b',
+      'evt-ca',
+      countyStack.id,
+      mvWage.id,
+    ]);
+  });
+
+  test('CIT-69 nestTriggersForRestack drops sunnyvale peer then sorts remaining', () => {
+    const nested = nestTriggersForRestack(
+      [sunnyvalePeer, mvWage, countyStack],
+      'mv',
+    );
+    expect(nested.map((row) => row.id)).toEqual([countyStack.id, mvWage.id]);
+    expect(nested.some((row) => row.jurisdictionId === 'sunnyvale')).toBe(false);
+    const commands = buildServerRestackCommands(nested);
+    expect(commands[0]).toEqual({ type: 'clear_triggers' });
+    expect(commands.slice(1).map((command) => command.type)).toEqual([
+      'apply_trigger',
+      'apply_trigger',
+    ]);
+    expect(commands[1].trigger).not.toHaveProperty('jurisdictionId');
+  });
+
+  test('CIT-69 shouldRestackAfterIngest default off; changed=false skips', () => {
+    expect(shouldRestackAfterIngest({})).toBe(false);
+    expect(
+      shouldRestackAfterIngest({
+        campaignId: '33333333-3333-4333-8333-333333333333',
+        changed: false,
+        triggerCount: 1,
+      }),
+    ).toBe(false);
+    expect(
+      shouldRestackAfterIngest({
+        campaignId: '33333333-3333-4333-8333-333333333333',
+        changed: true,
+        triggerCount: 1,
+      }),
+    ).toBe(true);
   });
 });
