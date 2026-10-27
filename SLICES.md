@@ -17,17 +17,23 @@
 - Keep the React Flow diagram as the system map.
 
 ### Next suggested slice
-Real-world trigger (mock or Firecrawl) updates hype or talent cost and appears in the diagram + dashboard.
+Slice 2 landed on `main` (PRs #1–#6). See **Next suggested slice** under Slice 2.
 
-## Slice 2
+## Slice 2 (completed on main)
 **A sample world event updates hype and talent cost, and the effect is visible.**
 
 ### What works
-- `src/triggers.js` is the RealWorldTrigger contract (id, type, label, source, timestamp, effect.hype, effect.talentCost) plus frozen `mock:local` samples.
+- `src/triggers.js` is the RealWorldTrigger contract (id, type, label, source, timestamp, effect.hype, effect.talentCost) plus frozen `mock:local` samples shaped for `real_world_triggers.extracted` (Firecrawl can replace the source later).
 - `applyTrigger`, `removeTrigger`, and `clearTriggers` in `src/simulation.js` stack those effects from the Slice 1 baseline. No active trigger leaves burn on the Slice 1 formula.
-- The diagram shows the talent-cost delta on the infrastructure node and edge, and adds a hype node when hype moves.
-- The dashboard draws a dashed Highcharts plot line and band at the trigger month, with a before/after readout.
+- The diagram updates Real-World Triggers node `id: '5'`, shows the talent-cost delta on the infrastructure node and edge, and adds a hype node when hype moves. Node id `civic-tax` is unchanged.
+- The dashboard draws a dashed Highcharts plot line and band at the trigger month, with a before/after hype and talent-cost readout.
 - World-event buttons are keyboard operable and announce the effect in an `aria-live="polite"` region.
+
+### Acceptance (Brainiac)
+- [ ] Mock trigger (`SAMPLE_TRIGGERS` / `source: mock:local`) updates `company.hype` and/or talent cost via data-driven effects.
+- [ ] Change appears on React Flow node `5` (and related overlay) and in the Dashboard readout/chart markers.
+- [ ] Node id `civic-tax` still present; with no world event, tax → burn matches Slice 1 (2200 at 25% tax).
+- [ ] Local test steps below still pass.
 
 ### Local test
 ```bash
@@ -35,7 +41,10 @@ npm install
 npm test
 npm run dev
 ```
-Drag the tax slider, click “Advance Month”, watch the chart. Apply “Policy change” and confirm talent cost +12% without moving cash until the next month.
+Drag the tax slider, click “Advance Month”, watch the chart. Apply “Policy change” and confirm talent cost +12% without moving cash until the next month. Apply “News spike” and confirm hype rises and node `5` / the hype overlay update. Clear world events and confirm burn returns to the Slice 1 baseline.
+
+### Next suggested slice
+Authoritative game state (versioned GameState / turn commit) — see [STATE.md](STATE.md) Phase 1.
 
 ### API dependency
 
