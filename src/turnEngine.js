@@ -18,6 +18,10 @@
  * company.hype via the typed pathway registry (`pathway.budgetHeadroom→company.hype`)
  * without changing burn baselines. TurnResult.pathwayPreview mirrors that rule.
  *
+ * Politics (P1-5): `voterSupport = 0.5*budgetHeadroom + 0.5*company.hype`.
+ * Support refreshes whenever civic/hype move; `survivalStatus` is evaluated
+ * only on `advance_turn` against floor 0.25 (`ousted` / `incumbent`).
+ *
  * Authority: campaign TurnResult owns cash/burn history when committed.
  * After hire, campaign GameState also owns the employee roster / talent mix.
  * Civic metrics travel with campaign GameState; GET /api/companies cash/burnRate
@@ -45,6 +49,11 @@ import {
   explainPathwayApplication,
   previewPathway,
 } from './pathways.js';
+import {
+  VOTER_SUPPORT_FLOOR,
+  evaluatePoliticalSurvival,
+  refreshPolitics,
+} from './politicalObjectives.js';
 
 export { GAME_STATE_VERSION, RULE_VERSION };
 export { PATHWAY_BUDGET_HEADROOM_TO_HYPE, PATHWAY_RULES, previewPathway } from './pathways.js';
@@ -122,6 +131,12 @@ export function normalizeGameState(raw) {
       ? Number(raw.civic.hypeBias)
       : derivedCivic.hypeBias,
   };
+  const companyCopy = { ...company };
+  // Refresh voterSupport from civic/hype; preserve survival until advance_turn.
+  const politics = refreshPolitics(
+    { civic, company: companyCopy, politics: raw.politics },
+    { evaluateSurvival: false },
+  );
   return {
     ...raw,
     stateVersion,
@@ -130,7 +145,7 @@ export function normalizeGameState(raw) {
     seed: raw.seed == null ? null : String(raw.seed),
     ruleVersion: typeof raw.ruleVersion === 'string' ? raw.ruleVersion : RULE_VERSION,
     taxRate: clampedTax,
-    company: { ...company },
+    company: companyCopy,
     history: {
       cash: Array.isArray(raw.history?.cash) ? [...raw.history.cash] : [Number(company.cash) || 0],
       burnRate: Array.isArray(raw.history?.burnRate) ? [...raw.history.burnRate] : [Number(company.burnRate) || 0],
@@ -150,6 +165,7 @@ export function normalizeGameState(raw) {
       : [],
     talentMix: Array.isArray(raw.talentMix) ? raw.talentMix.map((row) => ({ ...row })) : [],
     civic,
+    politics,
   };
 }
 
@@ -188,6 +204,11 @@ export function toGameStateView(state) {
     civic: {
       budgetHeadroom: normalized.civic.budgetHeadroom,
       hypeBias: normalized.civic.hypeBias,
+    },
+    politics: {
+      voterSupport: normalized.politics.voterSupport,
+      survivalStatus: normalized.politics.survivalStatus,
+      survivalFloor: normalized.politics.survivalFloor ?? VOTER_SUPPORT_FLOOR,
     },
   };
 }
@@ -295,6 +316,7 @@ function metricSnapshot(state) {
     activeTriggerCount: (state.activeTriggers ?? []).length,
     budgetHeadroom: Number(state.civic?.budgetHeadroom) || 0,
     hypeBias: Number(state.civic?.hypeBias) || 0,
+    voterSupport: Number(state.politics?.voterSupport) || 0,
   };
 }
 
@@ -311,6 +333,7 @@ function deltasBetween(before, after) {
     activeTriggerCount: after.activeTriggerCount - before.activeTriggerCount,
     budgetHeadroom: after.budgetHeadroom - before.budgetHeadroom,
     hypeBias: after.hypeBias - before.hypeBias,
+    voterSupport: after.voterSupport - before.voterSupport,
   };
 }
 
@@ -328,11 +351,16 @@ function explanationsFor(command, before, after, appliedEffects) {
         `Tax set to ${(after.taxRate * 100).toFixed(0)}%. Budget headroom ${(after.budgetHeadroom * 100).toFixed(0)}% → hype ${after.hype}.`,
       );
       break;
-    case 'advance_turn':
+    case 'advance_turn': {
+      const survival = evaluatePoliticalSurvival(after.voterSupport);
       lines.push(
         `Advanced to turn ${after.turn}. Burn ${formatMoney(after.burnRate)}/mo; cash ${formatMoney(before.cash)} → ${formatMoney(after.cash)}.`,
       );
+      lines.push(
+        `Political survival: voter support ${(after.voterSupport * 100).toFixed(0)}% → ${survival} (floor ${(VOTER_SUPPORT_FLOOR * 100).toFixed(0)}%).`,
+      );
       break;
+    }
     case 'apply_trigger':
       lines.push(
         `Applied trigger ${command.trigger?.label ?? command.trigger?.id ?? ''}: hype ${before.hype} → ${after.hype}, talent cost ${formatMoney(before.talentCost)} → ${formatMoney(after.talentCost)}.`,
@@ -366,6 +394,7 @@ function applyCommandMutation(state, command) {
       return simSetTaxRate(state, command.taxRate);
     case 'advance_turn': {
       const next = tickEffects(state);
+      const politics = refreshPolitics(next, { evaluateSurvival: true });
       return {
         ...next,
         turn: (Number.isInteger(state.turn) ? state.turn : 0) + 1,
@@ -373,6 +402,7 @@ function applyCommandMutation(state, command) {
         campaignId: state.campaignId ?? null,
         seed: state.seed ?? null,
         ruleVersion: state.ruleVersion ?? RULE_VERSION,
+        politics,
       };
     }
     case 'apply_trigger':
@@ -430,6 +460,18 @@ function appliedEffectsFor(command, before, after, beforeState, afterState) {
     effects.push({
       kind: 'burn.tick',
       summary: `cash drained by burn/12 (${formatMoney(before.burnRate)} preview → ${formatMoney(after.burnRate)} applied)`,
+    });
+    const beforeStatus = beforeState.politics?.survivalStatus === 'ousted' ? 'ousted' : 'incumbent';
+    const afterStatus = afterState.politics?.survivalStatus === 'ousted' ? 'ousted' : 'incumbent';
+    effects.push({
+      kind: 'politics.survival',
+      summary: `voterSupport ${before.voterSupport} → ${after.voterSupport}; survival ${beforeStatus} → ${afterStatus} (floor ${VOTER_SUPPORT_FLOOR})`,
+    });
+  }
+  if (command.type === 'set_tax' && before.voterSupport !== after.voterSupport) {
+    effects.push({
+      kind: 'politics.support',
+      summary: `voterSupport ${before.voterSupport} → ${after.voterSupport} (from headroom + hype)`,
     });
   }
   if (command.type === 'apply_trigger' || command.type === 'remove_trigger' || command.type === 'clear_triggers') {
@@ -511,5 +553,7 @@ export function stableMetrics(state) {
     historyBurn: view.history.burnRate,
     budgetHeadroom: view.civic.budgetHeadroom,
     hypeBias: view.civic.hypeBias,
+    voterSupport: view.politics.voterSupport,
+    survivalStatus: view.politics.survivalStatus,
   };
 }

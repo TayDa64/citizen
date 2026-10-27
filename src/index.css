@@ -400,6 +400,21 @@ button:focus-visible {
   font-weight: 700;
 }
 
+.political-survival {
+  margin: 0.75rem 0 0;
+  color: #f8fafc;
+}
+
+.political-survival h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+  color: #f8fafc;
+}
+
+.political-survival__stats {
+  margin: 0.5rem 0 0;
+}
+
 .chart-caption {
   margin: 0 0 0.5rem;
   color: #e2e8f0;

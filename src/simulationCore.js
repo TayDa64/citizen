@@ -38,6 +38,7 @@ import {
   baseBurnRate as taxOnlyBurnRate,
 } from './talentMultiplier.js';
 import { applyCivicFeedback, computeCivicFromTax } from './civicFeedback.js';
+import { defaultPolitics } from './politicalObjectives.js';
 
 export const BASE_BURN = 2000;
 export const BASE_HYPE = 0.3;
@@ -45,6 +46,8 @@ export const BASE_TALENT_COST = 4000;
 
 export const GAME_STATE_VERSION = 1;
 export const RULE_VERSION = 'citizen-civic-v1';
+
+const INITIAL_CIVIC = computeCivicFromTax(0.25);
 
 export const initialState = {
   stateVersion: GAME_STATE_VERSION,
@@ -75,7 +78,9 @@ export const initialState = {
   activeTriggers: [],
   lastTriggerChange: null,
   // Neutral tax 0.25 → headroom 0.75 → hypeBias 0 (Slice 1 default).
-  civic: computeCivicFromTax(0.25),
+  civic: INITIAL_CIVIC,
+  // P1-5: voterSupport from headroom + hype; survival evaluated on advance_turn.
+  politics: defaultPolitics(INITIAL_CIVIC, BASE_HYPE),
 };
 
 export function computeBurnRate(taxRate, talentMultiplier = 1) {

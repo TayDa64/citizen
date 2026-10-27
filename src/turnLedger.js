@@ -22,6 +22,7 @@ const METRIC_KEYS = Object.freeze([
   'activeTriggerCount',
   'budgetHeadroom',
   'hypeBias',
+  'voterSupport',
 ]);
 
 function asFiniteNumber(value, fallback = 0) {
@@ -44,6 +45,7 @@ function metricsFromView(view) {
   if (view == null || typeof view !== 'object') return null;
   const company = view.company ?? {};
   const civic = view.civic ?? {};
+  const politics = view.politics ?? {};
   return normalizeLedgerMetrics({
     turn: view.turn,
     taxRate: view.taxRate,
@@ -56,6 +58,7 @@ function metricsFromView(view) {
     activeTriggerCount: Array.isArray(view.activeTriggers) ? view.activeTriggers.length : 0,
     budgetHeadroom: civic.budgetHeadroom,
     hypeBias: civic.hypeBias,
+    voterSupport: politics.voterSupport,
   });
 }
 

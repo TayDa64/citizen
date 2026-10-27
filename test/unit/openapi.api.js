@@ -7,8 +7,9 @@ import { startServer } from '../../server/index.js';
 test('OpenAPI document publishes TRIGGER_CONTRACT v1', () => {
   const spec = JSON.parse(fs.readFileSync('openapi.json', 'utf8'));
   assert.equal(spec.openapi, '3.0.3');
-  assert.equal(spec.info.version, '0.8.4');
+  assert.equal(spec.info.version, '0.8.5');
   assert.ok(spec.components.schemas.CivicMetrics);
+  assert.ok(spec.components.schemas.PoliticsMetrics);
   assert.ok(spec.components.schemas.TurnLedgerEntry);
   assert.ok(spec.components.schemas.IngestRequest);
   assert.ok(spec.components.schemas.IngestResult);
@@ -22,6 +23,11 @@ test('OpenAPI document publishes TRIGGER_CONTRACT v1', () => {
     ['version', 'seq', 'turn', 'turnBefore', 'turnAfter', 'command', 'appliedEffects', 'explanations'],
   );
   assert.deepEqual(spec.components.schemas.CivicMetrics.required, ['budgetHeadroom', 'hypeBias']);
+  assert.deepEqual(
+    spec.components.schemas.PoliticsMetrics.required,
+    ['voterSupport', 'survivalStatus', 'survivalFloor'],
+  );
+  assert.ok(spec.components.schemas.TurnLedgerMetrics.properties.voterSupport);
   assert.ok(spec.paths['/api/campaigns']);
   assert.ok(spec.paths['/api/campaigns/{id}']);
   assert.ok(spec.paths['/api/campaigns/{id}/turns']);
