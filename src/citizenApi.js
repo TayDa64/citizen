@@ -8,6 +8,8 @@ import { TRIGGER_TYPES, assertTriggerId, assertValidTrigger } from './triggers';
 // - GET /api/companies cash/burnRate must never be copied onto the client sim.
 // - Campaign TurnResult (POST /api/campaigns/:id/turns) is the authoritative
 //   write path for cash, burn history, tax, and turn when a campaign is active.
+// - Campaign state_json must restack the same activeTriggers the UI shows
+//   (seed + apply/remove/clear TurnCommands) so advance burn matches preview.
 
 const TRIGGER_FIELDS = ['id', 'type', 'label', 'source', 'timestamp', 'effect'];
 const EFFECT_FIELDS = new Set(['hype', 'talentCost']);
