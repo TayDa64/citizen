@@ -234,11 +234,15 @@ export function createCitizenApi({ fetchImpl = globalThis.fetch, baseUrl } = {})
         body: JSON.stringify(command),
       });
     },
-    listTurns(id) {
+    listTurns(id, { limit } = {}) {
       if (typeof id !== 'string' || id.trim() === '') {
         throw new TypeError('campaign id is required');
       }
-      return send(`/api/campaigns/${encodeURIComponent(id)}/turns`);
+      const params = new URLSearchParams();
+      if (limit != null) params.set('limit', String(limit));
+      const query = params.toString();
+      const suffix = query ? `?${query}` : '';
+      return send(`/api/campaigns/${encodeURIComponent(id)}/turns${suffix}`);
     },
   };
 }

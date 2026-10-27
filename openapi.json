@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Citizen API",
-    "version": "0.8.2",
-    "description": "TRIGGER_CONTRACT v1. effect.hype is an absolute delta on the 0..1 scale and the result is clamped to 0..1. effect.talentCost is a relative delta: 0.12 multiplies companies.talent_cost by 1.12 and the result is floored at 0. At least one effect must be non-zero. Posting the same id replaces that trigger and reapplies the stack from each company's captured baseline; it does not stack a second copy. DELETE /api/triggers/{id} removes one trigger. DELETE /api/triggers clears every v1 trigger and restores hype and talent cost to the captured baselines. Input deltas are bounded (hype -1..1, talentCost -100..100, at most 4 decimal places) so the NUMERIC(12,2) talent column cannot overflow from a single field. A company inserted while triggers are already active keeps its own hype and talent cost until the next trigger create, replace, delete, or clear. talentMultiplier stays the 0.5.0 employee mean. talentCostFactor is the stacked ratio talentCost / baselines.talentCost, clamped once to [0.1, 3] and rounded to 4 decimal places. It is 1, and talentCostFactorClamped is false, when there is no trigger or the baseline is missing, 0, negative, or non-finite. talentCostFactorClamped is true only when the raw ratio fell outside that range. Stored talentCost and hype stay raw. effectiveMultiplier is round(talentMultiplier * talentCostFactor, 4). API burnRate is round(baseBurnRate * talentMultiplier * talentCostFactor), rounded once, with no tax. The client simulation uses the same product after baseBurnRate = round(2000 * (1 + taxRate * 0.4)). Trigger writes do not change stored companies.burn_rate or companies.cash. A null, blank, NaN, or Infinity skill counts as 0.5. An empty talentMix means talentMultiplier is 1; contributions sum to talentMultiplier only when the mix is non-empty. The Host header must be localhost, 127.0.0.1, or [::1] on the bound port; anything else is 403. A missing Host is 400 {\"error\":\"Host required\"}. More than one Host header is 400 {\"error\":\"Duplicate host\"}. A validation failure is 400 with error and an issues array. A method the route does not implement is 405 {\"error\":\"Method not allowed\",\"issues\":[]}. Campaign turns (0.8.0): POST /api/campaigns creates a versioned GameState. POST /api/campaigns/{id}/turns atomically commits a TurnCommand (set_tax, advance_turn, apply_trigger, remove_trigger, clear_triggers) and appends a turn_commits ledger row in the same transaction; a failed commit leaves no partial advance. GET /api/campaigns/{id} reloads the last committed state. GET /api/companies cash and burnRate remain non-authoritative for the client sim. TurnCommand hire_employee appends an employee to campaign GameState, recomputes talentMultiplier / burn preview, and drains cash only on advance_turn. Civic feedback (0.8.2): GameState.civic.budgetHeadroom = clamp(1 - taxRate, 0, 1); civic.hypeBias = (budgetHeadroom - 0.75) * 0.2 folds into company.hype on set_tax (bias 0 at 25% tax). Does not change Slice 1 burn baselines. civic-infra shows budget headroom as a readout only."
+    "version": "0.8.3",
+    "description": "TRIGGER_CONTRACT v1. effect.hype is an absolute delta on the 0..1 scale and the result is clamped to 0..1. effect.talentCost is a relative delta: 0.12 multiplies companies.talent_cost by 1.12 and the result is floored at 0. At least one effect must be non-zero. Posting the same id replaces that trigger and reapplies the stack from each company's captured baseline; it does not stack a second copy. DELETE /api/triggers/{id} removes one trigger. DELETE /api/triggers clears every v1 trigger and restores hype and talent cost to the captured baselines. Input deltas are bounded (hype -1..1, talentCost -100..100, at most 4 decimal places) so the NUMERIC(12,2) talent column cannot overflow from a single field. A company inserted while triggers are already active keeps its own hype and talent cost until the next trigger create, replace, delete, or clear. talentMultiplier stays the 0.5.0 employee mean. talentCostFactor is the stacked ratio talentCost / baselines.talentCost, clamped once to [0.1, 3] and rounded to 4 decimal places. It is 1, and talentCostFactorClamped is false, when there is no trigger or the baseline is missing, 0, negative, or non-finite. talentCostFactorClamped is true only when the raw ratio fell outside that range. Stored talentCost and hype stay raw. effectiveMultiplier is round(talentMultiplier * talentCostFactor, 4). API burnRate is round(baseBurnRate * talentMultiplier * talentCostFactor), rounded once, with no tax. The client simulation uses the same product after baseBurnRate = round(2000 * (1 + taxRate * 0.4)). Trigger writes do not change stored companies.burn_rate or companies.cash. A null, blank, NaN, or Infinity skill counts as 0.5. An empty talentMix means talentMultiplier is 1; contributions sum to talentMultiplier only when the mix is non-empty. The Host header must be localhost, 127.0.0.1, or [::1] on the bound port; anything else is 403. A missing Host is 400 {\"error\":\"Host required\"}. More than one Host header is 400 {\"error\":\"Duplicate host\"}. A validation failure is 400 with error and an issues array. A method the route does not implement is 405 {\"error\":\"Method not allowed\",\"issues\":[]}. Campaign turns (0.8.0): POST /api/campaigns creates a versioned GameState. POST /api/campaigns/{id}/turns atomically commits a TurnCommand (set_tax, advance_turn, apply_trigger, remove_trigger, clear_triggers) and appends a turn_commits ledger row in the same transaction; a failed commit leaves no partial advance. GET /api/campaigns/{id} reloads the last committed state. GET /api/companies cash and burnRate remain non-authoritative for the client sim. TurnCommand hire_employee appends an employee to campaign GameState, recomputes talentMultiplier / burn preview, and drains cash only on advance_turn. Civic feedback (0.8.2): GameState.civic.budgetHeadroom = clamp(1 - taxRate, 0, 1); civic.hypeBias = (budgetHeadroom - 0.75) * 0.2 folds into company.hype on set_tax (bias 0 at 25% tax). Does not change Slice 1 burn baselines. civic-infra shows budget headroom as a readout only. Turn ledger (0.8.3): GET /api/campaigns/{id}/turns returns recent append-only ledger entries (seq, turnBefore/turnAfter, command, before/after metrics, appliedEffects, explanations). POST commit persists before/after in turn_commits.result_json. Optional ?limit= (1..200, default 50) returns the most recent N in ascending seq order. Chart history remains a 24-month client ring buffer; the ledger is the durable decision log."
   },
   "paths": {
     "/api/triggers": {
@@ -410,7 +410,7 @@
     },
     "/api/campaigns/{id}/turns": {
       "get": {
-        "summary": "List committed turn ledger rows for a campaign",
+        "summary": "List recent campaign turn ledger entries",
         "parameters": [
           {
             "name": "id",
@@ -420,17 +420,29 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            },
+            "description": "Most recent N ledger rows (returned ascending by seq)"
           }
         ],
         "responses": {
           "200": {
-            "description": "Turn commits in seq order",
+            "description": "Recent turn ledger entries in ascending seq order",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/TurnCommit"
+                    "$ref": "#/components/schemas/TurnLedgerEntry"
                   }
                 }
               }
@@ -979,7 +991,8 @@
             "$ref": "#/components/schemas/TurnCommand"
           },
           "result": {
-            "type": "object"
+            "type": "object",
+            "description": "Persisted TurnResult fields: before, after, deltas, appliedEffects, explanations, view"
           },
           "createdAt": {
             "type": "string",
@@ -1004,6 +1017,115 @@
           "hypeBias": {
             "type": "number",
             "description": "(budgetHeadroom - 0.75) * 0.2; zero at default 25% tax"
+          }
+        }
+      },
+      "TurnLedgerMetrics": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "turn": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "taxRate": {
+            "type": "number"
+          },
+          "cash": {
+            "type": "number"
+          },
+          "burnRate": {
+            "type": "number"
+          },
+          "hype": {
+            "type": "number"
+          },
+          "talentCost": {
+            "type": "number"
+          },
+          "talentMultiplier": {
+            "type": "number"
+          },
+          "employeeCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "activeTriggerCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "budgetHeadroom": {
+            "type": "number"
+          },
+          "hypeBias": {
+            "type": "number"
+          }
+        }
+      },
+      "TurnLedgerEntry": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "seq",
+          "turn",
+          "turnBefore",
+          "turnAfter",
+          "command",
+          "appliedEffects",
+          "explanations"
+        ],
+        "properties": {
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "seq": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "turn": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Turn number after the command (same as turnAfter)"
+          },
+          "turnBefore": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "turnAfter": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "command": {
+            "$ref": "#/components/schemas/TurnCommand"
+          },
+          "appliedEffects": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "explanations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "before": {
+            "$ref": "#/components/schemas/TurnLedgerMetrics"
+          },
+          "after": {
+            "$ref": "#/components/schemas/TurnLedgerMetrics"
+          },
+          "deltas": {
+            "type": "object",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
           }
         }
       }

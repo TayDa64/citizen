@@ -121,6 +121,22 @@ describe('world event trigger', () => {
     expect(screen.getByRole('slider', { name: /tax rate/i })).toHaveValue('0.25');
   });
 
+  test('advance month appends a turn ledger entry with before/after metrics', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    expect(screen.getByTestId('turn-ledger-empty')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /advance month/i }));
+
+    const ledger = screen.getByTestId('turn-ledger');
+    expect(within(ledger).getByTestId('turn-ledger-list')).toBeInTheDocument();
+    expect(within(ledger).getAllByTestId('turn-ledger-entry').length).toBeGreaterThanOrEqual(1);
+    expect(within(ledger).getByText(/advance_turn/)).toBeInTheDocument();
+    expect(within(ledger).getByText(/Before:/)).toBeInTheDocument();
+    expect(within(ledger).getByText(/After:/)).toBeInTheDocument();
+    expect(within(ledger).getByText(/Advanced to turn 1/)).toBeInTheDocument();
+  });
+
   test('live region names both active events and clear restores baseline announce', async () => {
     const user = userEvent.setup();
     render(<App />);

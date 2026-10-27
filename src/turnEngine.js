@@ -444,12 +444,19 @@ export function applyTurnCommand(state, commandInput) {
     : previewPathway(PATHWAY_BUDGET_HEADROOM_TO_HYPE, nextState, nextState.taxRate);
   return {
     state: nextState,
+    before,
+    after,
     deltas: deltasBetween(before, after),
     appliedEffects,
     explanations: explanationsFor(command, before, after, appliedEffects),
     command,
     pathwayPreview,
   };
+}
+
+/** Key metrics snapshot used by the turn ledger (before/after). */
+export function ledgerMetricsOf(state) {
+  return metricSnapshot(normalizeGameState(state));
 }
 
 /**

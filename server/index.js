@@ -118,7 +118,8 @@ function parseJson(raw) {
 
 async function handleRequest(req, res, pool) {
   const origin = allowedOrigin(req);
-  const pathname = new URL(req.url, 'http://127.0.0.1').pathname;
+  const requestUrl = new URL(req.url, 'http://127.0.0.1');
+  const pathname = requestUrl.pathname;
   if (req.method === 'OPTIONS' && pathname.startsWith('/api/')) {
     res.writeHead(204, {
       'Access-Control-Allow-Origin': origin || 'http://127.0.0.1:5173',
@@ -216,7 +217,9 @@ async function handleRequest(req, res, pool) {
       throw error;
     }
     if (req.method === 'GET') {
-      sendJson(res, 200, await listTurnCommits(pool, id), origin);
+      const limitRaw = requestUrl.searchParams.get('limit');
+      const limit = limitRaw == null ? 50 : Number(limitRaw);
+      sendJson(res, 200, await listTurnCommits(pool, id, { limit }), origin);
       return;
     }
     if (req.method === 'POST') {

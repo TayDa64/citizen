@@ -65,7 +65,7 @@ Slice 3 (authoritative turns) — see below and [STATE.md](STATE.md) Phase 1.
 
 ### API dependency
 
-Live company and world-event data comes from Citizen API OpenAPI **0.8.2** (civic feedback + hire TurnCommand + campaign turns + prior 0.7.1 talent fields). Trigger contract paths below still apply.
+Live company and world-event data comes from Citizen API OpenAPI **0.8.3** (turn ledger + civic feedback + hire TurnCommand + campaign turns + prior 0.7.1 talent fields). Trigger contract paths below still apply.
 
 **Authority boundary:** The companies service is the source of truth for hype, talent cost, baselines, and (until a campaign hire) talent multiplier / mix / factors. After `hire_employee`, campaign GameState owns the roster. `hydrateFromApi` / `readApiSnapshot` never copy `company.cash` or `company.burnRate` from the companies payload. Cash / burn history / tax / turn / hire commit through the turn engine and, when connected, `POST /api/campaigns/{id}/turns`. Advance Month never POSTs to `/api/companies`.
 
@@ -85,7 +85,7 @@ Live company and world-event data comes from Citizen API OpenAPI **0.8.2** (civi
 
 `APPLY_TALENT_COST_TO_BURN` in `src/talentMultiplier.js` is on. Trigger talent cost scales burn in local mode and API mode. `talentMultiplier` stays employee-only.
 
-OpenAPI **0.8.2** (civic feedback + hire_employee + campaign turns; builds on 0.8.1 / 0.8.0 / 0.7.1) includes `talentCostFactor` and `effectiveMultiplier` on `GET /api/companies`, plus campaign GameState / TurnCommand routes (`hire_employee` refreshes talent / burn preview without draining cash) and `GameState.civic` (`budgetHeadroom`, `hypeBias`). `talentMultiplier` remains employee-only. A 0.5.0 payload omits the new talent fields and the client computes them. Parsing stays in `src/talentMultiplier.js`. A missing Host is 400 `Host required`, two Host headers are 400 `Duplicate host`, and any other host is 403 `Forbidden host`. Those alerts keep the current numbers. Hype outside 0–1 and talent cost outside $0–$9,999,999,999.99 are clamped, and the status says so.
+OpenAPI **0.8.3** (turn ledger + civic feedback + hire_employee + campaign turns; builds on 0.8.2 / 0.8.1 / 0.8.0 / 0.7.1) includes `talentCostFactor` and `effectiveMultiplier` on `GET /api/companies`, plus campaign GameState / TurnCommand routes (`hire_employee` refreshes talent / burn preview without draining cash), `GameState.civic` (`budgetHeadroom`, `hypeBias`), and shaped turn ledger entries on `GET /api/campaigns/{id}/turns`. `talentMultiplier` remains employee-only. A 0.5.0 payload omits the new talent fields and the client computes them. Parsing stays in `src/talentMultiplier.js`. A missing Host is 400 `Host required`, two Host headers are 400 `Duplicate host`, and any other host is 403 `Forbidden host`. Those alerts keep the current numbers. Hype outside 0–1 and talent cost outside $0–$9,999,999,999.99 are clamped, and the status says so.
 
 ## Slice lifecycle hire (P0 business lifecycle — first PR)
 
@@ -132,6 +132,20 @@ Funding / exit / Firecrawl; full civic-infra / civic-reg levers; large civic sim
 
 ### Explicit non-goals
 Funding / exit / Firecrawl; multi-rule causal graph (P1); civic-infra / civic-reg as interactive levers.
+
+## Slice turn ledger (P1-1 — durable campaign history)
+
+**Append-only campaign turn ledger / replay (not only the 24-month Highcharts ring buffer).**
+
+### What works
+- Shared shaping in `src/turnLedger.js`: TurnResult → ledger entry (command, appliedEffects, before/after metrics, explanations, turn/seq).
+- Server `turn_commits.result_json` stores `before` / `after` (plus deltas, effects, explanations, view); `GET /api/campaigns/{id}/turns?limit=` returns recent shaped ledger entries.
+- Client: local engine appends ledger entries offline; when a campaign is live, commits append and reload via `listTurns`.
+- Dashboard **Turn ledger** panel lists recent decisions (beyond chart authority).
+- Offline unit tests lock engine→ledger shaping (`src/turnLedger.test.js`).
+
+### Explicit non-goals
+Full campaign-loop acceptance suite (P1-4); rewriting the UI as a pure read-model; Firecrawl; Postgres-only path (dual offline/API kept).
 
 ## Merge train
 
