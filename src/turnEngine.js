@@ -15,7 +15,8 @@
  * Slice 1/2). The UI tax slider still advances a month by issuing `set_tax`
  * then `advance_turn`. Hire refreshes talent multiplier + burn preview only.
  * `set_tax` also updates civic.budgetHeadroom and folds civic hype bias into
- * company.hype (first civic feedback loop) without changing burn baselines.
+ * company.hype via the typed pathway registry (`pathway.budgetHeadroom→company.hype`)
+ * without changing burn baselines. TurnResult.pathwayPreview mirrors that rule.
  *
  * Authority: campaign TurnResult owns cash/burn history when committed.
  * After hire, campaign GameState also owns the employee roster / talent mix.
@@ -35,8 +36,14 @@ import {
   setTaxRate as simSetTaxRate,
 } from './simulationCore.js';
 import { computeCivicFromTax } from './civicFeedback.js';
+import {
+  PATHWAY_BUDGET_HEADROOM_TO_HYPE,
+  explainPathwayApplication,
+  previewPathway,
+} from './pathways.js';
 
 export { GAME_STATE_VERSION, RULE_VERSION };
+export { PATHWAY_BUDGET_HEADROOM_TO_HYPE, PATHWAY_RULES, previewPathway } from './pathways.js';
 
 export const TURN_COMMAND_TYPES = Object.freeze([
   'set_tax',
@@ -365,7 +372,7 @@ function applyCommandMutation(state, command) {
   }
 }
 
-function appliedEffectsFor(command, before, after) {
+function appliedEffectsFor(command, before, after, beforeState, afterState) {
   const effects = [];
   if (command.type === 'set_tax' && before.taxRate !== after.taxRate) {
     effects.push({
@@ -382,6 +389,20 @@ function appliedEffectsFor(command, before, after) {
         summary: `civic hypeBias ${before.hypeBias} → ${after.hypeBias}; hype ${before.hype} → ${after.hype}`,
       });
     }
+    // Typed pathway registry effect (graph edge derives from the same rule).
+    const pathway = explainPathwayApplication(
+      PATHWAY_BUDGET_HEADROOM_TO_HYPE,
+      beforeState.civic,
+      afterState.civic,
+      before.hype,
+      after.hype,
+    );
+    effects.push({
+      kind: pathway.kind,
+      pathwayId: pathway.pathwayId,
+      summary: pathway.summary,
+      explanation: pathway.explanation,
+    });
   }
   if (command.type === 'advance_turn') {
     effects.push({
@@ -408,6 +429,8 @@ function appliedEffectsFor(command, before, after) {
 
 /**
  * Apply one TurnCommand to a GameState (or legacy sim state). Returns TurnResult.
+ * `pathwayPreview` is the registered civic↔hype pathway readout (also useful
+ * as a pre-commit preview via `previewPathway` without mutating).
  */
 export function applyTurnCommand(state, commandInput) {
   const beforeState = normalizeGameState(state);
@@ -415,13 +438,17 @@ export function applyTurnCommand(state, commandInput) {
   const before = metricSnapshot(beforeState);
   const nextState = normalizeGameState(applyCommandMutation(beforeState, command));
   const after = metricSnapshot(nextState);
-  const appliedEffects = appliedEffectsFor(command, before, after);
+  const appliedEffects = appliedEffectsFor(command, before, after, beforeState, nextState);
+  const pathwayPreview = command.type === 'set_tax'
+    ? previewPathway(PATHWAY_BUDGET_HEADROOM_TO_HYPE, beforeState, command.taxRate)
+    : previewPathway(PATHWAY_BUDGET_HEADROOM_TO_HYPE, nextState, nextState.taxRate);
   return {
     state: nextState,
     deltas: deltasBetween(before, after),
     appliedEffects,
     explanations: explanationsFor(command, before, after, appliedEffects),
     command,
+    pathwayPreview,
   };
 }
 
