@@ -1,344 +1,62 @@
-// Client-side simulation.
-// Slice 1: taxRate increases burn, then cash falls on each tick.
-// Slice 2: real-world triggers move hype and talent cost. With no active
-// trigger, talent cost stays at the $4,000 baseline and burn matches Slice 1.
-// baseBurnRate = round(2000 * (1 + taxRate * 0.4)).
-// Burn is round(baseBurnRate * talentMultiplier * talentCostFactor), once.
-// talentMultiplier is employee-only and is not clamped. talentCostFactor is
-// round4(clamp(talentCost / baselines.talentCost, 0.1, 3)).
+// Client simulation façade.
+// Mutations route through the authoritative turn engine so Advance Month / tax
+// / trigger commands share one deterministic path with the server.
 //
-// Authority boundary (dual-owner until GameState / turns):
-// - API owns: hype, talentCost, baselines, talentMultiplier / mix / factors.
-// - Client owns: cash, simulation burnRate, taxRate, history, Advance Month.
-// - readApiSnapshot / hydrateFromApi never copy company.cash or company.burnRate
-//   from the payload; ticks (applyEffects) never POST cash to the service.
-//
-// `appliedAtIndex` on an active trigger is client runtime for the chart, not
-// part of the RealWorldTrigger payload in triggers.js.
+// Authority boundary:
+// - GET /api/companies: never copy cash / burnRate onto the client sim.
+// - Campaign TurnResult (when connected): owns cash, burn history, tax, turn.
+// - Trigger create/clear still uses /api/triggers and refreshes hype/talent.
+
+export {
+  BASE_BURN,
+  BASE_HYPE,
+  BASE_TALENT_COST,
+  GAME_STATE_VERSION,
+  RULE_VERSION,
+  initialState,
+  computeBurnRate,
+  previewBurnRate,
+  baselineBurnRate,
+  readApiSnapshot,
+  hydrateFromApi,
+} from './simulationCore.js';
 
 import {
-  announceTrigger,
-  assertValidTrigger,
-  clampHype,
-  clampTalentCost,
-  describeTrigger,
-  hypeOutOfRange,
-  roundTo,
-  talentCostOutOfRange,
-} from './triggers';
-import {
-  burnRateFromMultiplier,
-  composeTalentMultiplier,
-  effectiveBurnRate,
-  readOptionalFactor,
-  talentCostFactorClampOf,
-  readTalentMix,
-  readTalentMultiplier,
-  baseBurnRate as taxOnlyBurnRate,
-} from './talentMultiplier';
+  applyEffects as coreApplyEffects,
+  applyTrigger as coreApplyTrigger,
+  clearTriggers as coreClearTriggers,
+  removeTrigger as coreRemoveTrigger,
+  setTaxRate as coreSetTaxRate,
+} from './simulationCore.js';
+import { applyTurnCommand } from './turnEngine.js';
 
-export const BASE_BURN = 2000;
-export const BASE_HYPE = 0.3;
-export const BASE_TALENT_COST = 4000;
-
-export const initialState = {
-  taxRate: 0.25,
-  company: {
-    cash: 15000,
-    burnRate: BASE_BURN,
-    hype: BASE_HYPE,
-    productQuality: 0.4,
-    talentCost: BASE_TALENT_COST,
-  },
-  history: {
-    cash: [15000],
-    burnRate: [BASE_BURN],
-  },
-  baselines: {
-    hype: BASE_HYPE,
-    talentCost: BASE_TALENT_COST,
-  },
-  dataSource: 'local',
-  employees: [],
-  talentMultiplier: 1,
-  talentMix: [],
-  activeTriggers: [],
-  lastTriggerChange: null,
-};
-
-export function computeBurnRate(taxRate, talentMultiplier = 1) {
-  return burnRateFromMultiplier(taxRate, talentMultiplier);
-}
-
-export function previewBurnRate(state) {
-  return effectiveBurnRate(state);
-}
-
-export function baselineBurnRate(state) {
-  return taxOnlyBurnRate(state.taxRate);
-}
-
+/** Advance one month (cash drain + burn history). Prefer TurnCommand `advance_turn`. */
 export function applyEffects(state) {
-  const next = structuredClone(state);
-  // API mode keeps the fetched multiplier, mix, employees, and any
-  // talentCostFactor or effectiveMultiplier. Burn changes with tax. An empty
-  // employee list must not reset the server multiplier. Those fields update
-  // on the next fetch. Local mode recomputes the employee multiplier only.
-  if (next.dataSource !== 'api') {
-    const profile = composeTalentMultiplier({ employees: next.employees });
-    next.talentMultiplier = profile.talentMultiplier;
-    next.talentMix = profile.talentMix;
-    next.talentCostFactor = null;
-    next.effectiveMultiplier = null;
-  }
-  next.company.talentMultiplier = next.talentMultiplier;
-  next.company.talentMix = next.talentMix;
-  next.company.baseBurnRate = baselineBurnRate(next);
-  next.company.burnRate = previewBurnRate(next);
-  next.company.cash = Math.max(0, next.company.cash - next.company.burnRate / 12);
-  next.history.cash.push(Math.round(next.company.cash));
-  next.history.burnRate.push(next.company.burnRate);
-  if (next.history.cash.length > 24) {
-    next.history.cash.shift();
-    next.history.burnRate.shift();
-    next.activeTriggers = (next.activeTriggers ?? []).map((trigger) => ({
-      ...trigger,
-      appliedAtIndex: Math.max(0, (trigger.appliedAtIndex ?? 0) - 1),
-    }));
-  }
-  return next;
+  return applyTurnCommand(state, { type: 'advance_turn' }).state;
 }
 
+/** Clamp tax without draining cash. Prefer TurnCommand `set_tax`. */
 export function setTaxRate(state, taxRate) {
-  return { ...state, taxRate: Math.max(0, Math.min(1, taxRate)) };
-}
-
-function cloneTriggerState(state) {
-  const next = structuredClone(state);
-  if (!next.baselines) {
-    next.baselines = {
-      hype: next.company.hype,
-      talentCost: next.company.talentCost ?? BASE_TALENT_COST,
-    };
-  }
-  if (next.company.talentCost == null) {
-    next.company.talentCost = next.baselines.talentCost;
-  }
-  if (!Array.isArray(next.activeTriggers)) next.activeTriggers = [];
-  return next;
-}
-
-function combinedEffects(baselines, activeTriggers) {
-  const hypeBaseline = Number.isFinite(Number(baselines?.hype)) ? Number(baselines.hype) : BASE_HYPE;
-  const talentBaseline = Number.isFinite(Number(baselines?.talentCost))
-    ? Number(baselines.talentCost)
-    : BASE_TALENT_COST;
-  const ordered = [...activeTriggers].sort((left, right) => {
-    if (String(left.id) < String(right.id)) return -1;
-    if (String(left.id) > String(right.id)) return 1;
-    return 0;
-  });
-  let hype = hypeBaseline;
-  let factor = 1;
-  for (const trigger of ordered) {
-    if (typeof trigger.effect?.hype === 'number') hype += trigger.effect.hype;
-    if (typeof trigger.effect?.talentCost === 'number') factor *= 1 + trigger.effect.talentCost;
-  }
-  const talent = talentBaseline * factor;
-  const talentCost = roundTo(Math.max(0, Number.isFinite(talent) ? talent : 0), 2);
-  return {
-    hype: roundTo(clampHype(hype), 4),
-    talentCost: clampTalentCost(talentCost),
-  };
-}
-
-function storeTrigger(trigger, appliedAtIndex) {
-  const effect = {};
-  if (typeof trigger.effect?.hype === 'number') effect.hype = trigger.effect.hype;
-  if (typeof trigger.effect?.talentCost === 'number') effect.talentCost = trigger.effect.talentCost;
-  return {
-    id: trigger.id,
-    type: trigger.type,
-    label: trigger.label,
-    source: trigger.source,
-    timestamp: trigger.timestamp,
-    effect,
-    appliedAtIndex,
-  };
-}
-
-function finiteNumber(value) {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
-
-function unreadableCompany() {
-  const error = new TypeError('Company payload could not be read');
-  error.code = 'unreadable-company';
-  return error;
-}
-
-export function readApiSnapshot(prev, snapshot) {
-  const company = snapshot?.company;
-  const baselines = company?.baselines;
-  const baselineHype = finiteNumber(baselines?.hype);
-  const baselineTalent = finiteNumber(baselines?.talentCost);
-  if (
-    company == null
-    || typeof company !== 'object'
-    || Array.isArray(company)
-    || baselineHype == null
-    || baselineTalent == null
-  ) {
-    throw unreadableCompany();
-  }
-
-  const rawTriggers = snapshot?.triggers;
-  const triggerList = Array.isArray(rawTriggers) ? rawTriggers : [];
-  const accepted = [];
-  let skipped = Array.isArray(rawTriggers) || rawTriggers == null ? 0 : 1;
-  for (const trigger of triggerList) {
-    try {
-      assertValidTrigger(trigger);
-      accepted.push(trigger);
-    } catch {
-      skipped += 1;
-    }
-  }
-
-  const hypeReading = clampMetric(finiteNumber(company.hype), clampHype, hypeOutOfRange);
-  const talentReading = clampMetric(finiteNumber(company.talentCost), clampTalentCost, talentCostOutOfRange);
-  const baselineHypeReading = clampMetric(baselineHype, clampHype, hypeOutOfRange);
-  const baselineTalentReading = clampMetric(baselineTalent, clampTalentCost, talentCostOutOfRange);
-  const hype = hypeReading.value;
-  const talentCost = talentReading.value;
-  const index = Math.max(0, (prev.history?.cash?.length ?? 1) - 1);
-  const previousById = new Map((prev.activeTriggers ?? []).map((item) => [item.id, item]));
-  const activeTriggers = accepted.map((trigger) => {
-    const prior = previousById.get(trigger.id);
-    return storeTrigger(trigger, prior?.appliedAtIndex ?? index);
-  });
-
-  const talentMultiplier = readTalentMultiplier(company.talentMultiplier);
-  const talentMix = readTalentMix(company.talentMix);
-  const talentCostFactor = readOptionalFactor(company.talentCostFactor, 'talentCostFactor');
-  const effectiveMultiplier = readOptionalFactor(company.effectiveMultiplier, 'effectiveMultiplier');
-  const talentCostFactorClamped = typeof company.talentCostFactorClamped === 'boolean'
-    ? company.talentCostFactorClamped
-    : null;
-  const resolvedHype = hype ?? baselineHypeReading.value;
-  const resolvedTalent = talentCost ?? baselineTalentReading.value;
-  // Keep client cash / burnRate / productQuality / history. Ignore any
-  // company.cash or company.burnRate on the API payload (authority boundary).
-  return {
-    state: {
-      ...prev,
-      dataSource: 'api',
-      baselines: { hype: baselineHypeReading.value, talentCost: baselineTalentReading.value },
-      activeTriggers,
-      employees: readProvidedEmployees(snapshot, company),
-      talentMultiplier,
-      talentMix,
-      talentCostFactor,
-      talentCostFactorClamped,
-      effectiveMultiplier,
-      company: {
-        ...prev.company,
-        cash: prev.company.cash,
-        burnRate: prev.company.burnRate,
-        hype: resolvedHype,
-        talentCost: resolvedTalent,
-        talentMultiplier,
-        talentMix,
-      },
-    },
-    skipped,
-    missingHype: hype == null,
-    missingTalent: talentCost == null,
-    clampedHype: hypeReading.clamped || baselineHypeReading.clamped || hypeOutOfRange(resolvedHype),
-    clampedTalent: talentReading.clamped || baselineTalentReading.clamped || talentCostOutOfRange(resolvedTalent),
-  };
-}
-
-function clampMetric(value, clamp, outOfRange) {
-  if (value == null) return { value: null, clamped: false };
-  if (!outOfRange(value)) return { value, clamped: false };
-  return { value: clamp(value), clamped: true };
-}
-
-function readProvidedEmployees(snapshot, company) {
-  const raw = Array.isArray(company?.employees)
-    ? company.employees
-    : Array.isArray(snapshot?.employees)
-      ? snapshot.employees
-      : [];
-  return raw
-    .filter((employee) => employee != null && typeof employee === 'object' && !Array.isArray(employee))
-    .map((employee) => ({ ...employee }));
-}
-
-export function hydrateFromApi(prev, snapshot) {
-  return readApiSnapshot(prev, snapshot).state;
-}
-
-function applyActiveTriggers(next, before, change) {
-  const after = combinedEffects(next.baselines, next.activeTriggers);
-  next.company.hype = after.hype;
-  next.company.talentCost = after.talentCost;
-  next.lastTriggerChange = change
-    ? {
-        ...change,
-        before,
-        after: { hype: after.hype, talentCost: after.talentCost },
-      }
-    : null;
-  return next;
+  return applyTurnCommand(state, { type: 'set_tax', taxRate }).state;
 }
 
 export function applyTrigger(state, trigger) {
-  assertValidTrigger(trigger);
-  const next = cloneTriggerState(state);
-  const before = { hype: next.company.hype, talentCost: next.company.talentCost };
-  const appliedAtIndex = Math.max(0, (next.history?.cash?.length ?? 1) - 1);
-  next.activeTriggers = [
-    ...next.activeTriggers.filter((item) => item.id !== trigger.id),
-    storeTrigger(trigger, appliedAtIndex),
-  ];
-  const applied = applyActiveTriggers(next, before, {
-    triggerId: trigger.id,
-    label: trigger.label,
-    type: trigger.type,
-    announcement: describeTrigger(trigger),
-  });
-  applied.lastTriggerChange.announcement = announceTrigger(
-    trigger,
-    'apply',
-    effectiveBurnRate(applied),
-    talentCostFactorClampOf(applied),
-  );
-  return applied;
+  return applyTurnCommand(state, { type: 'apply_trigger', trigger }).state;
 }
 
 export function removeTrigger(state, triggerId) {
-  if (typeof triggerId !== 'string' || triggerId.trim() === '') {
-    throw new TypeError('triggerId must be a non-empty string');
-  }
-  const next = cloneTriggerState(state);
-  const before = { hype: next.company.hype, talentCost: next.company.talentCost };
-  next.activeTriggers = next.activeTriggers.filter((item) => item.id !== triggerId);
-  if (next.activeTriggers.length === 0) {
-    return applyActiveTriggers(next, before, null);
-  }
-  return applyActiveTriggers(next, before, {
-    triggerId,
-    label: triggerId,
-    type: next.activeTriggers[0].type,
-    announcement: 'Trigger removed. Remaining world events still apply.',
-  });
+  return applyTurnCommand(state, { type: 'remove_trigger', triggerId }).state;
 }
 
 export function clearTriggers(state) {
-  const next = cloneTriggerState(state);
-  const before = { hype: next.company.hype, talentCost: next.company.talentCost };
-  next.activeTriggers = [];
-  return applyActiveTriggers(next, before, null);
+  return applyTurnCommand(state, { type: 'clear_triggers' }).state;
 }
+
+/** Escape hatch for callers that need the pre-engine mutation only. */
+export const __core = {
+  applyEffects: coreApplyEffects,
+  setTaxRate: coreSetTaxRate,
+  applyTrigger: coreApplyTrigger,
+  removeTrigger: coreRemoveTrigger,
+  clearTriggers: coreClearTriggers,
+};

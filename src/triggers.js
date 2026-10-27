@@ -7,7 +7,7 @@ import {
   talentCostFactorOf,
   talentMixOf,
   talentMultiplierOf,
-} from './talentMultiplier';
+} from './talentMultiplier.js';
 
 export const HYPE_MIN = 0;
 export const HYPE_MAX = 1;

@@ -7,7 +7,14 @@ import { startServer } from '../../server/index.js';
 test('OpenAPI document publishes TRIGGER_CONTRACT v1', () => {
   const spec = JSON.parse(fs.readFileSync('openapi.json', 'utf8'));
   assert.equal(spec.openapi, '3.0.3');
-  assert.equal(spec.info.version, '0.7.1');
+  assert.equal(spec.info.version, '0.8.0');
+  assert.ok(spec.paths['/api/campaigns']);
+  assert.ok(spec.paths['/api/campaigns/{id}']);
+  assert.ok(spec.paths['/api/campaigns/{id}/turns']);
+  assert.deepEqual(
+    spec.components.schemas.TurnCommand.properties.type.enum,
+    ['set_tax', 'advance_turn', 'apply_trigger', 'remove_trigger', 'clear_triggers']
+  );
   const methods = ['get', 'post', 'put', 'patch', 'delete', 'options', 'head'];
   for (const [path, item] of Object.entries(spec.paths)) {
     for (const method of methods) {
