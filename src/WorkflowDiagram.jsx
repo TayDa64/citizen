@@ -13,6 +13,22 @@ import CivicLeverNode from './nodes/CivicLeverNode';
 import { triggerDiagramOverlay } from './triggers';
 
 const nodeTypes = { civicLever: CivicLeverNode };
+
+// Default React Flow nodes use a light fill; App sets color:white on ancestors,
+// so labels need an explicit readable color (and fill) here.
+const DEFAULT_NODE_STYLE = {
+  background: '#1e293b',
+  color: '#f8fafc',
+  border: '1px solid #64748b',
+};
+
+const STYLED_NODE = {
+  morale: { background: '#4a3f6b', color: '#f8fafc', border: '1px solid #64748b' },
+  triggers: { background: '#3a5a6b', color: '#f8fafc', border: '1px solid #64748b' },
+  funding: { background: '#3a6b4a', color: '#f8fafc', border: '1px solid #64748b' },
+  civic: { background: '#6b3a3a', color: '#f8fafc', border: '1px solid #64748b' },
+};
+
 const HYPE_NODE_STYLE = {
   background: '#1e293b',
   color: '#f8fafc',
@@ -105,13 +121,13 @@ function applyOverlayToEdges(edges, overlay) {
 
 export default function WorkflowDiagram({ state, setState, onTick }) {
   const initialNodes = [
-    { id: '1', type: 'input', data: { label: 'Found Startup\n(Citizen)' }, position: { x: 300, y: 0 } },
-    { id: '2', data: { label: 'Choose Idea\n+ Target Market' }, position: { x: 300, y: 100 } },
-    { id: '3', data: { label: 'Hire Staff\n(Tech / Marketing / Sales)' }, position: { x: 80, y: 220 } },
-    { id: '4', data: { label: 'Assign Tasks\nDevelop Product' }, position: { x: 520, y: 220 } },
-    { id: 'morale', data: { label: 'Employee Morale\n& Happiness' }, position: { x: 80, y: 340 }, style: { background: '#4a3f6b' } },
-    { id: '5', data: { label: 'Real-World Triggers\n(Firecrawl + Events)' }, position: { x: 300, y: 360 }, style: { background: '#3a5a6b' } },
-    { id: 'funding', data: { label: 'Funding Rounds\n(Angel / Seed / Series)' }, position: { x: 520, y: 340 }, style: { background: '#3a6b4a' } },
+    { id: '1', type: 'input', data: { label: 'Found Startup\n(Citizen)' }, position: { x: 300, y: 0 }, style: DEFAULT_NODE_STYLE },
+    { id: '2', data: { label: 'Choose Idea\n+ Target Market' }, position: { x: 300, y: 100 }, style: DEFAULT_NODE_STYLE },
+    { id: '3', data: { label: 'Hire Staff\n(Tech / Marketing / Sales)' }, position: { x: 80, y: 220 }, style: DEFAULT_NODE_STYLE },
+    { id: '4', data: { label: 'Assign Tasks\nDevelop Product' }, position: { x: 520, y: 220 }, style: DEFAULT_NODE_STYLE },
+    { id: 'morale', data: { label: 'Employee Morale\n& Happiness' }, position: { x: 80, y: 340 }, style: STYLED_NODE.morale },
+    { id: '5', data: { label: 'Real-World Triggers\n(Firecrawl + Events)' }, position: { x: 300, y: 360 }, style: STYLED_NODE.triggers },
+    { id: 'funding', data: { label: 'Funding Rounds\n(Angel / Seed / Series)' }, position: { x: 520, y: 340 }, style: STYLED_NODE.funding },
     {
       id: 'civic-tax',
       type: 'civicLever',
@@ -124,10 +140,10 @@ export default function WorkflowDiagram({ state, setState, onTick }) {
       },
       position: { x: 40, y: 480 }
     },
-    { id: 'civic-infra', data: { label: 'Civic Lever:\nInfrastructure / Talent' }, position: { x: 220, y: 500 }, style: { background: '#6b3a3a' } },
-    { id: 'civic-reg', data: { label: 'Civic Lever:\nRegulations' }, position: { x: 400, y: 480 }, style: { background: '#6b3a3a' } },
-    { id: '7', data: { label: 'Launch / Market / Sell\nTrack Runway & Hype' }, position: { x: 580, y: 480 } },
-    { id: '8', type: 'output', data: { label: 'Exit / IPO / Acquisition\nor Iterate / Pivot' }, position: { x: 300, y: 640 } },
+    { id: 'civic-infra', data: { label: 'Civic Lever:\nInfrastructure / Talent' }, position: { x: 220, y: 500 }, style: STYLED_NODE.civic },
+    { id: 'civic-reg', data: { label: 'Civic Lever:\nRegulations' }, position: { x: 400, y: 480 }, style: STYLED_NODE.civic },
+    { id: '7', data: { label: 'Launch / Market / Sell\nTrack Runway & Hype' }, position: { x: 580, y: 480 }, style: DEFAULT_NODE_STYLE },
+    { id: '8', type: 'output', data: { label: 'Exit / IPO / Acquisition\nor Iterate / Pivot' }, position: { x: 300, y: 640 }, style: DEFAULT_NODE_STYLE },
   ];
 
   const initialEdges = [
@@ -178,24 +194,26 @@ export default function WorkflowDiagram({ state, setState, onTick }) {
   );
 
   return (
-    <div style={{ width: '100%', height: '60vh' }}>
-      <h2 style={{ textAlign: 'center', margin: '8px 0', color: '#e0e0e0' }}>
+    <div className="workflow-diagram">
+      <h2 className="workflow-diagram__title">
         Citizen — Startup + Civic Workflow
       </h2>
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
-        nodeTypes={nodeTypes}
-        fitView
-      >
-        <Background color="#222" gap={16} />
-        <Controls />
-        <MiniMap />
-      </ReactFlow>
-      <div style={{ textAlign: 'center', marginTop: 8 }}>
+      <div className="workflow-diagram__canvas">
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          nodeTypes={nodeTypes}
+          fitView
+        >
+          <Background color="#222" gap={16} />
+          <Controls />
+          <MiniMap />
+        </ReactFlow>
+      </div>
+      <div className="workflow-diagram__tick">
         <button onClick={onTick} style={{ padding: '6px 16px' }}>
           Advance Month (apply effects)
         </button>

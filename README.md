@@ -6,6 +6,22 @@ Players manage both city-level civic systems (budgets, policies, social incident
 
 Forked conceptually from civic-brief ideas and expanded into a full game backend + frontend.
 
+## Screenshots
+
+Local sample-data workflow (Playwright desktop viewport). Tax lever, world-event triggers, and cash/burn history are interactive today; several React Flow nodes remain visual-only placeholders.
+
+![Citizen workflow diagram](docs/images/workflow-hero.png)
+
+![Tax policy civic lever](docs/images/workflow-tax-control.png)
+
+![World event triggers](docs/images/workflow-triggers.png)
+
+![Company metrics dashboard with event history](docs/images/workflow-dashboard.png)
+
+![Cash and burn chart with trigger markers](docs/images/workflow-dashboard-chart.png)
+
+![React Flow diagram with active world events](docs/images/workflow-diagram.png)
+
 ## Tech Stack (planned)
 - Frontend: React + React Flow (workflows), three.js (3D city), Highcharts, fabric.js, etc.
 - Backend: PostgreSQL (simulation objects, effects, companies, real-world triggers) + pgvector for AI
