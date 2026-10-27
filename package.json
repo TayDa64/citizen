@@ -31,6 +31,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "start:api": "node server/index.js",
+    "ingest:once": "node server/ingestOnce.js",
     "test:unit": "node --test test/unit/*.api.js",
     "test:ui": "vitest run",
     "test": "npm run test:unit && npm run test:ui",

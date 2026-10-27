@@ -172,7 +172,24 @@ Live Firecrawl; many data sources; AI-generated arbitrary rules; political syste
 - OpenAPI **0.8.6**. Fixture wage bulletin still burns **2376**; clear still **2200**. TRIGGER_CONTRACT v1 unchanged.
 
 ### Explicit non-goals
-CIT-67 `--once` / Actions schedule; calendar reducer; nest (006); restack (CIT-69); meetings (007); Firecrawl; dampening; HNSW/embeddings; AI Judge.
+Calendar reducer; nest (006); restack (CIT-69); meetings (007); Firecrawl; dampening; HNSW/embeddings; AI Judge. (CIT-67 `--once` is the next slice.)
+
+## Slice ingest:once (CIT-67 — fixture runner, dispatch only)
+
+**`npm run ingest:once` runs one fixture ingest beside local Postgres; stdout prints `changed=true|false`.**
+
+### What works
+- CLI `server/ingestOnce.js` → `ingestAndPersist(pool, { adapter: 'fixture', fixtureId })` (reuses CIT-68 `ingest_runs`).
+- Default fixture `civic-wage-bulletin`; override with `--fixture` / `--fixture-id` or env `INGEST_FIXTURE_ID`.
+- Stdout token `changed=true|false` (CivicBrief `botResult` shape). Exit `1` on validation / DB failure (still records `status=error` when persist was reached).
+- Requires `DATABASE_URL` loopback/socket (same guard as the API). Migrations must already be applied.
+- Fixture wage bulletin still burns **2376**; clear still **2200**. `adapter: firecrawl` stays rejected.
+
+### Actions (docs only — do not arm cron yet)
+Intended GitHub Actions job is **`workflow_dispatch` only** (no `schedule:` key until the calendar due-row sweep exists). The job should: install deps, start local Postgres the way `test:api` does, migrate, then `npm run ingest:once`. It must not POST a remote Host (loopback 403). Do **not** add `.github/workflows` `schedule:` in this slice.
+
+### Explicit non-goals
+`schedule:` cron; in-process `node-cron`; calendar reducer; nest (006); restack / `campaignId` (CIT-69); meetings (007); Firecrawl / live fetch; UI.
 
 ## Slice causal graph (P1-3 — rule registry is truth; diagram is a view)
 
