@@ -183,34 +183,69 @@ export default function Dashboard({ state }) {
   return (
     <div className="dashboard" style={{ padding: '1rem', background: '#12121f', color: '#e0e0e0' }}>
       <h3 style={{ margin: '0 0 0.5rem' }}>Company Metrics</h3>
-      <p>
-        <span data-testid="cash-value">Cash: ${state.company.cash.toFixed(0)}</span>
-        {' | '}
-        <span id="burn-value" data-testid="burn-value">Burn/mo: {formatCurrency(previewBurnRate(state))}</span>
-        {' | '}
-        <span id="base-burn-value" data-testid="base-burn-value">Base burn: {formatCurrency(baseBurnRate(state.taxRate))}</span>
-        {' | '}
-        <span id="talent-multiplier-value" data-testid="talent-multiplier-value">Talent multiplier: {formatTalentReadout(talentMultiplierOf(state))}</span>
-        {' | '}
-        <span
-          id="talent-cost-factor-value"
-          data-testid="talent-cost-factor-value"
-          role="group"
-          aria-label={`Talent cost factor ${formatTalentCostFactor(talentCostFactorOf(state))}${factorClampNote ? `, ${factorClampNote}` : ''}`}
-        >
-          Talent cost factor: {formatTalentCostFactor(talentCostFactorOf(state))}
-        </span>
-        {factorClampNote ? (
-          <>
-            {' '}
-            <span data-testid="talent-cost-factor-clamp">{factorClampNote}</span>
-          </>
-        ) : null}
-        {' | '}
-        <span id="effective-multiplier-value" data-testid="effective-multiplier-value">Effective multiplier: {formatTalentCostFactor(effectiveMultiplierOf(state))}</span>
-        {' | '}
-        Tax: {(state.taxRate * 100).toFixed(0)}%
-      </p>
+      <dl className="metrics-grid">
+        <div>
+          <dt>Cash</dt>
+          <dd>
+            <span data-testid="cash-value">Cash: ${state.company.cash.toFixed(0)}</span>
+          </dd>
+        </div>
+        <div>
+          <dt>Burn / month</dt>
+          <dd>
+            <span id="burn-value" data-testid="burn-value">
+              Burn/mo: {formatCurrency(previewBurnRate(state))}
+            </span>
+          </dd>
+        </div>
+        <div>
+          <dt>Base burn</dt>
+          <dd>
+            <span id="base-burn-value" data-testid="base-burn-value">
+              Base burn: {formatCurrency(baseBurnRate(state.taxRate))}
+            </span>
+          </dd>
+        </div>
+        <div>
+          <dt>Talent multiplier</dt>
+          <dd>
+            <span id="talent-multiplier-value" data-testid="talent-multiplier-value">
+              Talent multiplier: {formatTalentReadout(talentMultiplierOf(state))}
+            </span>
+          </dd>
+        </div>
+        <div>
+          <dt>Talent cost factor</dt>
+          <dd>
+            <span
+              id="talent-cost-factor-value"
+              data-testid="talent-cost-factor-value"
+              role="group"
+              aria-label={`Talent cost factor ${formatTalentCostFactor(talentCostFactorOf(state))}${factorClampNote ? `, ${factorClampNote}` : ''}`}
+            >
+              Talent cost factor: {formatTalentCostFactor(talentCostFactorOf(state))}
+            </span>
+            {factorClampNote ? (
+              <>
+                {' '}
+                <span data-testid="talent-cost-factor-clamp">{factorClampNote}</span>
+              </>
+            ) : null}
+          </dd>
+        </div>
+        <div>
+          <dt>Effective multiplier</dt>
+          <dd>
+            <span id="effective-multiplier-value" data-testid="effective-multiplier-value">
+              Effective multiplier: {formatTalentCostFactor(effectiveMultiplierOf(state))}
+            </span>
+          </dd>
+        </div>
+        <div>
+          <dt>Tax</dt>
+          <dd>Tax: {(state.taxRate * 100).toFixed(0)}%</dd>
+        </div>
+      </dl>
       <TalentBurnSummary state={state} />
       <WorldEventEffect state={state} />
       <figure className="metrics-chart" aria-busy={ChartAccessibility === undefined}>

@@ -59,3 +59,19 @@ if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
     },
   });
 }
+
+// jsdom lacks DOMMatrix*; @xyflow reads zoom from the viewport transform.
+if (typeof window !== 'undefined' && typeof window.DOMMatrixReadOnly !== 'function') {
+  window.DOMMatrixReadOnly = class DOMMatrixReadOnly {
+    constructor(init) {
+      this.m22 = 1;
+      if (typeof init === 'string') {
+        const scale = init.match(/matrix\(([^)]+)\)/i);
+        if (scale) {
+          const parts = scale[1].split(',').map((part) => Number(part.trim()));
+          if (Number.isFinite(parts[3])) this.m22 = parts[3];
+        }
+      }
+    }
+  };
+}
