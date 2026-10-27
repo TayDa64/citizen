@@ -65,9 +65,18 @@ function effectParts(trigger, state) {
   return parts;
 }
 
-export default function TriggerPanel({ state, announcement, busy = false, onToggleTrigger, onClearTriggers }) {
+export default function TriggerPanel({
+  state,
+  announcement,
+  busy = false,
+  pipelineEvents = [],
+  onToggleTrigger,
+  onClearTriggers,
+  onIngestFixture,
+}) {
   const activeIds = new Set((state.activeTriggers ?? []).map((trigger) => trigger.id));
   const headingRef = useRef(null);
+  const events = Array.isArray(pipelineEvents) ? pipelineEvents : [];
 
   const handleClear = async () => {
     await onClearTriggers();
@@ -88,8 +97,8 @@ export default function TriggerPanel({ state, announcement, busy = false, onTogg
         </h2>
         <p className="trigger-panel__lede">
           {state.dataSource === 'api'
-            ? 'Events stored by the Citizen service. Talent cost is shown in dollars from the company baseline.'
-            : 'Sample events stored on this device. A policy change, news spike, or market shift moves hype and talent cost. No live feed is connected.'}
+            ? 'Events stored by the Citizen service. Talent cost is shown in dollars from the company baseline. Ingest a fixture signal through the observation → interpretation → effect pipeline (no live scrape).'
+            : 'Sample events stored on this device. Ingest a fixture wage bulletin through the same pipeline — observation, interpretation, and validated effect stay separate. No live feed is connected.'}
         </p>
       </div>
       <div role="status" aria-live="polite" aria-atomic="true" className="trigger-live">
@@ -135,6 +144,33 @@ export default function TriggerPanel({ state, announcement, busy = false, onTogg
             </button>
           );
         })}
+      </div>
+      <div className="trigger-pipeline">
+        <button
+          type="button"
+          className="trigger-ingest"
+          disabled={busy || typeof onIngestFixture !== 'function'}
+          onClick={() => onIngestFixture?.()}
+        >
+          Ingest fixture wage bulletin
+        </button>
+        {events.length > 0 ? (
+          <ul className="trigger-pipeline__list" aria-label="Pipeline provenance">
+            {events.map((event) => (
+              <li key={event.observationId ?? event.triggerId ?? event.label} className="trigger-pipeline__item">
+                <span className="trigger-pipeline__lifecycle">{event.lifecycle}</span>
+                {' '}
+                <span className="trigger-pipeline__label">{event.label}</span>
+                {event.evidence ? (
+                  <span className="trigger-pipeline__evidence"> — {event.evidence}</span>
+                ) : null}
+                {event.provenance ? (
+                  <span className="trigger-pipeline__provenance"> ({event.provenance})</span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </div>
       {activeIds.size > 0 && (
         <button type="button" className="trigger-clear" onClick={handleClear} disabled={busy}>

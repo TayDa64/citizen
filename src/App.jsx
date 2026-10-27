@@ -28,6 +28,7 @@ import { CLEARED_ANNOUNCEMENT, announceTrigger, composeLiveAnnouncement } from '
 import { effectiveBurnRate, talentCostFactorClampOf } from './talentMultiplier';
 import {
   applyCommandsLocally,
+  buildTriggerRestackCommands,
   commandsWithTriggerRestack,
   dispatchTurnCommands,
   toCampaignTrigger,
@@ -37,6 +38,7 @@ import {
   ledgerEntriesFromApiCommits,
   shapeLedgerEntry,
 } from './turnLedger';
+import { ingestFixtureIntoState } from './pipelineIngest';
 
 function removalBlockedMessage(error, label) {
   const hostAlert = hostHeaderAlert(error);
@@ -83,6 +85,7 @@ function App() {
   const [actionError, setActionError] = useState('');
   const [apiBase, setApiBase] = useState(configuredBase);
   const [ledger, setLedger] = useState([]);
+  const [pipelineEvents, setPipelineEvents] = useState([]);
   const campaignIdRef = useRef(null);
 
   const showSampleData = (note) => {
@@ -91,6 +94,7 @@ function App() {
     setApiBase(null);
     campaignIdRef.current = null;
     setLedger([]);
+    setPipelineEvents([]);
     setSourceNote(note);
     setActionError('');
   };
@@ -421,9 +425,97 @@ function App() {
     }
   };
 
+  const onIngestFixture = async () => {
+    if (state.dataSource !== 'api' || !apiBase) {
+      const result = ingestFixtureIntoState(stateRef.current);
+      setState(result.state);
+      stateRef.current = result.state;
+      setPipelineEvents(result.events);
+      const active = result.triggers[0];
+      if (active) {
+        announceLive(
+          announceTrigger(active, 'apply', effectiveBurnRate(result.state), talentCostFactorClampOf(result.state)),
+          result.state,
+        );
+      } else {
+        setAnnouncement('Fixture ingest produced no active world events.');
+      }
+      return;
+    }
+
+    setSourceBusy(true);
+    setActionError('');
+    setAnnouncement('Ingesting fixture wage bulletin.');
+    let saved = false;
+    try {
+      const api = createCitizenApi({ baseUrl: apiBase });
+      const ingested = await api.ingestWorldEvents({
+        adapter: 'fixture',
+        fixtureId: 'civic-wage-bulletin',
+      });
+      saved = true;
+      setPipelineEvents(Array.isArray(ingested?.events) ? ingested.events : []);
+      let reading = null;
+      try {
+        reading = await refreshApi(apiBase);
+      } catch (error) {
+        const hostAlert = hostHeaderAlert(error);
+        if (hostAlert) {
+          setActionError(hostAlert);
+          setAnnouncement('');
+          return;
+        }
+        if (error?.code === 'unreadable-company') {
+          showSampleData(UNREADABLE_COMPANY_NOTE);
+          setAnnouncement('');
+          return;
+        }
+        const local = ingestFixtureIntoState(stateRef.current);
+        setState(local.state);
+        stateRef.current = local.state;
+        setPipelineEvents(local.events);
+        const active = local.triggers[0];
+        if (active) {
+          announceLive(
+            announceTrigger(active, 'apply', effectiveBurnRate(local.state), talentCostFactorClampOf(local.state)),
+            local.state,
+          );
+        }
+        return;
+      }
+      // Restack campaign GameState from the refreshed API trigger list (supersession
+      // already applied server-side — no compounding).
+      const listed = reading.state.activeTriggers ?? [];
+      await commitCommands(buildTriggerRestackCommands(listed));
+      const pipelineTriggers = (ingested?.triggers ?? []).filter(Boolean);
+      const headline = pipelineTriggers[0]
+        ?? listed.find((row) => String(row.id).startsWith('evt-pipeline-'));
+      if (headline) {
+        announceLive(
+          announceTrigger(headline, 'apply', effectiveBurnRate(reading.state), talentCostFactorClampOf(reading.state)),
+          reading.state,
+        );
+      } else {
+        setAnnouncement('Fixture ingest completed.');
+      }
+    } catch (error) {
+      if (!saved) {
+        setActionError(saveBlockedMessage(error, 'fixture ingest'));
+        setAnnouncement('');
+      }
+    } finally {
+      setSourceBusy(false);
+    }
+  };
+
   const onClearTriggers = async () => {
     if (state.dataSource !== 'api' || !apiBase) {
       setState((prev) => clearTriggers(prev));
+      setPipelineEvents((prev) => prev.map((event) => (
+        event.lifecycle === 'cleared' || event.lifecycle === 'expired'
+          ? event
+          : { ...event, lifecycle: 'cleared' }
+      )));
       setAnnouncement(CLEARED_ANNOUNCEMENT);
       return;
     }
@@ -443,6 +535,9 @@ function App() {
         if (reading.skipped > 0) alerts.push(skippedTriggerAlert(reading.skipped));
         if (reading.state.activeTriggers.length === 0) {
           setAnnouncement(CLEARED_ANNOUNCEMENT);
+          setPipelineEvents((prev) => prev.map((event) => (
+            event.lifecycle === 'cleared' ? event : { ...event, lifecycle: 'cleared' }
+          )));
           await syncCampaignTriggerCommand({ type: 'clear_triggers' });
         } else {
           alerts.push('World events are still listed by the service.');
@@ -462,6 +557,9 @@ function App() {
           return;
         }
         setState((prev) => clearTriggers(prev));
+        setPipelineEvents((prev) => prev.map((event) => (
+          event.lifecycle === 'cleared' ? event : { ...event, lifecycle: 'cleared' }
+        )));
         setAnnouncement(CLEARED_ANNOUNCEMENT);
       }
     } catch (error) {
@@ -501,8 +599,10 @@ function App() {
           state={state}
           announcement={announcement}
           busy={sourceBusy}
+          pipelineEvents={pipelineEvents}
           onToggleTrigger={onToggleTrigger}
           onClearTriggers={onClearTriggers}
+          onIngestFixture={onIngestFixture}
         />
         <Dashboard state={state} ledger={ledger} />
       </main>

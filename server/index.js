@@ -16,6 +16,7 @@ import {
   getCampaign,
   listTurnCommits
 } from './campaigns.js';
+import { ingestAndPersist } from './eventIngest.js';
 import {
   mockTriggerPayload,
   TriggerValidationError,
@@ -144,7 +145,7 @@ async function handleRequest(req, res, pool) {
     return;
   }
   const triggerPath = pathname.match(/^\/api\/triggers\/([^/]+)$/);
-  if (req.method === 'DELETE' && triggerPath && triggerPath[1] !== 'mock') {
+  if (req.method === 'DELETE' && triggerPath && triggerPath[1] !== 'mock' && triggerPath[1] !== 'ingest') {
     let id;
     try {
       id = decodeURIComponent(triggerPath[1]);
@@ -158,6 +159,20 @@ async function handleRequest(req, res, pool) {
     sendEmpty(res, 204, origin);
     return;
   }
+  if (req.method === 'POST' && pathname === '/api/triggers/ingest') {
+    const raw = await readBody(req);
+    const contentType = req.headers['content-type'] || '';
+    if (raw.trim() && !contentType.includes('application/json')) {
+      const error = new Error('Content-Type must be application/json');
+      error.status = 415;
+      throw error;
+    }
+    const parsed = raw.trim() ? parseJson(raw) : {};
+    // Fixture / http-stub pipeline → contract triggers → createTrigger (replace, no compound).
+    sendJson(res, 201, await ingestAndPersist(pool, parsed ?? {}), origin);
+    return;
+  }
+
   if (req.method === 'POST' && (pathname === '/api/triggers' || pathname === '/api/triggers/mock')) {
     const raw = await readBody(req);
     const contentType = req.headers['content-type'] || '';
@@ -244,6 +259,7 @@ async function handleRequest(req, res, pool) {
   if (
     pathname === '/api/triggers' ||
     pathname === '/api/triggers/mock' ||
+    pathname === '/api/triggers/ingest' ||
     pathname === '/api/companies' ||
     pathname === '/api/campaigns' ||
     /^\/api\/campaigns\/[^/]+$/.test(pathname) ||
