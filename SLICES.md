@@ -65,7 +65,7 @@ Slice 3 (authoritative turns) — see below and [STATE.md](STATE.md) Phase 1.
 
 ### API dependency
 
-Live company and world-event data comes from Citizen API OpenAPI **0.8.5** (political survival + real-world ingest + turn ledger + civic feedback + hire TurnCommand + campaign turns + prior 0.7.1 talent fields). Trigger contract paths below still apply.
+Live company and world-event data comes from Citizen API OpenAPI **0.8.6** (ingest_runs audit + political survival + real-world ingest + turn ledger + civic feedback + hire TurnCommand + campaign turns + prior 0.7.1 talent fields). Trigger contract paths below still apply.
 
 **Authority boundary:** The companies service is the source of truth for hype, talent cost, baselines, and (until a campaign hire) talent multiplier / mix / factors. After `hire_employee`, campaign GameState owns the roster. `hydrateFromApi` / `readApiSnapshot` never copy `company.cash` or `company.burnRate` from the companies payload. Cash / burn history / tax / turn / hire commit through the turn engine and, when connected, `POST /api/campaigns/{id}/turns`. Advance Month never POSTs to `/api/companies`.
 
@@ -85,7 +85,7 @@ Live company and world-event data comes from Citizen API OpenAPI **0.8.5** (poli
 
 `APPLY_TALENT_COST_TO_BURN` in `src/talentMultiplier.js` is on. Trigger talent cost scales burn in local mode and API mode. `talentMultiplier` stays employee-only.
 
-OpenAPI **0.8.5** (political `GameState.politics` + prior 0.8.4 ingest / 0.8.3 ledger / 0.8.2 civic / hire / turns / 0.7.1 talent) includes `talentCostFactor` and `effectiveMultiplier` on `GET /api/companies`, campaign GameState / TurnCommand routes, `GameState.civic` (`budgetHeadroom`, `hypeBias`), `GameState.politics` (`voterSupport`, `survivalStatus`, `survivalFloor`), shaped turn ledger entries, and fixture/http_stub ingest behind TRIGGER_CONTRACT v1. `talentMultiplier` remains employee-only. A 0.5.0 payload omits the new talent fields and the client computes them. Parsing stays in `src/talentMultiplier.js`. A missing Host is 400 `Host required`, two Host headers are 400 `Duplicate host`, and any other host is 403 `Forbidden host`. Those alerts keep the current numbers. Hype outside 0–1 and talent cost outside $0–$9,999,999,999.99 are clamped, and the status says so.
+OpenAPI **0.8.6** (CIT-68 `ingest_runs` + political `GameState.politics` + prior 0.8.4 ingest / 0.8.3 ledger / 0.8.2 civic / hire / turns / 0.7.1 talent) includes `talentCostFactor` and `effectiveMultiplier` on `GET /api/companies`, campaign GameState / TurnCommand routes, `GameState.civic` (`budgetHeadroom`, `hypeBias`), `GameState.politics` (`voterSupport`, `survivalStatus`, `survivalFloor`), shaped turn ledger entries, fixture/http_stub ingest behind TRIGGER_CONTRACT v1, and `GET /api/ingest/runs`. `talentMultiplier` remains employee-only. A 0.5.0 payload omits the new talent fields and the client computes them. Parsing stays in `src/talentMultiplier.js`. A missing Host is 400 `Host required`, two Host headers are 400 `Duplicate host`, and any other host is 403 `Forbidden host`. Those alerts keep the current numbers. Hype outside 0–1 and talent cost outside $0–$9,999,999,999.99 are clamped, and the status says so.
 
 ## Slice lifecycle hire (P0 business lifecycle — first PR)
 
@@ -160,6 +160,19 @@ Full campaign-loop acceptance suite (P1-4); rewriting the UI as a pure read-mode
 
 ### Explicit non-goals
 Live Firecrawl; many data sources; AI-generated arbitrary rules; political systems.
+
+## Slice ingest_runs (CIT-68 — audit before the clock)
+
+**Every `ingestAndPersist` writes a durable `ingest_runs` row; validation failure is not `status=success`.**
+
+### What works
+- Migration `005_ingest_runs.sql`: `id`, `started_at`, `finished_at`, `adapter`, `fixture_id`, `status`, `changed`, `error`, `trigger_client_ids`, `result_json`. No `scheduled_meeting_id` yet (waits for 007).
+- `POST /api/triggers/ingest` always inserts a run (`success` + `changed` when triggers persist; `error` + `changed=false` on validation/adapter rejection, including `firecrawl`).
+- `GET /api/ingest/runs?limit=` (1..200, default 50) lists newest-first on loopback.
+- OpenAPI **0.8.6**. Fixture wage bulletin still burns **2376**; clear still **2200**. TRIGGER_CONTRACT v1 unchanged.
+
+### Explicit non-goals
+CIT-67 `--once` / Actions schedule; calendar reducer; nest (006); restack (CIT-69); meetings (007); Firecrawl; dampening; HNSW/embeddings; AI Judge.
 
 ## Slice causal graph (P1-3 — rule registry is truth; diagram is a view)
 

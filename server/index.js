@@ -16,7 +16,7 @@ import {
   getCampaign,
   listTurnCommits
 } from './campaigns.js';
-import { ingestAndPersist } from './eventIngest.js';
+import { ingestAndPersist, listIngestRuns } from './eventIngest.js';
 import {
   mockTriggerPayload,
   TriggerValidationError,
@@ -169,7 +169,15 @@ async function handleRequest(req, res, pool) {
     }
     const parsed = raw.trim() ? parseJson(raw) : {};
     // Fixture / http-stub pipeline → contract triggers → createTrigger (replace, no compound).
+    // Always writes an ingest_runs audit row (validation failure → status=error).
     sendJson(res, 201, await ingestAndPersist(pool, parsed ?? {}), origin);
+    return;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/ingest/runs') {
+    const limitRaw = requestUrl.searchParams.get('limit');
+    const limit = limitRaw == null ? 50 : Number(limitRaw);
+    sendJson(res, 200, await listIngestRuns(pool, { limit }), origin);
     return;
   }
 
@@ -260,6 +268,7 @@ async function handleRequest(req, res, pool) {
     pathname === '/api/triggers' ||
     pathname === '/api/triggers/mock' ||
     pathname === '/api/triggers/ingest' ||
+    pathname === '/api/ingest/runs' ||
     pathname === '/api/companies' ||
     pathname === '/api/campaigns' ||
     /^\/api\/campaigns\/[^/]+$/.test(pathname) ||

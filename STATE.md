@@ -66,22 +66,34 @@ Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/
 - Deterministic action → applied event → turn → metrics → explanation → reload
 - Suite: `src/campaignLoop.acceptance.test.js` (offline + ledger dual-path; live Postgres covered by `npm run test:api` / CI `test-api`)
 
-### Phase 9 — Political survival / objectives (P1-5) — this PR
+### Phase 9 — Political survival / objectives (P1-5) — landed (PR #21)
 - `voterSupport = 0.5*budgetHeadroom + 0.5*company.hype`; floor **0.25** on `advance_turn` → `ousted` / `incumbent`
 - `GameState.politics` + Dashboard readout; OpenAPI **0.8.5**; Slice 1/2 burns unchanged
 
+### Phase 10 — ingest_runs audit (CIT-68 / Wave 2) — this PR
+- Migration `005_ingest_runs.sql`; every `ingestAndPersist` writes a run row
+- Validation failure → `status=error` (not success); `GET /api/ingest/runs?limit=`
+- OpenAPI **0.8.6**; fixture burn **2376** / clear **2200** unchanged; `adapter: firecrawl` still rejected
+- Not in this PR: CIT-67, calendar reducer, nest 006, CIT-69 restack, meetings 007
+
 ## Next Highest-Priority Phases
+### Wave 2 continued (after CIT-68)
+- CIT-67 fixture `--once` + `workflow_dispatch` only
+- Three-phase calendar reducer (fixtures); then nest 006 → CIT-69 → meetings 007
+- Defer dampening, HNSW/embeddings, Firecrawl/AI Judge until after 007
+
 ### Phase 2 continued — Complete business lifecycle (P0)
 - Product development, launch, funding, runway, exit as real mechanics
 - Separate employee productivity from cost
 - Acceptance: player can form company → hire → build → launch → see revenue or insolvency
 
 ## Definition of Done for current slice
-Player tax/hype pathway drives voterSupport; advance_turn below 0.25 ousts (observable on TurnResult / Dashboard); Slice 1/2 burn + campaign-loop acceptance stay green; `npm test` green.
+`ingest_runs` rows exist for success and validation-failure ingest; `GET /api/ingest/runs` works on loopback; OpenAPI 0.8.6; fixture supersession burn 2376 / clear 2200 stay green; `npm test` green.
 
 ## Open items
 - A1: resolved. Axe is 0 on 5f4f021.
-- P2-M1 (info): the down migration only reverts 003/002, so a full re-run after rollback fails at 001. (004 adds campaigns/turn_commits down.)
+- P2-M1 (info): the down migration only reverts 003/002, so a full re-run after rollback fails at 001. (004 adds campaigns/turn_commits down; 005 adds ingest_runs down.)
 - P1-4: live Postgres campaign reload still gated on `npm run test:api` when DB available.
+- CIT-68: live `test:api` ingest_runs coverage needs Postgres (CI `test-api` / local socket).
 
-Last updated: 2026-10-27, Phase 9 political objectives off `main` @ `28c0215`.
+Last updated: 2026-10-27, CIT-68 ingest_runs off `main` @ `cf9b186`.
