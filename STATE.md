@@ -10,7 +10,7 @@
 
 Sequence complete. Post-merge regression on main 5f4f021: PASS (trace diag-20261026-8e1cd230), CI green.
 
-Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/Playwright; PR #12 authoritative turns; PR #13 campaign↔trigger coherence. Tip for lifecycle hire: `main` @ `e6e5cdb` (PR #13).
+Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/Playwright; PR #12 authoritative turns; PR #13 campaign↔trigger coherence; PR #14 business lifecycle hire. Tip for civic feedback: `main` @ `1fd81ac` (PR #14).
 
 **Rule:** Each PR must be green, rebased clean on main, and meet its acceptance criteria before the next is merged. Update this file after every merge.
 
@@ -30,10 +30,15 @@ Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/
 - Campaign↔trigger restack before advance (PR #13)
 - Acceptance: reload reproduces last committed state; failed commit leaves no partial state; offline engine determinism under `npm test`
 
-### Phase 2 — Minimum business lifecycle (P0) — in progress (first hire)
+### Phase 2 — Minimum business lifecycle (P0) — landed (PR #14)
 - TurnCommand `hire_employee` + Hire UI on diagram node `3`
-- Talent multiplier / burn preview update; cash drains on `advance_turn`; optional cash floor at 0
-- Still visual-only: funding, exit, product launch revenue, civic-infra/regs, morale, Firecrawl
+- Talent multiplier / burn preview update; cash drains on `advance_turn`; cash floors at 0
+- Still visual-only: funding, exit, product launch revenue, civic-reg, morale, Firecrawl
+
+### Phase 3 — First civic feedback loop (P0) — in progress
+- `budgetHeadroom = clamp(1 - taxRate)`; `hypeBias = (headroom - 0.75) * 0.2` → company hype
+- Diagram + Dashboard show civic metric and hype consequence; Slice 1 burn baselines preserved
+- `civic-infra` readout of headroom only (not a full second lever)
 
 ## Next Highest-Priority Phases
 ### Phase 2 continued — Complete business lifecycle (P0)
@@ -41,22 +46,21 @@ Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/
 - Separate employee productivity from cost
 - Acceptance: player can form company → hire → build → launch → see revenue or insolvency
 
-### Phase 3 — First civic feedback loop (P0)
-- Minimal city metrics (budget, employment, infrastructure)
-- At least one policy beyond tax that affects the company and feeds back
-- Acceptance: policy change → observable business consequence → city metric update
+### Phase 4 — Connect civic ↔ business pathways (P0-5)
+- One typed rule linking civic metric ↔ company field in the turn engine
+- Preview before commit / explanation after
 
-### Phase 4 — Real-world event pipeline (P1)
+### Phase 5 — Real-world event pipeline (P1)
 - Separate observation → interpretation → effect
 - Event lifecycle (discovered → active → expired)
 - Provenance retained
 - Acceptance: one live source produces a validated, replayable effect
 
 ## Definition of Done for current slice
-A player can hire ≥1 employee on node `3`, see talent multiplier and burn preview change, advance months through the turn engine (cash path differs; cash floors at 0), keep tax + world-event Slice 1/2 baselines with no employees/triggers, and persist hire via campaign turns when the API is up.
+A player can change tax, see city `budgetHeadroom` move, see company hype move by the civic bias in the same `set_tax` TurnCommand, keep Slice 1 burn baselines (2000 / 2200 / 2800), keep hire on node `3` working, and see headroom + hype on Dashboard / diagram.
 
 ## Open items
 - A1: resolved. Axe is 0 on 5f4f021.
 - P2-M1 (info): the down migration only reverts 003/002, so a full re-run after rollback fails at 001. (004 adds campaigns/turn_commits down.)
 
-Last updated: 2026-10-27, Phase 2 first hire off `main` @ `e6e5cdb`.
+Last updated: 2026-10-27, Phase 3 civic feedback off `main` @ `1fd81ac`.

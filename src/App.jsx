@@ -403,7 +403,7 @@ function App() {
     <div className="App" style={{ background: '#0f0f1a', minHeight: '100vh', color: 'white' }}>
       <header style={{ padding: '1rem', background: '#1a1a2e', textAlign: 'center' }}>
         <h1>Citizen</h1>
-        <p>Civic + Startup Simulation — tax policy and world events shape burn and hype</p>
+        <p>Civic + Startup Simulation — tax moves city budget headroom into hype; world events shape burn and talent</p>
       </header>
       <main>
         <WorkflowDiagram state={state} setState={handleSetState} onTick={onTick} onHire={onHire} />

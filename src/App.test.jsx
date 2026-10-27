@@ -153,7 +153,7 @@ describe('product header', () => {
   test('describes tax and world events without Slice-1-only copy', () => {
     render(<App />);
     expect(screen.getByRole('heading', { level: 1, name: 'Citizen' })).toBeInTheDocument();
-    expect(screen.getByText(/tax policy and world events/i)).toBeInTheDocument();
+    expect(screen.getByText(/budget headroom into hype/i)).toBeInTheDocument();
     expect(screen.queryByText(/Slice 1/i)).not.toBeInTheDocument();
   });
 });

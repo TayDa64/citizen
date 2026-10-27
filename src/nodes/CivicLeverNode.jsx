@@ -1,6 +1,14 @@
 import { Handle, Position } from '@xyflow/react';
+import { formatBudgetHeadroom, formatHypeBias } from '../civicFeedback.js';
 
 export default function CivicLeverNode({ data }) {
+  const headroom = data.budgetHeadroom;
+  const bias = data.hypeBias;
+  const headroomText = Number.isFinite(Number(headroom))
+    ? formatBudgetHeadroom(headroom)
+    : null;
+  const biasText = Number.isFinite(Number(bias)) ? formatHypeBias(bias) : null;
+
   return (
     <div style={{
       padding: 12,
@@ -29,6 +37,15 @@ export default function CivicLeverNode({ data }) {
           onChange={(e) => data.onChange?.(parseFloat(e.target.value))}
           style={{ width: '100%' }}
         />
+        {headroomText ? (
+          <p
+            data-testid="civic-budget-headroom"
+            style={{ margin: '6px 0 0', fontSize: 11, lineHeight: 1.35 }}
+          >
+            Budget headroom: {headroomText}
+            {biasText && biasText !== '0' ? ` · hype ${biasText}` : ''}
+          </p>
+        ) : null}
       </div>
       <Handle type="source" position={Position.Bottom} />
     </div>

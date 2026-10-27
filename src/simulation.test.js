@@ -19,7 +19,8 @@ import {
   talentCostFactorOf,
   talentMultiplierOf,
 } from './talentMultiplier';
-import { SAMPLE_TRIGGERS } from './triggers';
+import { SAMPLE_TRIGGERS, clampHype, roundTo } from './triggers';
+import { hypeBiasFromHeadroom, budgetHeadroomFromTax } from './civicFeedback.js';
 
 const policy = SAMPLE_TRIGGERS.find((trigger) => trigger.type === 'policy_change');
 const news = SAMPLE_TRIGGERS.find((trigger) => trigger.type === 'news_spike');
@@ -101,7 +102,9 @@ describe('authority boundary', () => {
     expect(reading.state.history).toEqual(ticking.history);
     expect(reading.state.company.cash).not.toBe(1);
     expect(reading.state.company.burnRate).not.toBe(9);
-    expect(reading.state.company.hype).toBe(0.55);
+    // Tax was set to 1 before hydrate → civic bias -0.15 folds onto API hype 0.55.
+    expect(reading.state.civic.hypeBias).toBe(-0.15);
+    expect(reading.state.company.hype).toBe(0.4);
     expect(reading.state.company.talentCost).toBe(4480);
     expect(reading.state.talentMultiplier).toBe(1.28);
   });
@@ -871,8 +874,12 @@ describe('local mode parity with the OpenAPI 0.7.0 simulation', () => {
       const stacked = referenceStack(state.activeTriggers);
       const resolved = referenceResolve(stacked.talentCost);
       const employee = talentMultiplierOf(state);
+      const civicHype = roundTo(
+        clampHype(stacked.hype + hypeBiasFromHeadroom(budgetHeadroomFromTax(state.taxRate))),
+        4,
+      );
       expect(state.company.talentCost, `draw ${draw} talent cost`).toBe(stacked.talentCost);
-      expect(state.company.hype, `draw ${draw} hype`).toBe(stacked.hype);
+      expect(state.company.hype, `draw ${draw} hype`).toBe(civicHype);
       expect(talentCostFactorOf(state), `draw ${draw} factor`).toBe(resolved.factor);
       expect(talentCostFactorClampedOf(state), `draw ${draw} flag`).toBe(resolved.clamped);
       expect(previewBurnRate(state), `draw ${draw} burn`).toBe(

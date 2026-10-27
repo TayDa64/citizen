@@ -65,7 +65,7 @@ Slice 3 (authoritative turns) — see below and [STATE.md](STATE.md) Phase 1.
 
 ### API dependency
 
-Live company and world-event data comes from Citizen API OpenAPI **0.8.1** (hire TurnCommand + campaign turns + prior 0.7.1 talent fields). Trigger contract paths below still apply.
+Live company and world-event data comes from Citizen API OpenAPI **0.8.2** (civic feedback + hire TurnCommand + campaign turns + prior 0.7.1 talent fields). Trigger contract paths below still apply.
 
 **Authority boundary:** The companies service is the source of truth for hype, talent cost, baselines, and (until a campaign hire) talent multiplier / mix / factors. After `hire_employee`, campaign GameState owns the roster. `hydrateFromApi` / `readApiSnapshot` never copy `company.cash` or `company.burnRate` from the companies payload. Cash / burn history / tax / turn / hire commit through the turn engine and, when connected, `POST /api/campaigns/{id}/turns`. Advance Month never POSTs to `/api/companies`.
 
@@ -85,7 +85,7 @@ Live company and world-event data comes from Citizen API OpenAPI **0.8.1** (hire
 
 `APPLY_TALENT_COST_TO_BURN` in `src/talentMultiplier.js` is on. Trigger talent cost scales burn in local mode and API mode. `talentMultiplier` stays employee-only.
 
-OpenAPI **0.8.1** (hire_employee + campaign turns; builds on 0.8.0 / 0.7.1) includes `talentCostFactor` and `effectiveMultiplier` on `GET /api/companies`, plus campaign GameState / TurnCommand routes (`hire_employee` refreshes talent / burn preview without draining cash). `talentMultiplier` remains employee-only. A 0.5.0 payload omits the new talent fields and the client computes them. Parsing stays in `src/talentMultiplier.js`. A missing Host is 400 `Host required`, two Host headers are 400 `Duplicate host`, and any other host is 403 `Forbidden host`. Those alerts keep the current numbers. Hype outside 0–1 and talent cost outside $0–$9,999,999,999.99 are clamped, and the status says so.
+OpenAPI **0.8.2** (civic feedback + hire_employee + campaign turns; builds on 0.8.1 / 0.8.0 / 0.7.1) includes `talentCostFactor` and `effectiveMultiplier` on `GET /api/companies`, plus campaign GameState / TurnCommand routes (`hire_employee` refreshes talent / burn preview without draining cash) and `GameState.civic` (`budgetHeadroom`, `hypeBias`). `talentMultiplier` remains employee-only. A 0.5.0 payload omits the new talent fields and the client computes them. Parsing stays in `src/talentMultiplier.js`. A missing Host is 400 `Host required`, two Host headers are 400 `Duplicate host`, and any other host is 403 `Forbidden host`. Those alerts keep the current numbers. Hype outside 0–1 and talent cost outside $0–$9,999,999,999.99 are clamped, and the status says so.
 
 ## Slice lifecycle hire (P0 business lifecycle — first PR)
 
@@ -97,7 +97,28 @@ OpenAPI **0.8.1** (hire_employee + campaign turns; builds on 0.8.0 / 0.7.1) incl
 - Campaign persist: same `POST /api/campaigns/{id}/turns` path (no parallel hire HTTP).
 
 ### Explicit non-goals (still)
-Funding, exit, product launch revenue, civic-infra/regs, morale, Firecrawl, wiring unrelated edges as rules.
+Funding, exit, product launch revenue, civic-reg interactivity, morale, Firecrawl, wiring unrelated edges as rules.
+
+## Slice civic feedback (P0-4 — first city ↔ company loop)
+
+**One city metric moves with tax and feeds back into company hype on the same TurnCommand path.**
+
+### Formulas (`src/civicFeedback.js`)
+```
+budgetHeadroom = clamp(1 - taxRate, 0, 1)
+hypeBias       = (budgetHeadroom - 0.75) * 0.2   // 0 at default 25% tax
+company.hype   = clamp(stackedTriggerHype + hypeBias)
+```
+
+### What works
+- `set_tax` updates `GameState.civic.budgetHeadroom` / `hypeBias` and folds bias into `company.hype` (effects `civic.budget`, `civic.hype`).
+- Slice 1 burn baselines **unchanged** (civic never multiplies burn / talentCostFactor).
+- Diagram: tax node shows budget headroom; `civic-infra` lightly reads out headroom (not a new lever).
+- Dashboard “Civic feedback” readout: headroom, hype bias, company hype.
+- Campaign merge rebases API hype with the new civic bias when tax commits.
+
+### Explicit non-goals
+Funding / exit / Firecrawl; full civic-infra / civic-reg levers; large civic sim; typed pathway registry (P0-5).
 
 ## Merge train
 
