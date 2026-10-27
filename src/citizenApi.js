@@ -1,3 +1,4 @@
+import { KNOWN_EFFECT_KEYS } from './effectKeys.js';
 import { readTalentMix, readTalentMultiplier } from './talentMultiplier';
 import { TRIGGER_TYPES, assertTriggerId, assertValidTrigger } from './triggers';
 
@@ -12,7 +13,8 @@ import { TRIGGER_TYPES, assertTriggerId, assertValidTrigger } from './triggers';
 //   (seed + apply/remove/clear TurnCommands) so advance burn matches preview.
 
 const TRIGGER_FIELDS = ['id', 'type', 'label', 'source', 'timestamp', 'effect'];
-const EFFECT_FIELDS = new Set(['hype', 'talentCost']);
+/** Allow-list from causal effectKeys registry. */
+const EFFECT_FIELDS = new Set(KNOWN_EFFECT_KEYS);
 
 export const SAMPLE_DATA_NOTE = 'Using sample data on this device.';
 export const EMPTY_COMPANIES_NOTE = 'No company was returned. Using sample data on this device.';

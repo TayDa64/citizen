@@ -1,8 +1,10 @@
 /**
- * Causal pathway registry (P0-5).
+ * Causal pathway registry (P0-5; folded into P1-3 causal graph).
  *
  * One typed civic ↔ business rule the turn engine executes. React Flow edges
  * and labels are a view of this registry — not an independent source of truth.
+ * The executable causal graph umbrella lives in `causalGraph.js` (pathways +
+ * tax→burn + registered effect keys).
  *
  * Operator `linear_bias`:
  *   bias   = (source - neutralSource) * scale
@@ -42,7 +44,7 @@ export const PATHWAY_BUDGET_HEADROOM_TO_HYPE = Object.freeze({
   }),
 });
 
-/** Frozen registry — extend later for P1 causal graph; keep one rule for P0. */
+/** Frozen pathway list — included in CAUSAL_RULES (`causalGraph.js`). */
 export const PATHWAY_RULES = Object.freeze([PATHWAY_BUDGET_HEADROOM_TO_HYPE]);
 
 export function getPathway(id) {

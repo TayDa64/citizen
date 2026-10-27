@@ -10,7 +10,7 @@
 
 Sequence complete. Post-merge regression on main 5f4f021: PASS (trace diag-20261026-8e1cd230), CI green.
 
-Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/Playwright; PR #12 authoritative turns; PR #13 campaign↔trigger coherence; PR #14 business lifecycle hire; PR #15 civic feedback; PR #16 connect pathways. Tip: `main` @ `855211f` (PR #16).
+Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/Playwright; PR #12 authoritative turns; PR #13 campaign↔trigger coherence; PR #14 business lifecycle hire; PR #15 civic feedback; PR #16 connect pathways; PR #17 turn ledger; PR #18 real-world pipeline. Tip: `main` @ `6e5d76e` (PR #18).
 
 **Rule:** Each PR must be green, rebased clean on main, and meet its acceptance criteria before the next is merged. Update this file after every merge.
 
@@ -51,11 +51,16 @@ Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/
 - Dashboard Turn ledger panel; chart 24-month buffer remains display-only
 - OpenAPI **0.8.3**
 
-### Phase 6 — Real-world event pipeline (P1-2) — this PR
+### Phase 6 — Real-world event pipeline (P1-2) — landed (PR #18)
 - Observation → interpretation → validated TRIGGER_CONTRACT effect with provenance
 - Lifecycle: discovered/normalized → pending/active → expired|cleared; supersession without compounding
 - Fixture adapter (`civic-wage-bulletin`) + http_stub plug-in point; `POST /api/triggers/ingest`
 - OpenAPI **0.8.4**
+
+### Phase 7 — Executable causal graph (P1-3) — this PR
+- `CAUSAL_RULES` in `src/causalGraph.js` extends pathway registry; React Flow edges from registry
+- Effect keys (`src/effectKeys.js`) are the allow-list; unknown keys rejected at apply/preview
+- Tax→burn + pathway + talentCost edges are views of registered rules
 
 ## Next Highest-Priority Phases
 ### Phase 2 continued — Complete business lifecycle (P0)
@@ -63,14 +68,14 @@ Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/
 - Separate employee productivity from cost
 - Acceptance: player can form company → hire → build → launch → see revenue or insolvency
 
-### Phase 7 — Executable causal graph (P1-3)
-- Rule registry is truth; React Flow is a view; unknown effect keys stay rejected
+### Phase 8 — Campaign-loop acceptance suite (P1-4)
+- Deterministic action → persisted event → turn → metrics → explanation → reload
 
 ## Definition of Done for current slice
-Fixture (or http_stub) observations flow through observation → interpretation → contract-valid effect with lifecycle + provenance; supersession/clear never compound; apply/clear + campaign restack stay coherent; Slice 1/2 + hire + pathway + ledger invariants hold; OpenAPI 0.8.4 documents ingest.
+Causal registry is truth for executable edges; diagram derives tax/pathway/talentCost edges from it; unknown effect keys rejected at apply/preview; known pathway + trigger effects and Slice 1 burn baselines still hold.
 
 ## Open items
 - A1: resolved. Axe is 0 on 5f4f021.
 - P2-M1 (info): the down migration only reverts 003/002, so a full re-run after rollback fails at 001. (004 adds campaigns/turn_commits down.)
 
-Last updated: 2026-10-27, Phase 6 real-world pipeline off `main` @ `aa9efd0`.
+Last updated: 2026-10-27, Phase 7 causal graph off `main` @ `6e5d76e`.
