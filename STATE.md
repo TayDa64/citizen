@@ -70,16 +70,21 @@ Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/
 - `voterSupport = 0.5*budgetHeadroom + 0.5*company.hype`; floor **0.25** on `advance_turn` → `ousted` / `incumbent`
 - `GameState.politics` + Dashboard readout; OpenAPI **0.8.5**; Slice 1/2 burns unchanged
 
-### Phase 10 — ingest_runs audit (CIT-68 / Wave 2) — this PR
+### Phase 10 — ingest_runs audit (CIT-68 / Wave 2) — landed (PR #23)
 - Migration `005_ingest_runs.sql`; every `ingestAndPersist` writes a run row
 - Validation failure → `status=error` (not success); `GET /api/ingest/runs?limit=`
 - OpenAPI **0.8.6**; fixture burn **2376** / clear **2200** unchanged; `adapter: firecrawl` still rejected
-- Not in this PR: CIT-67, calendar reducer, nest 006, CIT-69 restack, meetings 007
+
+### Phase 11 — fixture ingest:once (CIT-67 / Wave 2) — this PR
+- `npm run ingest:once` → `ingestAndPersist` fixture path; default `civic-wage-bulletin`
+- Env `INGEST_FIXTURE_ID`; stdout `changed=true|false`; reuses 005 `ingest_runs`
+- workflow_dispatch-ready docs only — **no** GitHub Actions `schedule:` yet
+- Not in this PR: calendar reducer, nest 006, CIT-69 restack, meetings 007
 
 ## Next Highest-Priority Phases
-### Wave 2 continued (after CIT-68)
-- CIT-67 fixture `--once` + `workflow_dispatch` only
+### Wave 2 continued (after CIT-67)
 - Three-phase calendar reducer (fixtures); then nest 006 → CIT-69 → meetings 007
+- Arm Actions `schedule:` only after the due-row sweep exists (minute `:12`, dispatch beside)
 - Defer dampening, HNSW/embeddings, Firecrawl/AI Judge until after 007
 
 ### Phase 2 continued — Complete business lifecycle (P0)
@@ -88,12 +93,12 @@ Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/
 - Acceptance: player can form company → hire → build → launch → see revenue or insolvency
 
 ## Definition of Done for current slice
-`ingest_runs` rows exist for success and validation-failure ingest; `GET /api/ingest/runs` works on loopback; OpenAPI 0.8.6; fixture supersession burn 2376 / clear 2200 stay green; `npm test` green.
+`npm run ingest:once` prints `changed=true|false`, writes an `ingest_runs` row via existing persist, default fixture wage bulletin still burns 2376 / clear 2200; no `schedule:` in workflows; `npm test` green.
 
 ## Open items
 - A1: resolved. Axe is 0 on 5f4f021.
 - P2-M1 (info): the down migration only reverts 003/002, so a full re-run after rollback fails at 001. (004 adds campaigns/turn_commits down; 005 adds ingest_runs down.)
 - P1-4: live Postgres campaign reload still gated on `npm run test:api` when DB available.
-- CIT-68: live `test:api` ingest_runs coverage needs Postgres (CI `test-api` / local socket).
+- CIT-67: live `test:api` ingest:once coverage needs Postgres (CI `test-api` / local socket).
 
-Last updated: 2026-10-27, CIT-68 ingest_runs off `main` @ `cf9b186`.
+Last updated: 2026-10-27, CIT-67 ingest:once off `main` @ `0a2e59f`.
