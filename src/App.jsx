@@ -32,6 +32,11 @@ import {
   dispatchTurnCommands,
   toCampaignTrigger,
 } from './turnCommands';
+import {
+  appendLedgerFromTurnResults,
+  ledgerEntriesFromApiCommits,
+  shapeLedgerEntry,
+} from './turnLedger';
 
 function removalBlockedMessage(error, label) {
   const hostAlert = hostHeaderAlert(error);
@@ -77,6 +82,7 @@ function App() {
   const [sourceBusy, setSourceBusy] = useState(Boolean(configuredBase));
   const [actionError, setActionError] = useState('');
   const [apiBase, setApiBase] = useState(configuredBase);
+  const [ledger, setLedger] = useState([]);
   const campaignIdRef = useRef(null);
 
   const showSampleData = (note) => {
@@ -84,8 +90,59 @@ function App() {
     stateRef.current = initialState;
     setApiBase(null);
     campaignIdRef.current = null;
+    setLedger([]);
     setSourceNote(note);
     setActionError('');
+  };
+
+  const appendLocalResults = (results) => {
+    const list = Array.isArray(results) ? results.filter(Boolean) : [results].filter(Boolean);
+    if (list.length === 0) return;
+    setLedger((prev) => appendLedgerFromTurnResults(prev, list));
+  };
+
+  const appendApiCommits = (payloads) => {
+    const list = Array.isArray(payloads) ? payloads : [payloads];
+    const entries = [];
+    for (const payload of list) {
+      const commit = payload?.commit;
+      if (commit == null) continue;
+      entries.push(shapeLedgerEntry({
+        seq: commit.seq,
+        turnBefore: commit.turnBefore,
+        turnAfter: commit.turnAfter,
+        command: commit.command,
+        result: {
+          before: commit.before,
+          after: commit.after,
+          deltas: commit.deltas,
+          appliedEffects: commit.appliedEffects,
+          explanations: commit.explanations,
+        },
+        createdAt: null,
+      }));
+    }
+    if (entries.length === 0) return;
+    setLedger((prev) => {
+      const seen = new Set(prev.map((entry) => entry.seq));
+      const merged = [...prev];
+      for (const entry of entries) {
+        if (seen.has(entry.seq)) continue;
+        merged.push(entry);
+        seen.add(entry.seq);
+      }
+      return merged.sort((a, b) => a.seq - b.seq);
+    });
+  };
+
+  const refreshLedgerFromApi = async (baseUrl, campaignId) => {
+    if (!baseUrl || !campaignId) return;
+    try {
+      const rows = await createCitizenApi({ baseUrl }).listTurns(campaignId, { limit: 50 });
+      setLedger(ledgerEntriesFromApiCommits(rows));
+    } catch {
+      // Keep any local appends if the ledger route is unavailable.
+    }
   };
 
   const ensureCampaign = async (baseUrl, simState) => {
@@ -122,6 +179,7 @@ function App() {
       });
       if (created?.id) {
         campaignIdRef.current = created.id;
+        await refreshLedgerFromApi(baseUrl, created.id);
         return created.id;
       }
     } catch {
@@ -137,10 +195,22 @@ function App() {
     // immediately (Slice 1/2 UX + existing UI tests). Campaign API is async.
     // Only restack when a campaign is live — local state already owns the stack.
     if (!apiBase || !campaignIdRef.current) {
-      const local = applyCommandsLocally(prev, list);
-      setState(local.state);
-      stateRef.current = local.state;
-      return Promise.resolve({ state: local.state, mode: 'local', result: local.result });
+      const results = [];
+      let next = prev;
+      for (const command of list) {
+        const step = applyCommandsLocally(next, [command]);
+        next = step.state;
+        if (step.result) results.push(step.result);
+      }
+      setState(next);
+      stateRef.current = next;
+      appendLocalResults(results);
+      return Promise.resolve({
+        state: next,
+        mode: 'local',
+        result: results[results.length - 1] ?? null,
+        results,
+      });
     }
     const queued = restackTriggers ? commandsWithTriggerRestack(prev, list) : list;
     return dispatchTurnCommands(prev, queued, {
@@ -149,6 +219,11 @@ function App() {
     }).then((dispatched) => {
       setState(dispatched.state);
       stateRef.current = dispatched.state;
+      if (dispatched.mode === 'api' && Array.isArray(dispatched.results)) {
+        appendApiCommits(dispatched.results);
+      } else if (dispatched.result) {
+        appendLocalResults([dispatched.result]);
+      }
       return dispatched;
     });
   };
@@ -429,7 +504,7 @@ function App() {
           onToggleTrigger={onToggleTrigger}
           onClearTriggers={onClearTriggers}
         />
-        <Dashboard state={state} />
+        <Dashboard state={state} ledger={ledger} />
       </main>
     </div>
   );

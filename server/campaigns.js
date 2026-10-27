@@ -6,6 +6,7 @@ import {
   parseTurnCommand,
   toGameStateView,
 } from '../src/turnEngine.js';
+import { ledgerEntriesFromApiCommits, ledgerResultPayload } from '../src/turnLedger.js';
 
 function badRequest(message, issues = []) {
   const error = new TurnCommandError(message, issues);
@@ -104,18 +105,23 @@ export async function getCampaign(pool, campaignId) {
 }
 
 export async function listTurnCommits(pool, campaignId, { limit = 50 } = {}) {
+  // Most recent N by seq, returned in ascending seq order for replay/UI.
   const capped = Math.max(1, Math.min(200, Number(limit) || 50));
   const exists = await pool.query(`SELECT 1 FROM campaigns WHERE id = $1`, [campaignId]);
   if (exists.rowCount === 0) throw notFound('Campaign not found');
   const result = await pool.query(
     `SELECT seq, turn_before, turn_after, command_json, result_json, created_at
-     FROM turn_commits
-     WHERE campaign_id = $1
-     ORDER BY seq ASC
-     LIMIT $2`,
+     FROM (
+       SELECT seq, turn_before, turn_after, command_json, result_json, created_at
+       FROM turn_commits
+       WHERE campaign_id = $1
+       ORDER BY seq DESC
+       LIMIT $2
+     ) recent
+     ORDER BY seq ASC`,
     [campaignId, capped],
   );
-  return result.rows.map((row) => ({
+  const rows = result.rows.map((row) => ({
     seq: row.seq,
     turnBefore: row.turn_before,
     turnAfter: row.turn_after,
@@ -123,6 +129,8 @@ export async function listTurnCommits(pool, campaignId, { limit = 50 } = {}) {
     result: row.result_json,
     createdAt: row.created_at?.toISOString?.() ?? row.created_at,
   }));
+  // Normalized ledger entries (same shape as offline append path).
+  return ledgerEntriesFromApiCommits(rows);
 }
 
 /**
@@ -175,6 +183,7 @@ export async function commitTurn(pool, campaignId, commandBody) {
     );
     const seq = Number(seqResult.rows[0].next_seq);
 
+    const resultPayload = ledgerResultPayload(turnResult, toGameStateView(next));
     await client.query(
       `INSERT INTO turn_commits
          (campaign_id, seq, turn_before, turn_after, command_json, result_json)
@@ -185,12 +194,7 @@ export async function commitTurn(pool, campaignId, commandBody) {
         before.turn,
         next.turn,
         JSON.stringify(command),
-        JSON.stringify({
-          deltas: turnResult.deltas,
-          appliedEffects: turnResult.appliedEffects,
-          explanations: turnResult.explanations,
-          view: toGameStateView(next),
-        }),
+        JSON.stringify(resultPayload),
       ],
     );
 
@@ -225,6 +229,8 @@ export async function commitTurn(pool, campaignId, commandBody) {
         turnBefore: before.turn,
         turnAfter: next.turn,
         command,
+        before: turnResult.before,
+        after: turnResult.after,
         deltas: turnResult.deltas,
         appliedEffects: turnResult.appliedEffects,
         explanations: turnResult.explanations,

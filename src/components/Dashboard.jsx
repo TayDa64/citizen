@@ -34,6 +34,7 @@ import {
   talentEquation,
 } from '../triggers';
 import { loadChartAccessibility } from './loadChartAccessibility';
+import TurnLedger from './TurnLedger';
 import {
   axisGuideOptions,
   metricsChartDescription,
@@ -201,7 +202,7 @@ function WorldEventEffect({ state }) {
   );
 }
 
-export default function Dashboard({ state }) {
+export default function Dashboard({ state, ledger = [] }) {
   const factorClampNote = talentCostFactorClampNote(talentCostFactorClampOf(state));
   const { cash, burnRate } = state.history;
   const categories = cash.map((_, i) => simulatedMonthLabel(i));
@@ -301,6 +302,7 @@ export default function Dashboard({ state }) {
       <TalentBurnSummary state={state} />
       <CivicFeedbackReadout state={state} />
       <WorldEventEffect state={state} />
+      <TurnLedger entries={ledger} />
       <figure className="metrics-chart" aria-busy={ChartAccessibility === undefined}>
         <figcaption id="metrics-chart-description" className="chart-caption">
           {description}
