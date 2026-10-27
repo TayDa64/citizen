@@ -4,7 +4,9 @@ import {
   DEFAULT_INGEST_FIXTURE_ID,
   formatChangedLine,
   resolveFixtureId,
+  resolveIngestOnceOptions,
 } from '../../server/ingestOnce.js';
+import { shouldRestackAfterIngest } from '../../server/campaignRestack.js';
 
 test('resolveFixtureId defaults to civic-wage-bulletin', () => {
   assert.equal(resolveFixtureId([], {}), DEFAULT_INGEST_FIXTURE_ID);
@@ -45,6 +47,26 @@ test('resolveFixtureId rejects unknown fixture and unknown flags', () => {
     () => resolveFixtureId(['--schedule'], {}),
     (error) => error.code === 'unknown_flag',
   );
+});
+
+test('resolveIngestOnceOptions campaignId default off; accepts --campaign UUID', () => {
+  assert.deepEqual(resolveIngestOnceOptions([], {}), {
+    fixtureId: DEFAULT_INGEST_FIXTURE_ID,
+    campaignId: null,
+  });
+  const id = '22222222-2222-4222-8222-222222222222';
+  assert.deepEqual(resolveIngestOnceOptions(['--campaign', id], {}), {
+    fixtureId: DEFAULT_INGEST_FIXTURE_ID,
+    campaignId: id,
+  });
+  assert.throws(
+    () => resolveIngestOnceOptions(['--campaign', 'nope'], {}),
+    (error) => error.code === 'invalid_campaign_flag',
+  );
+  assert.equal(shouldRestackAfterIngest({ campaignId: null, changed: true, triggerCount: 1 }), false);
+  assert.equal(shouldRestackAfterIngest({ campaignId: id, changed: false, triggerCount: 1 }), false);
+  assert.equal(shouldRestackAfterIngest({ campaignId: id, changed: true, triggerCount: 0 }), false);
+  assert.equal(shouldRestackAfterIngest({ campaignId: id, changed: true, triggerCount: 1 }), true);
 });
 
 test('formatChangedLine matches CivicBrief botResult tokens', () => {

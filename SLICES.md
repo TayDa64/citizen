@@ -65,7 +65,7 @@ Slice 3 (authoritative turns) — see below and [STATE.md](STATE.md) Phase 1.
 
 ### API dependency
 
-Live company and world-event data comes from Citizen API OpenAPI **0.8.6** (ingest_runs audit + political survival + real-world ingest + turn ledger + civic feedback + hire TurnCommand + campaign turns + prior 0.7.1 talent fields). Trigger contract paths below still apply.
+Live company and world-event data comes from Citizen API OpenAPI **0.8.7** (CIT-69 optional campaign restack + ingest_runs audit + political survival + real-world ingest + turn ledger + civic feedback + hire TurnCommand + campaign turns + prior 0.7.1 talent fields). Trigger contract paths below still apply.
 
 **Authority boundary:** The companies service is the source of truth for hype, talent cost, baselines, and (until a campaign hire) talent multiplier / mix / factors. After `hire_employee`, campaign GameState owns the roster. `hydrateFromApi` / `readApiSnapshot` never copy `company.cash` or `company.burnRate` from the companies payload. Cash / burn history / tax / turn / hire commit through the turn engine and, when connected, `POST /api/campaigns/{id}/turns`. Advance Month never POSTs to `/api/companies`.
 
@@ -85,7 +85,7 @@ Live company and world-event data comes from Citizen API OpenAPI **0.8.6** (inge
 
 `APPLY_TALENT_COST_TO_BURN` in `src/talentMultiplier.js` is on. Trigger talent cost scales burn in local mode and API mode. `talentMultiplier` stays employee-only.
 
-OpenAPI **0.8.6** (CIT-68 `ingest_runs` + political `GameState.politics` + prior 0.8.4 ingest / 0.8.3 ledger / 0.8.2 civic / hire / turns / 0.7.1 talent) includes `talentCostFactor` and `effectiveMultiplier` on `GET /api/companies`, campaign GameState / TurnCommand routes, `GameState.civic` (`budgetHeadroom`, `hypeBias`), `GameState.politics` (`voterSupport`, `survivalStatus`, `survivalFloor`), shaped turn ledger entries, fixture/http_stub ingest behind TRIGGER_CONTRACT v1, and `GET /api/ingest/runs`. `talentMultiplier` remains employee-only. A 0.5.0 payload omits the new talent fields and the client computes them. Parsing stays in `src/talentMultiplier.js`. A missing Host is 400 `Host required`, two Host headers are 400 `Duplicate host`, and any other host is 403 `Forbidden host`. Those alerts keep the current numbers. Hype outside 0–1 and talent cost outside $0–$9,999,999,999.99 are clamped, and the status says so.
+OpenAPI **0.8.7** (CIT-69 optional `campaignId` restack + CIT-68 `ingest_runs` + political `GameState.politics` + prior 0.8.4 ingest / 0.8.3 ledger / 0.8.2 civic / hire / turns / 0.7.1 talent) includes `talentCostFactor` and `effectiveMultiplier` on `GET /api/companies`, campaign GameState / TurnCommand routes, `GameState.civic` (`budgetHeadroom`, `hypeBias`), `GameState.politics` (`voterSupport`, `survivalStatus`, `survivalFloor`), shaped turn ledger entries, fixture/http_stub ingest behind TRIGGER_CONTRACT v1, and `GET /api/ingest/runs`. `talentMultiplier` remains employee-only. A 0.5.0 payload omits the new talent fields and the client computes them. Parsing stays in `src/talentMultiplier.js`. A missing Host is 400 `Host required`, two Host headers are 400 `Duplicate host`, and any other host is 403 `Forbidden host`. Those alerts keep the current numbers. Hype outside 0–1 and talent cost outside $0–$9,999,999,999.99 are clamped, and the status says so.
 
 ## Slice lifecycle hire (P0 business lifecycle — first PR)
 
@@ -213,10 +213,25 @@ Migration `006`/`007`; `scheduled_meetings` table; nest FK; CIT-69 restack; live
 - Wage bulletin `client_id`s (`evt-pipeline-obs-civic-wage-bulletin-%`) backfilled / ingest-stamped to `mv`.
 - Chain filter helper (`src/jurisdictionNest.js` + SQL CTE): home + ancestors only; fail closed on `NULL`.
 - Locks: home `mv` sees `mv`+ancestors; Sunnyvale peer does **not** apply to `mv`; missing outer tier = identity; burns **2376** / clear **2200**; `adapter: firecrawl` still rejected.
-- No OpenAPI bump (TRIGGER_CONTRACT / campaign HTTP surface unchanged). No CIT-69 restack / `commitTurn`.
+- OpenAPI unchanged in CIT-80 (restack request surface is CIT-69).
 
 ### Explicit non-goals
-CIT-69 restack / `campaignId` / `commitTurn`; migration `007` / `scheduled_meetings`; live Legistar / Firecrawl; GitHub Actions `schedule:`; calendar reducer changes.
+Migration `007` / `scheduled_meetings`; live Legistar / Firecrawl; GitHub Actions `schedule:`; calendar reducer changes. (CIT-69 restack is a following slice.)
+
+## Slice campaign restack (CIT-69 — one campaign after ingest)
+
+**Optional `campaignId` on ingest (default off). Nest filter before `clear_triggers` / `apply_trigger`. Failed restack does not delete triggers or mark ingest success.**
+
+### What works
+- Optional `campaignId` on `POST /api/triggers/ingest` and `npm run ingest:once -- --campaign <uuid>` (env `INGEST_CAMPAIGN_ID`). Default **off**.
+- When set and ingest `changed=true` with real triggers: `filterTriggersForHome` / nest sort (federal → state → county → city, then `client_id`) → `clear_triggers` then `apply_trigger` via `commitTurn`.
+- `changed=false` / zero-trigger success → **no** `commitTurn` (agenda-seen / empty pack).
+- Failed restack keeps `real_world_triggers` and writes `ingest_runs` `status=error` (not success).
+- Locks: Sunnyvale peer does not move mv campaign burn; wage→`mv` still **2376** / clear **2200**; `adapter: firecrawl` rejected; no companies.cash / burn_rate / morale write; no `RESTACK_INGEST`; no restack-all.
+- OpenAPI **0.8.7**.
+
+### Explicit non-goals
+Migration `007` / `scheduled_meetings`; due-row cron / GitHub `schedule:`; restack of every open campaign; live Firecrawl; `RESTACK_INGEST`; writing companies cash/burn/morale into `state_json`.
 
 ## Slice causal graph (P1-3 — rule registry is truth; diagram is a view)
 

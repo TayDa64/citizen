@@ -86,15 +86,20 @@ Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/
 - State machine A/B/C; 60d horizon stays closed; wage publication Phase C at `observedAt`
 - Burns **2376** / clear **2200** untouched; `main` @ `39974f0`
 
-### Phase 13 — jurisdiction nest (CIT-80 / Wave 2) — this PR
+### Phase 13 — jurisdiction nest (CIT-80 / Wave 2) — landed (PR #26)
 - Migration `006_jurisdiction_nest.sql`: jurisdictions seed + home/trigger FKs + wage→`mv` backfill
-- Chain filter helper before restack (JS + SQL CTE); peers fail closed; no CIT-69 / 007 / `schedule:`
-- Burns **2376** / clear **2200**; firecrawl still rejected; no OpenAPI bump
+- Chain filter helper before restack (JS + SQL CTE); peers fail closed
+- Burns **2376** / clear **2200**; firecrawl still rejected; `main` @ `ae91215`
+
+### Phase 14 — campaign restack after ingest (CIT-69 / Wave 2) — this PR
+- Optional `campaignId` on ingest CLI/HTTP (default off); nest filter + tier sort before `commitTurn`
+- `changed=false` / zero triggers → no restack; failed restack → ingest_runs error, triggers kept
+- Burns **2376** / clear **2200**; peer Sunnyvale excluded; firecrawl rejected; OpenAPI **0.8.7**
+- No 007 / `scheduled_meetings` / `schedule:` / restack-all / `RESTACK_INGEST` / companies cash write
 
 ## Next Highest-Priority Phases
-### Wave 2 continued (after CIT-80 / 006)
-- CIT-69 restack (one campaignId, chain only) → meetings 007 + due-row sweep
-- Arm Actions `schedule:` only after the due-row sweep exists (minute `:12`, dispatch beside)
+### Wave 2 continued (after CIT-69)
+- Meetings 007 + due-row sweep; arm Actions `schedule:` only after that (minute `:12`, dispatch beside)
 - Defer dampening, HNSW/embeddings, Firecrawl/AI Judge until after 007
 
 ### Phase 2 continued — Complete business lifecycle (P0)
@@ -103,12 +108,12 @@ Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/
 - Acceptance: player can form company → hire → build → launch → see revenue or insolvency
 
 ## Definition of Done for current slice
-Migration 006 applies; home `mv` chain + peer-negative + NULL fail-closed locked; wage→`mv` backfill; burns 2376/clear 2200; firecrawl rejected; no CIT-69/`commitTurn`/007/`schedule:`; `npm test` green.
+Optional campaignId restack after changed ingest; nest filter before clear/apply; tier sort federal→city; changed=false skips commit; failed restack keeps triggers + error run; wage 2376/clear 2200; sunnyvale peer excluded; firecrawl rejected; no 007/schedule:/RESTACK_INGEST; `npm test` green.
 
 ## Open items
 - A1: resolved. Axe is 0 on 5f4f021.
 - P2-M1 (info): the down migration only reverts 003/002, so a full re-run after rollback fails at 001. (004–006 add down sections.)
 - P1-4: live Postgres campaign reload still gated on `npm run test:api` when DB available.
-- CIT-80: nest filter shipped; CIT-69 restack not wired yet; no `scheduled_meetings` (007).
+- CIT-69: server restack for one campaign; no `scheduled_meetings` (007) yet.
 
-Last updated: 2026-10-27, CIT-80 jurisdiction nest off `main` @ `39974f0`.
+Last updated: 2026-10-27, CIT-69 campaign restack off `main` @ `ae91215`.
