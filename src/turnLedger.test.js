@@ -79,8 +79,8 @@ describe('turn ledger shaping', () => {
         turnAfter: 1,
         command: { type: 'advance_turn' },
         result: {
-          before: { turn: 0, taxRate: 0.25, cash: 15000, burnRate: 2200, hype: 0.3, talentCost: 4000, talentMultiplier: 1, employeeCount: 0, activeTriggerCount: 0, budgetHeadroom: 0.75, hypeBias: 0 },
-          after: { turn: 1, taxRate: 0.25, cash: 14816.6667, burnRate: 2200, hype: 0.3, talentCost: 4000, talentMultiplier: 1, employeeCount: 0, activeTriggerCount: 0, budgetHeadroom: 0.75, hypeBias: 0 },
+          before: { turn: 0, taxRate: 0.25, cash: 15000, burnRate: 2200, hype: 0.3, talentCost: 4000, talentMultiplier: 1, employeeCount: 0, activeTriggerCount: 0, budgetHeadroom: 0.75, hypeBias: 0, voterSupport: 0.525 },
+          after: { turn: 1, taxRate: 0.25, cash: 14816.6667, burnRate: 2200, hype: 0.3, talentCost: 4000, talentMultiplier: 1, employeeCount: 0, activeTriggerCount: 0, budgetHeadroom: 0.75, hypeBias: 0, voterSupport: 0.525 },
           deltas: { turn: 1, cash: -183.3333 },
           appliedEffects: [{ kind: 'burn.tick', summary: 'cash drained' }],
           explanations: ['Advanced to turn 1.'],

@@ -65,7 +65,7 @@ Slice 3 (authoritative turns) — see below and [STATE.md](STATE.md) Phase 1.
 
 ### API dependency
 
-Live company and world-event data comes from Citizen API OpenAPI **0.8.4** (real-world ingest + turn ledger + civic feedback + hire TurnCommand + campaign turns + prior 0.7.1 talent fields). Trigger contract paths below still apply.
+Live company and world-event data comes from Citizen API OpenAPI **0.8.5** (political survival + real-world ingest + turn ledger + civic feedback + hire TurnCommand + campaign turns + prior 0.7.1 talent fields). Trigger contract paths below still apply.
 
 **Authority boundary:** The companies service is the source of truth for hype, talent cost, baselines, and (until a campaign hire) talent multiplier / mix / factors. After `hire_employee`, campaign GameState owns the roster. `hydrateFromApi` / `readApiSnapshot` never copy `company.cash` or `company.burnRate` from the companies payload. Cash / burn history / tax / turn / hire commit through the turn engine and, when connected, `POST /api/campaigns/{id}/turns`. Advance Month never POSTs to `/api/companies`.
 
@@ -85,7 +85,7 @@ Live company and world-event data comes from Citizen API OpenAPI **0.8.4** (real
 
 `APPLY_TALENT_COST_TO_BURN` in `src/talentMultiplier.js` is on. Trigger talent cost scales burn in local mode and API mode. `talentMultiplier` stays employee-only.
 
-OpenAPI **0.8.4** (real-world `POST /api/triggers/ingest` + prior 0.8.3 ledger / 0.8.2 civic / hire / turns / 0.7.1 talent) includes `talentCostFactor` and `effectiveMultiplier` on `GET /api/companies`, campaign GameState / TurnCommand routes, `GameState.civic` (`budgetHeadroom`, `hypeBias`), shaped turn ledger entries, and fixture/http_stub ingest behind TRIGGER_CONTRACT v1. `talentMultiplier` remains employee-only. A 0.5.0 payload omits the new talent fields and the client computes them. Parsing stays in `src/talentMultiplier.js`. A missing Host is 400 `Host required`, two Host headers are 400 `Duplicate host`, and any other host is 403 `Forbidden host`. Those alerts keep the current numbers. Hype outside 0–1 and talent cost outside $0–$9,999,999,999.99 are clamped, and the status says so.
+OpenAPI **0.8.5** (political `GameState.politics` + prior 0.8.4 ingest / 0.8.3 ledger / 0.8.2 civic / hire / turns / 0.7.1 talent) includes `talentCostFactor` and `effectiveMultiplier` on `GET /api/companies`, campaign GameState / TurnCommand routes, `GameState.civic` (`budgetHeadroom`, `hypeBias`), `GameState.politics` (`voterSupport`, `survivalStatus`, `survivalFloor`), shaped turn ledger entries, and fixture/http_stub ingest behind TRIGGER_CONTRACT v1. `talentMultiplier` remains employee-only. A 0.5.0 payload omits the new talent fields and the client computes them. Parsing stays in `src/talentMultiplier.js`. A missing Host is 400 `Host required`, two Host headers are 400 `Duplicate host`, and any other host is 403 `Forbidden host`. Those alerts keep the current numbers. Hype outside 0–1 and talent cost outside $0–$9,999,999,999.99 are clamped, and the status says so.
 
 ## Slice lifecycle hire (P0 business lifecycle — first PR)
 
@@ -186,7 +186,27 @@ Funding / exit / Firecrawl; AI-generated rules; wiring cosmetic edges as mechani
 - Live Postgres campaign reload stays in `npm run test:api` (`test/api/campaign-turns.api.js`) — skipped here when DB unavailable.
 
 ### Explicit non-goals
-Browser Playwright full campaign UX; funding / exit / Firecrawl; political objectives (P1-5).
+Browser Playwright full campaign UX; funding / exit / Firecrawl; political objectives (P1-5) — see slice below.
+
+## Slice political objectives (P1-5 — survival / voter support)
+
+**One political objective metric driven by civic feedback signals; survival threshold after turn advance.**
+
+### Rule (`src/politicalObjectives.js`)
+```
+voterSupport = clamp(0.5 * budgetHeadroom + 0.5 * company.hype, 0, 1)
+On advance_turn: voterSupport < 0.25 → survivalStatus = ousted; else incumbent
+```
+Support refreshes when tax/hype move; survival flips only on `advance_turn` (recoverable later). Default tax 25% → support **0.525** incumbent; tax 100% → **0.075** → ousted after advance. Politics never multiplies burn.
+
+### What works
+- `GameState.politics` `{ voterSupport, survivalStatus, survivalFloor }` via turn engine normalize + advance.
+- TurnResult effects `politics.support` / `politics.survival` + advance explanation.
+- Dashboard **Political survival** readout; ledger metrics include `voterSupport`.
+- OpenAPI **0.8.5** documents `PoliticsMetrics`.
+
+### Explicit non-goals
+Full election calendar / parties; funding / exit / Firecrawl; changing Slice 1/2 burn baselines.
 
 ## Merge train
 

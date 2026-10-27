@@ -10,7 +10,7 @@
 
 Sequence complete. Post-merge regression on main 5f4f021: PASS (trace diag-20261026-8e1cd230), CI green.
 
-Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/Playwright; PR #12 authoritative turns; PR #13 campaign↔trigger coherence; PR #14 business lifecycle hire; PR #15 civic feedback; PR #16 connect pathways; PR #17 turn ledger; PR #18 real-world pipeline; PR #19 causal graph. Tip: `main` @ `d287298` (PR #19).
+Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/Playwright; PR #12 authoritative turns; PR #13 campaign↔trigger coherence; PR #14 business lifecycle hire; PR #15 civic feedback; PR #16 connect pathways; PR #17 turn ledger; PR #18 real-world pipeline; PR #19 causal graph; PR #20 campaign acceptance. Tip: `main` @ `28c0215` (PR #20).
 
 **Rule:** Each PR must be green, rebased clean on main, and meet its acceptance criteria before the next is merged. Update this file after every merge.
 
@@ -62,9 +62,13 @@ Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/
 - Effect keys (`src/effectKeys.js`) are the allow-list; unknown keys rejected at apply/preview
 - Tax→burn + pathway + talentCost edges are views of registered rules
 
-### Phase 8 — Campaign-loop acceptance suite (P1-4) — this PR
+### Phase 8 — Campaign-loop acceptance suite (P1-4) — landed (PR #20)
 - Deterministic action → applied event → turn → metrics → explanation → reload
 - Suite: `src/campaignLoop.acceptance.test.js` (offline + ledger dual-path; Postgres `test:api` documented skip)
+
+### Phase 9 — Political survival / objectives (P1-5) — this PR
+- `voterSupport = 0.5*budgetHeadroom + 0.5*company.hype`; floor **0.25** on `advance_turn` → `ousted` / `incumbent`
+- `GameState.politics` + Dashboard readout; OpenAPI **0.8.5**; Slice 1/2 burns unchanged
 
 ## Next Highest-Priority Phases
 ### Phase 2 continued — Complete business lifecycle (P0)
@@ -72,15 +76,12 @@ Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/
 - Separate employee productivity from cost
 - Acceptance: player can form company → hire → build → launch → see revenue or insolvency
 
-### Phase 9 — Political survival / objectives (P1-5)
-- Elections / support as objectives after feedback exists
-
 ## Definition of Done for current slice
-Acceptance suite locks Slice 1/2 burn, hire, pathway, ledger, pipeline supersession, causal rejection; offline reload + same-seed replay reproduce metrics; ledger dual-path without Postgres; `npm test` green.
+Player tax/hype pathway drives voterSupport; advance_turn below 0.25 ousts (observable on TurnResult / Dashboard); Slice 1/2 burn + campaign-loop acceptance stay green; `npm test` green.
 
 ## Open items
 - A1: resolved. Axe is 0 on 5f4f021.
 - P2-M1 (info): the down migration only reverts 003/002, so a full re-run after rollback fails at 001. (004 adds campaigns/turn_commits down.)
 - P1-4: live Postgres campaign reload still gated on `npm run test:api` when DB available.
 
-Last updated: 2026-10-27, Phase 8 campaign-loop acceptance off `main` @ `d287298`.
+Last updated: 2026-10-27, Phase 9 political objectives off `main` @ `28c0215`.
