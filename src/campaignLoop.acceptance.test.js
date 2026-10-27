@@ -191,7 +191,7 @@ describe('P1-4 campaign-loop acceptance', () => {
   });
 
   test.skip(
-    'API Postgres campaign reload (createCampaign → commitTurn → getCampaign) — needs DATABASE_URL; see test/api/campaign-turns.api.js',
+    'API Postgres campaign reload (createCampaign → commitTurn → getCampaign) — covered by npm run test:api / test/api/campaign-turns.api.js',
     () => {
       // Live atomic campaign reload is covered by `npm run test:api` when Postgres
       // is available. Offline reload + ledger dual-path above cover P1-4 without DB.

@@ -56,6 +56,6 @@ A company inserted while v1 triggers are already active keeps its own hype and t
 
 `npm test` runs the database-free backend suite in `test/unit`, then the UI suite (`vitest run`). Neither needs Postgres. CI's `npm run test --if-present` uses this script.
 
-`npm run test:api` runs the Postgres suite in `test/api`. That suite creates and drops `citizen_slice2_test_*` databases on the local socket and does not read `DATABASE_URL`.
+`npm run test:api` runs the Postgres suite in `test/api`. That suite creates and drops `citizen_slice2_test_*` databases on the local socket and does not read `DATABASE_URL`. CI's `test-api` job (ubuntu-24.04) installs the distro Postgres cluster + pgvector (apt, with a source-build fallback), starts the cluster, and runs the same suite (still socket-only; no TCP service container).
 
 Both backend suites use `*.api.js` names, which sit outside Vitest's include (`src/**/*.{test,spec}.{js,jsx}`).

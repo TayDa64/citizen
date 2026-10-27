@@ -64,7 +64,7 @@ Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/
 
 ### Phase 8 — Campaign-loop acceptance suite (P1-4) — landed (PR #20)
 - Deterministic action → applied event → turn → metrics → explanation → reload
-- Suite: `src/campaignLoop.acceptance.test.js` (offline + ledger dual-path; Postgres `test:api` documented skip)
+- Suite: `src/campaignLoop.acceptance.test.js` (offline + ledger dual-path; live Postgres covered by `npm run test:api` / CI `test-api`)
 
 ### Phase 9 — Political survival / objectives (P1-5) — this PR
 - `voterSupport = 0.5*budgetHeadroom + 0.5*company.hype`; floor **0.25** on `advance_turn` → `ousted` / `incumbent`
