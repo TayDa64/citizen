@@ -172,7 +172,7 @@ Live Firecrawl; many data sources; AI-generated arbitrary rules; political syste
 - OpenAPI **0.8.6**. Fixture wage bulletin still burns **2376**; clear still **2200**. TRIGGER_CONTRACT v1 unchanged.
 
 ### Explicit non-goals
-Calendar reducer; nest (006); restack (CIT-69); meetings (007); Firecrawl; dampening; HNSW/embeddings; AI Judge. (CIT-67 `--once` is the next slice.)
+Nest (006); restack (CIT-69); meetings (007); Firecrawl; dampening; HNSW/embeddings; AI Judge. (CIT-67 / CIT-79 landed separately.)
 
 ## Slice ingest:once (CIT-67 — fixture runner, dispatch only)
 
@@ -189,7 +189,20 @@ Calendar reducer; nest (006); restack (CIT-69); meetings (007); Firecrawl; dampe
 Intended GitHub Actions job is **`workflow_dispatch` only** (no `schedule:` key until the calendar due-row sweep exists). The job should: install deps, start local Postgres the way `test:api` does, migrate, then `npm run ingest:once`. It must not POST a remote Host (loopback 403). Do **not** add `.github/workflows` `schedule:` in this slice.
 
 ### Explicit non-goals
-`schedule:` cron; in-process `node-cron`; calendar reducer; nest (006); restack / `campaignId` (CIT-69); meetings (007); Firecrawl / live fetch; UI.
+`schedule:` cron; in-process `node-cron`; nest (006); restack / `campaignId` (CIT-69); meetings (007); Firecrawl / live fetch; UI. (Calendar reducer is CIT-79.)
+
+## Slice calendar reducer (CIT-79 — three-phase fixture clock)
+
+**Pure `(row, now, signal) → row` reducer for phases A/B/C. Frozen `now` + checked-in signals. No DB table yet.**
+
+### What works
+- `src/calendar/calendarReducer.js` + `scheduleMath.js`: statuses `scheduled` → `agenda_due` → `agenda_seen` → `confirmed` → `minutes_wait` → `ingested` | `unchanged` | `cancelled`.
+- Fixtures (`src/calendar/fixtures.js`): `mv-council-calendar-2026h2`, `mv-council-agenda-3367`, `mv-council-morning-3367`, `mv-council-minutes-3363`, `mv-library-minutes-3458`, publication path via `civic-wage-bulletin`.
+- Locks: Friday 06:00 empty ≠ blocked; Revised agenda updates pointer (zero triggers); morning absent cancels, blocked never cancels; `Final`+null file does not ingest; T+1 null stays wait (`changed=false`); library file ~+29d → one `ingested`; horizon 60d → `unchanged` and **stay closed**; wage pack still burns **2376** / clear **2200**.
+- Vitest: `src/calendar/calendarReducer.test.js`.
+
+### Explicit non-goals
+Migration `006`/`007`; `scheduled_meetings` table; nest FK; CIT-69 restack; live Legistar / Firecrawl; GitHub Actions `schedule:`; due-row sweep runner.
 
 ## Slice causal graph (P1-3 — rule registry is truth; diagram is a view)
 

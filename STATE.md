@@ -75,15 +75,20 @@ Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/
 - Validation failure → `status=error` (not success); `GET /api/ingest/runs?limit=`
 - OpenAPI **0.8.6**; fixture burn **2376** / clear **2200** unchanged; `adapter: firecrawl` still rejected
 
-### Phase 11 — fixture ingest:once (CIT-67 / Wave 2) — this PR
+### Phase 11 — fixture ingest:once (CIT-67 / Wave 2) — landed (PR #24)
 - `npm run ingest:once` → `ingestAndPersist` fixture path; default `civic-wage-bulletin`
 - Env `INGEST_FIXTURE_ID`; stdout `changed=true|false`; reuses 005 `ingest_runs`
 - workflow_dispatch-ready docs only — **no** GitHub Actions `schedule:` yet
-- Not in this PR: calendar reducer, nest 006, CIT-69 restack, meetings 007
+- `main` @ `31ce14c`
+
+### Phase 12 — three-phase calendar reducer (CIT-79 / Wave 2) — this PR
+- Pure `(row, now, signal) → row` in `src/calendar/`; MV council fixtures + frozen `now`
+- State machine A/B/C; 60d horizon stays closed; wage publication Phase C at `observedAt`
+- Burns **2376** / clear **2200** untouched; no 006/007 / nest / restack / `schedule:`
 
 ## Next Highest-Priority Phases
-### Wave 2 continued (after CIT-67)
-- Three-phase calendar reducer (fixtures); then nest 006 → CIT-69 → meetings 007
+### Wave 2 continued (after CIT-79)
+- Nest 006 → CIT-69 → meetings 007 + due-row sweep
 - Arm Actions `schedule:` only after the due-row sweep exists (minute `:12`, dispatch beside)
 - Defer dampening, HNSW/embeddings, Firecrawl/AI Judge until after 007
 
@@ -93,12 +98,12 @@ Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/
 - Acceptance: player can form company → hire → build → launch → see revenue or insolvency
 
 ## Definition of Done for current slice
-`npm run ingest:once` prints `changed=true|false`, writes an `ingest_runs` row via existing persist, default fixture wage bulletin still burns 2376 / clear 2200; no `schedule:` in workflows; `npm test` green.
+Calendar reducer unit tests lock A/B/C transitions (Final+null no ingest; +29d upsert; T+1 wait; blocked never cancels; 60d stay closed); wage 2376/2200 green; no `schedule:` / 006 / 007; `npm test` green.
 
 ## Open items
 - A1: resolved. Axe is 0 on 5f4f021.
 - P2-M1 (info): the down migration only reverts 003/002, so a full re-run after rollback fails at 001. (004 adds campaigns/turn_commits down; 005 adds ingest_runs down.)
 - P1-4: live Postgres campaign reload still gated on `npm run test:api` when DB available.
-- CIT-67: live `test:api` ingest:once coverage needs Postgres (CI `test-api` / local socket).
+- CIT-79: no `scheduled_meetings` persistence yet (007); nest filter still deferred (006).
 
-Last updated: 2026-10-27, CIT-67 ingest:once off `main` @ `0a2e59f`.
+Last updated: 2026-10-27, CIT-79 calendar reducer off `main` @ `31ce14c`.
