@@ -182,7 +182,7 @@ export default function Dashboard({ state }) {
 
   return (
     <div className="dashboard" style={{ padding: '1rem', background: '#12121f', color: '#e0e0e0' }}>
-      <h3 style={{ margin: '0 0 0.5rem' }}>Company Metrics (Slice 1)</h3>
+      <h3 style={{ margin: '0 0 0.5rem' }}>Company Metrics</h3>
       <p>
         <span data-testid="cash-value">Cash: ${state.company.cash.toFixed(0)}</span>
         {' | '}
