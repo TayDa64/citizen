@@ -28,3 +28,31 @@ jobs:
 
       - name: Test
         run: npm run test --if-present
+
+  # Local-socket Postgres only — matches test/api/throwaway-db.js (no TCP / DATABASE_URL).
+  test-api:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          check-latest: true
+
+      - name: Install Postgres + pgvector
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq postgresql postgresql-contrib postgresql-16-pgvector
+          sudo pg_ctlcluster 16 main start
+          sudo -u postgres createuser -s "$USER" || true
+          sudo -u postgres psql -d postgres -c "CREATE EXTENSION IF NOT EXISTS vector;"
+
+      - name: Install
+        run: npm ci
+
+      - name: API tests
+        run: npm run test:api
