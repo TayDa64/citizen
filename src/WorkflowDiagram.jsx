@@ -138,13 +138,37 @@ export default function WorkflowDiagram({ state, setState, onTick }) {
         value: state.taxRate,
         onChange: (v) => setState((s) => ({ ...s, taxRate: v }))
       },
-      position: { x: 40, y: 480 }
+      // Civic band spaced horizontally; Launch sits slightly lower so edge
+      // midpoints (burn rate / talent cost / compliance) clear neighbors.
+      position: { x: 40, y: 470 }
     },
-    { id: 'civic-infra', data: { label: 'Civic Lever:\nInfrastructure / Talent' }, position: { x: 220, y: 500 }, style: STYLED_NODE.civic },
-    { id: 'civic-reg', data: { label: 'Civic Lever:\nRegulations' }, position: { x: 400, y: 480 }, style: STYLED_NODE.civic },
-    { id: '7', data: { label: 'Launch / Market / Sell\nTrack Runway & Hype' }, position: { x: 580, y: 480 }, style: DEFAULT_NODE_STYLE },
-    { id: '8', type: 'output', data: { label: 'Exit / IPO / Acquisition\nor Iterate / Pivot' }, position: { x: 300, y: 640 }, style: DEFAULT_NODE_STYLE },
+    {
+      id: 'civic-infra',
+      data: { label: 'Civic Lever:\nInfrastructure / Talent' },
+      position: { x: 330, y: 490 },
+      style: { ...STYLED_NODE.civic, minWidth: 170 },
+    },
+    {
+      id: 'civic-reg',
+      data: { label: 'Civic Lever:\nRegulations' },
+      position: { x: 620, y: 470 },
+      style: { ...STYLED_NODE.civic, minWidth: 140 },
+    },
+    {
+      id: '7',
+      data: { label: 'Launch / Market / Sell\nTrack Runway & Hype' },
+      position: { x: 880, y: 600 },
+      style: { ...DEFAULT_NODE_STYLE, minWidth: 240 },
+    },
+    { id: '8', type: 'output', data: { label: 'Exit / IPO / Acquisition\nor Iterate / Pivot' }, position: { x: 440, y: 740 }, style: DEFAULT_NODE_STYLE },
   ];
+
+  const civicEdgeLabel = {
+    labelStyle: { fontSize: 12, fill: '#f8fafc', fontWeight: 600 },
+    labelBgStyle: { fill: '#0f0f1a', fillOpacity: 0.95 },
+    labelBgPadding: [10, 5],
+    labelBgBorderRadius: 4,
+  };
 
   const initialEdges = [
     { id: 'e1-2', source: '1', target: '2', animated: true },
@@ -158,9 +182,9 @@ export default function WorkflowDiagram({ state, setState, onTick }) {
     { id: 'e5-civic-infra', source: '5', target: 'civic-infra' },
     { id: 'e5-civic-reg', source: '5', target: 'civic-reg' },
     { id: 'efunding-7', source: 'funding', target: '7' },
-    { id: 'etax-7', source: 'civic-tax', target: '7', label: 'burn rate' },
-    { id: 'einfra-7', source: 'civic-infra', target: '7', label: 'talent cost' },
-    { id: 'ereg-7', source: 'civic-reg', target: '7', label: 'compliance' },
+    { id: 'etax-7', source: 'civic-tax', target: '7', label: 'burn rate', ...civicEdgeLabel },
+    { id: 'einfra-7', source: 'civic-infra', target: '7', label: 'talent cost', ...civicEdgeLabel },
+    { id: 'ereg-7', source: 'civic-reg', target: '7', label: 'compliance', ...civicEdgeLabel },
     { id: 'e7-8', source: '7', target: '8' },
     { id: 'efunding-8', source: 'funding', target: '8', animated: true },
   ];
@@ -207,6 +231,8 @@ export default function WorkflowDiagram({ state, setState, onTick }) {
           onConnect={onConnect}
           nodeTypes={nodeTypes}
           fitView
+          fitViewOptions={{ padding: 0.14, maxZoom: 1.25 }}
+          minZoom={0.45}
         >
           <Background color="#222" gap={16} />
           <Controls />

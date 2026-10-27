@@ -47,6 +47,29 @@ body {
   border: 1px solid #64748b;
 }
 
+/* Keep civic-band edge labels fully readable (no mid-word clip at fitView). */
+.react-flow__edge-text {
+  font-size: 11px;
+}
+.react-flow__edge-textbg {
+  fill: #0f0f1a;
+  fill-opacity: 0.92;
+}
+.react-flow__edgelabel-renderer {
+  z-index: 5;
+  pointer-events: none;
+}
+.react-flow__edge-label {
+  max-width: none;
+  white-space: nowrap;
+  overflow: visible;
+  font-size: 11px;
+  color: #f8fafc;
+  background: rgba(15, 15, 26, 0.92);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
 button:focus-visible {
   outline: 3px solid #fde68a;
   outline-offset: 2px;

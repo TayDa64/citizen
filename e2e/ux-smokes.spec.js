@@ -57,6 +57,61 @@ test('Advance Month grows cash history on the metrics chart', async ({ page }) =
   expect(pointsAfter).toBeGreaterThanOrEqual(2);
 });
 
+test('civic band labels and edge labels are fully readable at default fitView', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/');
+  await expect(page.locator('[data-id="civic-tax"]')).toBeVisible();
+  await expect(page.locator('#civic-tax-rate')).toBeEnabled();
+
+  await expect(page.locator('[data-id="civic-tax"]')).toContainText('Tax Policy');
+  await expect(page.locator('[data-id="civic-infra"]')).toContainText('Infrastructure');
+  await expect(page.locator('[data-id="civic-reg"]')).toContainText('Regulations');
+  await expect(page.locator('[data-id="7"]')).toContainText('Launch');
+
+  const edgeLabels = await page.locator('.react-flow__edge-text').allTextContents();
+  const joined = edgeLabels.map((t) => t.trim()).join(' | ');
+  expect(joined, joined).toMatch(/burn rate/);
+  expect(joined, joined).toMatch(/talent cost/);
+  expect(joined, joined).toMatch(/compliance/);
+  expect(joined, joined).not.toMatch(/complian\.\.\.|complian…|talent cos\.\.\./i);
+
+  const coverage = await page.evaluate(() => {
+    const bandIds = ['civic-tax', 'civic-infra', 'civic-reg', '7'];
+    const nodes = bandIds.map((id) => {
+      const el = document.querySelector(`[data-id="${id}"]`);
+      const r = el.getBoundingClientRect();
+      return { id, left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+    });
+    const overlaps = [];
+    for (let i = 0; i < nodes.length; i += 1) {
+      for (let j = i + 1; j < nodes.length; j += 1) {
+        const a = nodes[i];
+        const b = nodes[j];
+        const overlapX = !(a.right <= b.left || b.right <= a.left);
+        const overlapY = !(a.bottom <= b.top || b.bottom <= a.top);
+        if (overlapX && overlapY) overlaps.push(`${a.id}/${b.id}`);
+      }
+    }
+    const civicLabels = ['burn rate', 'talent cost', 'compliance'];
+    const covered = [...document.querySelectorAll('.react-flow__edge-text')]
+      .map((el) => {
+        const text = (el.textContent || '').trim();
+        if (!civicLabels.includes(text)) return null;
+        const r = el.getBoundingClientRect();
+        const cx = r.left + r.width / 2;
+        const cy = r.top + r.height / 2;
+        const hit = nodes.find(
+          (n) => cx >= n.left && cx <= n.right && cy >= n.top && cy <= n.bottom
+        );
+        return hit ? `${text}@${hit.id}` : null;
+      })
+      .filter(Boolean);
+    return { overlaps, covered };
+  });
+  expect(coverage.overlaps, JSON.stringify(coverage)).toEqual([]);
+  expect(coverage.covered, JSON.stringify(coverage)).toEqual([]);
+});
+
 test('default React Flow nodes have readable contrast and Advance Month does not overlap data-source', async ({
   page,
 }) => {
