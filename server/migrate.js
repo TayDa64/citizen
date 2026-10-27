@@ -45,10 +45,12 @@ export const UP_MIGRATIONS = Object.freeze([
   'migrations/002_real_world_trigger_effects.sql',
   'migrations/003_trigger_contract_v1.sql',
   'migrations/004_campaign_turns.sql',
-  'migrations/005_ingest_runs.sql'
+  'migrations/005_ingest_runs.sql',
+  'migrations/006_jurisdiction_nest.sql'
 ]);
 
 export const DOWN_MIGRATIONS = Object.freeze([
+  'migrations/006_jurisdiction_nest.sql',
   'migrations/005_ingest_runs.sql',
   'migrations/004_campaign_turns.sql',
   'migrations/003_trigger_contract_v1.sql',

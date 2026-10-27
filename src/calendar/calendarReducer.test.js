@@ -339,14 +339,14 @@ describe('calendar reducer — fixture registry + guards', () => {
     expect(isPastHorizon(row.startsAt, check, row.horizonDays)).toBe(false);
   });
 
-  test('no GitHub Actions schedule: creep and no migration 006/007 in this slice', () => {
+  test('no GitHub Actions schedule: creep and no migration 007 in calendar reducer', () => {
     const workflows = readdirSync('.github/workflows');
     for (const name of workflows) {
       const body = readFileSync(`.github/workflows/${name}`, 'utf8');
       expect(/^\s*schedule\s*:/m.test(body)).toBe(false);
     }
     const migrations = readdirSync('migrations');
-    expect(migrations.some((n) => n.startsWith('006'))).toBe(false);
+    // 006 nest may land after CIT-79; calendar reducer still must not ship 007.
     expect(migrations.some((n) => n.startsWith('007'))).toBe(false);
   });
 });

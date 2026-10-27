@@ -204,6 +204,20 @@ Intended GitHub Actions job is **`workflow_dispatch` only** (no `schedule:` key 
 ### Explicit non-goals
 Migration `006`/`007`; `scheduled_meetings` table; nest FK; CIT-69 restack; live Legistar / Firecrawl; GitHub Actions `schedule:`; due-row sweep runner.
 
+## Slice jurisdiction nest (CIT-80 — migration 006)
+
+**Peers do not bind; tiers nest. Home city + ancestors only. `NULL` jurisdiction matches no campaign.**
+
+### What works
+- Migration `006_jurisdiction_nest.sql`: `jurisdictions` (`us` → `ca` → `sc_county` → `mv`; optional peer `sunnyvale`); `campaigns.home_jurisdiction_id` DEFAULT `'mv'`; `real_world_triggers.jurisdiction_id` (nullable until stamped).
+- Wage bulletin `client_id`s (`evt-pipeline-obs-civic-wage-bulletin-%`) backfilled / ingest-stamped to `mv`.
+- Chain filter helper (`src/jurisdictionNest.js` + SQL CTE): home + ancestors only; fail closed on `NULL`.
+- Locks: home `mv` sees `mv`+ancestors; Sunnyvale peer does **not** apply to `mv`; missing outer tier = identity; burns **2376** / clear **2200**; `adapter: firecrawl` still rejected.
+- No OpenAPI bump (TRIGGER_CONTRACT / campaign HTTP surface unchanged). No CIT-69 restack / `commitTurn`.
+
+### Explicit non-goals
+CIT-69 restack / `campaignId` / `commitTurn`; migration `007` / `scheduled_meetings`; live Legistar / Firecrawl; GitHub Actions `schedule:`; calendar reducer changes.
+
 ## Slice causal graph (P1-3 — rule registry is truth; diagram is a view)
 
 **Executable causal / effect edges live in one registry; React Flow reads them; unknown effect keys stay rejected.**

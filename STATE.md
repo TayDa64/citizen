@@ -81,14 +81,19 @@ Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/
 - workflow_dispatch-ready docs only — **no** GitHub Actions `schedule:` yet
 - `main` @ `31ce14c`
 
-### Phase 12 — three-phase calendar reducer (CIT-79 / Wave 2) — this PR
+### Phase 12 — three-phase calendar reducer (CIT-79 / Wave 2) — landed (PR #25)
 - Pure `(row, now, signal) → row` in `src/calendar/`; MV council fixtures + frozen `now`
 - State machine A/B/C; 60d horizon stays closed; wage publication Phase C at `observedAt`
-- Burns **2376** / clear **2200** untouched; no 006/007 / nest / restack / `schedule:`
+- Burns **2376** / clear **2200** untouched; `main` @ `39974f0`
+
+### Phase 13 — jurisdiction nest (CIT-80 / Wave 2) — this PR
+- Migration `006_jurisdiction_nest.sql`: jurisdictions seed + home/trigger FKs + wage→`mv` backfill
+- Chain filter helper before restack (JS + SQL CTE); peers fail closed; no CIT-69 / 007 / `schedule:`
+- Burns **2376** / clear **2200**; firecrawl still rejected; no OpenAPI bump
 
 ## Next Highest-Priority Phases
-### Wave 2 continued (after CIT-79)
-- Nest 006 → CIT-69 → meetings 007 + due-row sweep
+### Wave 2 continued (after CIT-80 / 006)
+- CIT-69 restack (one campaignId, chain only) → meetings 007 + due-row sweep
 - Arm Actions `schedule:` only after the due-row sweep exists (minute `:12`, dispatch beside)
 - Defer dampening, HNSW/embeddings, Firecrawl/AI Judge until after 007
 
@@ -98,12 +103,12 @@ Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/
 - Acceptance: player can form company → hire → build → launch → see revenue or insolvency
 
 ## Definition of Done for current slice
-Calendar reducer unit tests lock A/B/C transitions (Final+null no ingest; +29d upsert; T+1 wait; blocked never cancels; 60d stay closed); wage 2376/2200 green; no `schedule:` / 006 / 007; `npm test` green.
+Migration 006 applies; home `mv` chain + peer-negative + NULL fail-closed locked; wage→`mv` backfill; burns 2376/clear 2200; firecrawl rejected; no CIT-69/`commitTurn`/007/`schedule:`; `npm test` green.
 
 ## Open items
 - A1: resolved. Axe is 0 on 5f4f021.
-- P2-M1 (info): the down migration only reverts 003/002, so a full re-run after rollback fails at 001. (004 adds campaigns/turn_commits down; 005 adds ingest_runs down.)
+- P2-M1 (info): the down migration only reverts 003/002, so a full re-run after rollback fails at 001. (004–006 add down sections.)
 - P1-4: live Postgres campaign reload still gated on `npm run test:api` when DB available.
-- CIT-79: no `scheduled_meetings` persistence yet (007); nest filter still deferred (006).
+- CIT-80: nest filter shipped; CIT-69 restack not wired yet; no `scheduled_meetings` (007).
 
-Last updated: 2026-10-27, CIT-79 calendar reducer off `main` @ `31ce14c`.
+Last updated: 2026-10-27, CIT-80 jurisdiction nest off `main` @ `39974f0`.

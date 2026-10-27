@@ -59,9 +59,11 @@ test('migration 003 is additive and reversible in source', () => {
     'migrations/002_real_world_trigger_effects.sql',
     'migrations/003_trigger_contract_v1.sql',
     'migrations/004_campaign_turns.sql',
-    'migrations/005_ingest_runs.sql'
+    'migrations/005_ingest_runs.sql',
+    'migrations/006_jurisdiction_nest.sql'
   ]);
   assert.deepEqual(DOWN_MIGRATIONS, [
+    'migrations/006_jurisdiction_nest.sql',
     'migrations/005_ingest_runs.sql',
     'migrations/004_campaign_turns.sql',
     'migrations/003_trigger_contract_v1.sql',
@@ -90,6 +92,27 @@ test('migration 005 ingest_runs is additive and reversible in source', () => {
   assert.doesNotMatch(parts.up, /scheduled_meeting_id/);
   assert.match(parts.down, /DROP TABLE IF EXISTS ingest_runs/);
   assert.doesNotMatch(parts.up, /DROP TABLE/i);
+});
+
+test('migration 006 jurisdiction nest is additive and reversible in source', () => {
+  const sql = fs.readFileSync('migrations/006_jurisdiction_nest.sql', 'utf8');
+  const parts = splitMigration(sql);
+  assert.match(parts.up, /CREATE TABLE IF NOT EXISTS jurisdictions/);
+  assert.match(parts.up, /'federal', 'state', 'county', 'city'/);
+  assert.match(parts.up, /\('us'/);
+  assert.match(parts.up, /\('ca'/);
+  assert.match(parts.up, /\('sc_county'/);
+  assert.match(parts.up, /\('mv'/);
+  assert.match(parts.up, /\('sunnyvale'/);
+  assert.match(parts.up, /home_jurisdiction_id/);
+  assert.match(parts.up, /DEFAULT 'mv'/);
+  assert.match(parts.up, /real_world_triggers[\s\S]*jurisdiction_id/);
+  assert.match(parts.up, /evt-pipeline-obs-civic-wage-bulletin-%/);
+  assert.doesNotMatch(parts.up, /scheduled_meetings/);
+  assert.doesNotMatch(parts.up, /commitTurn|restack/i);
+  assert.match(parts.down, /DROP COLUMN IF EXISTS jurisdiction_id/);
+  assert.match(parts.down, /DROP COLUMN IF EXISTS home_jurisdiction_id/);
+  assert.match(parts.down, /DROP TABLE IF EXISTS jurisdictions/);
 });
 
 test('node:test filenames stay outside the vitest default include', () => {
