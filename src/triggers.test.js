@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import {
+  CLEARED_ANNOUNCEMENT,
   SAMPLE_TRIGGERS,
   TRIGGER_CONTRACT,
   assertValidTrigger,
+  composeLiveAnnouncement,
   describeTrigger,
   formatCurrency,
   formatDollars,
@@ -70,6 +72,18 @@ describe('trigger contract', () => {
     expect(describeTrigger(policy())).toBe('Policy change: talent cost +12%');
     expect(describeTrigger(news())).toBe('News spike: hype +10%');
     expect(describeTrigger(market())).toBe('Market shift: talent cost -8%, hype -5%');
+  });
+
+  test('composeLiveAnnouncement keeps single-event and clear copy, lists labels when ≥2 active', () => {
+    const delta = 'News spike: hype +10%, burn $2,200';
+    expect(composeLiveAnnouncement(delta, [news()])).toBe(delta);
+    expect(composeLiveAnnouncement(delta, [policy(), news()])).toBe(
+      `${delta} 2 world events active: Policy change; News spike.`
+    );
+    expect(composeLiveAnnouncement(CLEARED_ANNOUNCEMENT, [policy(), news()])).toBe(
+      CLEARED_ANNOUNCEMENT
+    );
+    expect(composeLiveAnnouncement('', [policy(), news()])).toBe('');
   });
 
   test('rejects payloads outside the contract', () => {

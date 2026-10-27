@@ -120,4 +120,40 @@ describe('world event trigger', () => {
     expect(screen.getByText(/Burn\/mo: \$2,464/)).toBeInTheDocument();
     expect(screen.getByRole('slider', { name: /tax rate/i })).toHaveValue('0.25');
   });
+
+  test('live region names both active events and clear restores baseline announce', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const events = screen.getByRole('region', { name: 'World events' });
+    await user.click(within(events).getByRole('button', { name: /^Policy change / }));
+    await user.click(within(events).getByRole('button', { name: /^News spike / }));
+
+    const live = within(events).getByRole('status');
+    expect(live).toHaveTextContent(/News spike:/);
+    expect(live).toHaveTextContent(/2 world events active: Policy change; News spike/);
+    expect(within(events).getByRole('button', { name: /^Policy change / })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    expect(within(events).getByRole('button', { name: /^News spike / })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+
+    await user.click(within(events).getByRole('button', { name: 'Clear world events' }));
+    expect(live).toHaveTextContent(
+      'World events cleared. Hype and talent cost returned to baseline.'
+    );
+    expect(live).not.toHaveTextContent(/world events active/);
+  });
+});
+
+describe('product header', () => {
+  test('describes tax and world events without Slice-1-only copy', () => {
+    render(<App />);
+    expect(screen.getByRole('heading', { level: 1, name: 'Citizen' })).toBeInTheDocument();
+    expect(screen.getByText(/tax policy and world events/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Slice 1/i)).not.toBeInTheDocument();
+  });
 });

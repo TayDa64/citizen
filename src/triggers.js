@@ -268,6 +268,16 @@ export function announceTrigger(trigger, mode, burn, clamp = null) {
   }
 }
 
+/** Live-region copy: delta announce, plus active labels when ≥2 events remain. */
+export function composeLiveAnnouncement(delta, activeTriggers) {
+  if (!delta) return '';
+  if (delta === CLEARED_ANNOUNCEMENT) return delta;
+  const active = activeTriggers ?? [];
+  if (active.length <= 1) return delta;
+  const labels = active.map((trigger) => trigger.label).join('; ');
+  return `${delta} ${active.length} world events active: ${labels}.`;
+}
+
 export function deltaPhrase(fraction) {
   if (!Number.isFinite(fraction) || Math.abs(fraction) < 0.0005) return 'unchanged';
   const word = fraction > 0 ? 'up' : 'down';

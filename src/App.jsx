@@ -25,7 +25,7 @@ import {
   readApiSnapshot,
   removeTrigger,
 } from './simulation';
-import { CLEARED_ANNOUNCEMENT, announceTrigger } from './triggers';
+import { CLEARED_ANNOUNCEMENT, announceTrigger, composeLiveAnnouncement } from './triggers';
 import { effectiveBurnRate, talentCostFactorClampOf } from './talentMultiplier';
 
 function removalBlockedMessage(error, label) {
@@ -141,6 +141,10 @@ function App() {
     return commitSnapshot(snapshot);
   };
 
+  const announceLive = (delta, nextState) => {
+    setAnnouncement(composeLiveAnnouncement(delta, nextState?.activeTriggers));
+  };
+
   const onToggleTrigger = async (trigger) => {
     const active = (state.activeTriggers ?? []).some((item) => item.id === trigger.id);
     if (state.dataSource !== 'api' || !apiBase) {
@@ -148,13 +152,19 @@ function App() {
         const next = removeTrigger(stateRef.current, trigger.id);
         setState(next);
         stateRef.current = next;
-        setAnnouncement(announceTrigger(trigger, 'remove', effectiveBurnRate(next), talentCostFactorClampOf(next)));
+        announceLive(
+          announceTrigger(trigger, 'remove', effectiveBurnRate(next), talentCostFactorClampOf(next)),
+          next
+        );
         return;
       }
       const next = applyTrigger(stateRef.current, trigger);
       setState(next);
       stateRef.current = next;
-      setAnnouncement(announceTrigger(trigger, 'apply', effectiveBurnRate(next), talentCostFactorClampOf(next)));
+      announceLive(
+        announceTrigger(trigger, 'apply', effectiveBurnRate(next), talentCostFactorClampOf(next)),
+        next
+      );
       return;
     }
 
@@ -190,17 +200,26 @@ function App() {
           : applyTrigger(stateRef.current, trigger);
         setState(next);
         stateRef.current = next;
-        setAnnouncement(announceTrigger(trigger, active ? 'remove' : 'apply', effectiveBurnRate(next), talentCostFactorClampOf(next)));
+        announceLive(
+          announceTrigger(trigger, active ? 'remove' : 'apply', effectiveBurnRate(next), talentCostFactorClampOf(next)),
+          next
+        );
         return;
       }
       const listed = reading.state.activeTriggers.find((item) => item.id === trigger.id);
       const alerts = [];
       if (reading.skipped > 0) alerts.push(skippedTriggerAlert(reading.skipped));
       if (listed) {
-        setAnnouncement(announceTrigger(listed, 'apply', effectiveBurnRate(reading.state), talentCostFactorClampOf(reading.state)));
+        announceLive(
+          announceTrigger(listed, 'apply', effectiveBurnRate(reading.state), talentCostFactorClampOf(reading.state)),
+          reading.state
+        );
         if (active) alerts.push(`${listed.label} is still listed by the service.`);
       } else if (active) {
-        setAnnouncement(announceTrigger(trigger, 'remove', effectiveBurnRate(reading.state), talentCostFactorClampOf(reading.state)));
+        announceLive(
+          announceTrigger(trigger, 'remove', effectiveBurnRate(reading.state), talentCostFactorClampOf(reading.state)),
+          reading.state
+        );
       } else {
         alerts.push(`${trigger.label} is not listed by the service.`);
         setAnnouncement('');
@@ -276,7 +295,7 @@ function App() {
     <div className="App" style={{ background: '#0f0f1a', minHeight: '100vh', color: 'white' }}>
       <header style={{ padding: '1rem', background: '#1a1a2e', textAlign: 'center' }}>
         <h1>Citizen</h1>
-        <p>Civic + Startup Simulation — Slice 1: Tax → Burn Rate</p>
+        <p>Civic + Startup Simulation — tax policy and world events shape burn and hype</p>
       </header>
       <main>
         <WorkflowDiagram state={state} setState={handleSetState} onTick={onTick} />

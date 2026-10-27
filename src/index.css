@@ -218,19 +218,22 @@ button:focus-visible {
   padding-left: 1.2rem;
 }
 
-.trigger-readout__stats {
+.trigger-readout__stats,
+.metrics-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 0.5rem 1rem;
   margin: 0 0 0.5rem;
 }
 
-.trigger-readout__stats dt {
+.trigger-readout__stats dt,
+.metrics-grid dt {
   font-size: 0.875rem;
   color: #e2e8f0;
 }
 
-.trigger-readout__stats dd {
+.trigger-readout__stats dd,
+.metrics-grid dd {
   margin: 0;
   font-weight: 700;
   color: #f8fafc;
