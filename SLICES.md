@@ -174,6 +174,20 @@ Live Firecrawl; many data sources; AI-generated arbitrary rules; political syste
 ### Explicit non-goals
 Funding / exit / Firecrawl; AI-generated rules; wiring cosmetic edges as mechanics; multi-rule civic catalogs.
 
+## Slice campaign-loop acceptance (P1-4 — deterministic loop suite)
+
+**One acceptance suite walks action → event → turn → metrics → explanation → reload.**
+
+### What works
+- Vitest suite `src/campaignLoop.acceptance.test.js` (part of `npm test` / `test:ui`).
+- Offline loop: tax / hire / trigger → advance → metrics + TurnResult explanations → ledger → JSON reload + same-seed replay reproduce `stableMetrics`.
+- Locks Slice 1/2 burn **2000 / 2200 / 2800**, hire **×1.75 / 3850**, policy burn **2464**, pathway headroom→hype, pipeline supersession **2376** / clear **2200**, causal unknown-key rejection, diagram edges `etax-7` / `ecivic-hype` / `einfra-7`.
+- Ledger dual-path: offline TurnResult shaping ≡ API commit-row round-trip **without** live Postgres.
+- Live Postgres campaign reload stays in `npm run test:api` (`test/api/campaign-turns.api.js`) — skipped here when DB unavailable.
+
+### Explicit non-goals
+Browser Playwright full campaign UX; funding / exit / Firecrawl; political objectives (P1-5).
+
 ## Merge train
 
 Which slices land in which order, and what is already verified, is tracked in [STATE.md](STATE.md).
