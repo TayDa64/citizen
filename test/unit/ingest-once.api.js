@@ -76,21 +76,21 @@ test('formatChangedLine matches CivicBrief botResult tokens', () => {
   assert.equal(formatChangedLine(0), 'changed=false');
 });
 
-test('package.json exposes ingest:once script without schedule cron key', async () => {
+test('package.json exposes ingest:once; ci.yml stays schedule-free; calendar-ingest arms :12', async () => {
   const fs = await import('node:fs');
   const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
   assert.equal(pkg.scripts['ingest:once'], 'node server/ingestOnce.js');
+  assert.equal(pkg.scripts['calendar:clock'], 'node server/dueRowSweep.js');
   assert.equal(Object.prototype.hasOwnProperty.call(pkg.scripts, 'schedule'), false);
 
   const ci = fs.readFileSync('.github/workflows/ci.yml', 'utf8');
   assert.equal(/^\s*schedule\s*:/m.test(ci), false);
-  const workflows = fs.readdirSync('.github/workflows');
-  for (const name of workflows) {
-    const body = fs.readFileSync(`.github/workflows/${name}`, 'utf8');
-    assert.equal(
-      /^\s*schedule\s*:/m.test(body),
-      false,
-      `${name} must not add GitHub Actions schedule: yet (CIT-67 dispatch-docs only)`,
-    );
-  }
+
+  const calendar = fs.readFileSync('.github/workflows/calendar-ingest.yml', 'utf8');
+  assert.equal(/^\s*schedule\s*:/m.test(calendar), true);
+  assert.match(calendar, /cron:\s*'12 14 \* \* 1'/);
+  assert.match(calendar, /cron:\s*'12 6,18 \* \* \*'/);
+  assert.match(calendar, /workflow_dispatch/);
+  assert.doesNotMatch(calendar, /cron:\s*'0 6 \* \* 1-5'/);
+  assert.doesNotMatch(calendar, /npm run ingest:once/);
 });

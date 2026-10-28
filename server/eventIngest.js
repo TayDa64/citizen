@@ -184,6 +184,7 @@ function mapIngestRunRow(row) {
     error: row.error,
     triggerClientIds: row.trigger_client_ids ?? [],
     result: row.result_json,
+    scheduledMeetingId: row.scheduled_meeting_id ?? null,
   };
 }
 
@@ -191,10 +192,10 @@ export async function insertIngestRun(pool, fields) {
   const result = await pool.query(
     `INSERT INTO ingest_runs (
        started_at, finished_at, adapter, fixture_id, status, changed, error,
-       trigger_client_ids, result_json
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::text[], $9::jsonb)
+       trigger_client_ids, result_json, scheduled_meeting_id
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::text[], $9::jsonb, $10)
      RETURNING id, started_at, finished_at, adapter, fixture_id, status, changed,
-               error, trigger_client_ids, result_json`,
+               error, trigger_client_ids, result_json, scheduled_meeting_id`,
     [
       fields.startedAt,
       fields.finishedAt,
@@ -205,6 +206,7 @@ export async function insertIngestRun(pool, fields) {
       fields.error,
       fields.triggerClientIds ?? [],
       fields.resultJson == null ? null : JSON.stringify(fields.resultJson),
+      fields.scheduledMeetingId ?? null,
     ],
   );
   return mapIngestRunRow(result.rows[0]);
@@ -214,7 +216,7 @@ export async function listIngestRuns(pool, { limit = 50 } = {}) {
   const capped = Math.max(1, Math.min(200, Number(limit) || 50));
   const result = await pool.query(
     `SELECT id, started_at, finished_at, adapter, fixture_id, status, changed,
-            error, trigger_client_ids, result_json
+            error, trigger_client_ids, result_json, scheduled_meeting_id
      FROM ingest_runs
      ORDER BY started_at DESC
      LIMIT $1`,
@@ -223,7 +225,7 @@ export async function listIngestRuns(pool, { limit = 50 } = {}) {
   return result.rows.map(mapIngestRunRow);
 }
 
-async function recordErrorRun(pool, request, startedAt, error) {
+async function recordErrorRun(pool, request, startedAt, error, scheduledMeetingId = null) {
   const hints = requestHints(request);
   try {
     await insertIngestRun(pool, {
@@ -235,6 +237,7 @@ async function recordErrorRun(pool, request, startedAt, error) {
       changed: false,
       error: error?.message || String(error),
       triggerClientIds: [],
+      scheduledMeetingId,
       resultJson: Array.isArray(error?.issues) ? { issues: error.issues } : null,
     });
   } catch (recordError) {
@@ -249,8 +252,9 @@ async function recordErrorRun(pool, request, startedAt, error) {
  * CIT-69: when campaignId is set and changed=true, nest-filter then commitTurn
  * restack before marking the run successful. Failed restack keeps triggers and
  * records status=error (does not delete real_world_triggers).
+ * CIT-81: optional scheduledMeetingId links the audit row (due-row / Phase C).
  */
-export async function ingestAndPersist(pool, request) {
+export async function ingestAndPersist(pool, request, { scheduledMeetingId = null } = {}) {
   const startedAt = new Date();
   try {
     const validated = validateIngestRequest(request);
@@ -288,6 +292,7 @@ export async function ingestAndPersist(pool, request) {
           changed: false,
           error: restackError?.message || String(restackError),
           triggerClientIds,
+          scheduledMeetingId,
           resultJson: {
             events: result.events,
             triggerIds: triggerClientIds,
@@ -308,6 +313,7 @@ export async function ingestAndPersist(pool, request) {
       changed,
       error: null,
       triggerClientIds,
+      scheduledMeetingId,
       resultJson: {
         events: result.events,
         triggerIds: triggerClientIds,
@@ -339,7 +345,7 @@ export async function ingestAndPersist(pool, request) {
     };
   } catch (error) {
     if (!error?.ingestRunRecorded) {
-      await recordErrorRun(pool, request, startedAt, error);
+      await recordErrorRun(pool, request, startedAt, error, scheduledMeetingId);
     }
     throw error;
   }

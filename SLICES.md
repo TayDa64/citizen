@@ -65,7 +65,7 @@ Slice 3 (authoritative turns) — see below and [STATE.md](STATE.md) Phase 1.
 
 ### API dependency
 
-Live company and world-event data comes from Citizen API OpenAPI **0.8.7** (CIT-69 optional campaign restack + ingest_runs audit + political survival + real-world ingest + turn ledger + civic feedback + hire TurnCommand + campaign turns + prior 0.7.1 talent fields). Trigger contract paths below still apply.
+Live company and world-event data comes from Citizen API OpenAPI **0.8.8** (CIT-81 scheduledMeetingId + CIT-69 optional campaign restack + ingest_runs audit + political survival + real-world ingest + turn ledger + civic feedback + hire TurnCommand + campaign turns + prior 0.7.1 talent fields). Trigger contract paths below still apply.
 
 **Authority boundary:** The companies service is the source of truth for hype, talent cost, baselines, and (until a campaign hire) talent multiplier / mix / factors. After `hire_employee`, campaign GameState owns the roster. `hydrateFromApi` / `readApiSnapshot` never copy `company.cash` or `company.burnRate` from the companies payload. Cash / burn history / tax / turn / hire commit through the turn engine and, when connected, `POST /api/campaigns/{id}/turns`. Advance Month never POSTs to `/api/companies`.
 
@@ -85,7 +85,7 @@ Live company and world-event data comes from Citizen API OpenAPI **0.8.7** (CIT-
 
 `APPLY_TALENT_COST_TO_BURN` in `src/talentMultiplier.js` is on. Trigger talent cost scales burn in local mode and API mode. `talentMultiplier` stays employee-only.
 
-OpenAPI **0.8.7** (CIT-69 optional `campaignId` restack + CIT-68 `ingest_runs` + political `GameState.politics` + prior 0.8.4 ingest / 0.8.3 ledger / 0.8.2 civic / hire / turns / 0.7.1 talent) includes `talentCostFactor` and `effectiveMultiplier` on `GET /api/companies`, campaign GameState / TurnCommand routes, `GameState.civic` (`budgetHeadroom`, `hypeBias`), `GameState.politics` (`voterSupport`, `survivalStatus`, `survivalFloor`), shaped turn ledger entries, fixture/http_stub ingest behind TRIGGER_CONTRACT v1, and `GET /api/ingest/runs`. `talentMultiplier` remains employee-only. A 0.5.0 payload omits the new talent fields and the client computes them. Parsing stays in `src/talentMultiplier.js`. A missing Host is 400 `Host required`, two Host headers are 400 `Duplicate host`, and any other host is 403 `Forbidden host`. Those alerts keep the current numbers. Hype outside 0–1 and talent cost outside $0–$9,999,999,999.99 are clamped, and the status says so.
+OpenAPI **0.8.8** (CIT-81 `scheduledMeetingId` + CIT-69 optional `campaignId` restack + CIT-68 `ingest_runs` + political `GameState.politics` + prior 0.8.4 ingest / 0.8.3 ledger / 0.8.2 civic / hire / turns / 0.7.1 talent) includes `talentCostFactor` and `effectiveMultiplier` on `GET /api/companies`, campaign GameState / TurnCommand routes, `GameState.civic` (`budgetHeadroom`, `hypeBias`), `GameState.politics` (`voterSupport`, `survivalStatus`, `survivalFloor`), shaped turn ledger entries, fixture/http_stub ingest behind TRIGGER_CONTRACT v1, and `GET /api/ingest/runs`. `talentMultiplier` remains employee-only. A 0.5.0 payload omits the new talent fields and the client computes them. Parsing stays in `src/talentMultiplier.js`. A missing Host is 400 `Host required`, two Host headers are 400 `Duplicate host`, and any other host is 403 `Forbidden host`. Those alerts keep the current numbers. Hype outside 0–1 and talent cost outside $0–$9,999,999,999.99 are clamped, and the status says so.
 
 ## Slice lifecycle hire (P0 business lifecycle — first PR)
 
@@ -231,7 +231,21 @@ Migration `007` / `scheduled_meetings`; live Legistar / Firecrawl; GitHub Action
 - OpenAPI **0.8.7**.
 
 ### Explicit non-goals
-Migration `007` / `scheduled_meetings`; due-row cron / GitHub `schedule:`; restack of every open campaign; live Firecrawl; `RESTACK_INGEST`; writing companies cash/burn/morale into `state_json`.
+Migration `007` / `scheduled_meetings`; due-row cron / GitHub `schedule:` (landed in CIT-81); restack of every open campaign; live Firecrawl; `RESTACK_INGEST`; writing companies cash/burn/morale into `state_json`.
+
+## Slice scheduled meetings + due-row sweep (CIT-81 — migration 007)
+
+**Persist the three-phase clock in Postgres; weekly Phase A + twice-daily due-row Actions at `:12`.**
+
+### What works
+- Migration `007_scheduled_meetings.sql`: `scheduled_meetings` (wave2 sketch + backoff/horizon helpers) with `UNIQUE (source_id, external_event_id)` and index `(status, next_check_at)`; `ingest_runs.scheduled_meeting_id` FK.
+- Persist/load + Phase A seed from `mv-council-calendar-2026h2` (MV council alone); due-row sweep selects `next_check_at <= now()`, applies pure calendar reducer with **fixture signals** (frozen `now` in tests); host loopback / no network.
+- Every sweep attempt writes `ingest_runs` (`changed=false` for agenda-seen / empty / blocked / minutes pointer-only). Phase C publication wage body calls `ingestAndPersist`; optional CIT-69 restack only when trigger `changed=true`. 60d `unchanged` stays closed.
+- `npm run calendar:clock -- --phase-a|--due`; GitHub Actions `.github/workflows/calendar-ingest.yml` — weekly Phase A + twice-daily due at minute `:12`, plus `workflow_dispatch`. No scrape-all, no weekday wage-only cron, no T-3 06:00-only job.
+- OpenAPI **0.8.8** (`IngestRun.scheduledMeetingId`). Burns **2376** / clear **2200**; firecrawl rejected; peers still do not bind.
+
+### Explicit non-goals
+Live Legistar / Firecrawl GET; dampening; HNSW/embeddings; AI Judge; restack-all; editing migrations 001–006 in place; minutes→trigger interpretation pack (pointer only until a later fixture).
 
 ## Slice causal graph (P1-3 — rule registry is truth; diagram is a view)
 
