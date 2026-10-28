@@ -10,7 +10,7 @@
 
 Sequence complete. Post-merge regression on main 5f4f021: PASS (trace diag-20261026-8e1cd230), CI green.
 
-Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/Playwright; PR #12 authoritative turns; PR #13 campaign↔trigger coherence; PR #14 business lifecycle hire; PR #15 civic feedback; PR #16 connect pathways; PR #17 turn ledger; PR #18 real-world pipeline; PR #19 causal graph; PR #20 campaign acceptance. Tip: `main` @ `28c0215` (PR #20).
+Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/Playwright; PR #12 authoritative turns; PR #13 campaign↔trigger coherence; PR #14 business lifecycle hire; PR #15 civic feedback; PR #16 connect pathways; PR #17 turn ledger; PR #18 real-world pipeline; PR #19 causal graph; PR #20 campaign acceptance; PR #21 political objectives; PR #22 test:api harness; **Wave 2** PR #23–#28 (ingest_runs → meetings + `:12`). Tip: `main` @ `3420879` (PR #28).
 
 **Rule:** Each PR must be green, rebased clean on main, and meet its acceptance criteria before the next is merged. Update this file after every merge.
 
@@ -22,6 +22,7 @@ Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/
 - Additive only; no breaking changes to existing schema or UI nodes
 - GET /api/companies cash/burnRate never copied onto the client sim
 - Same seed + TurnCommand sequence → same metrics (turn engine)
+- Fixture wage bulletin burn **2376** / clear **2200**; peers do not bind; `adapter: firecrawl` rejected
 
 ## Active phase
 ### Phase 1 — Authoritative Game State (P0) — landed (PR #12 / #13)
@@ -70,55 +71,62 @@ Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/
 - `voterSupport = 0.5*budgetHeadroom + 0.5*company.hype`; floor **0.25** on `advance_turn` → `ousted` / `incumbent`
 - `GameState.politics` + Dashboard readout; OpenAPI **0.8.5**; Slice 1/2 burns unchanged
 
-### Phase 10 — ingest_runs audit (CIT-68 / Wave 2) — landed (PR #23)
+### Wave 2 — calendar-driven ingest path — **complete** (`main` @ `3420879`)
+
+Locked path shipped: CIT-68 (#23) → CIT-67 (#24) → calendar reducer CIT-79 (#25) → 006 nest CIT-80 (#26) → CIT-69 restack (#27) → 007 meetings + `:12` due-row CIT-81 (#28).
+
+Sign-offs held: MV council alone; minutes outside 60d stay closed; statutory tax fixtures stay on talentCost/hype.
+
+Migrations on `main`: **`001`–`007`**. OpenAPI **0.8.8**.
+
+#### Phase 10 — ingest_runs audit (CIT-68) — landed (PR #23)
 - Migration `005_ingest_runs.sql`; every `ingestAndPersist` writes a run row
 - Validation failure → `status=error` (not success); `GET /api/ingest/runs?limit=`
-- OpenAPI **0.8.6**; fixture burn **2376** / clear **2200** unchanged; `adapter: firecrawl` still rejected
+- OpenAPI **0.8.6**; fixture burn **2376** / clear **2200**; `adapter: firecrawl` rejected
 
-### Phase 11 — fixture ingest:once (CIT-67 / Wave 2) — landed (PR #24)
+#### Phase 11 — fixture ingest:once (CIT-67) — landed (PR #24)
 - `npm run ingest:once` → `ingestAndPersist` fixture path; default `civic-wage-bulletin`
 - Env `INGEST_FIXTURE_ID`; stdout `changed=true|false`; reuses 005 `ingest_runs`
-- workflow_dispatch-ready docs only — **no** GitHub Actions `schedule:` yet
-- `main` @ `31ce14c`
 
-### Phase 12 — three-phase calendar reducer (CIT-79 / Wave 2) — landed (PR #25)
+#### Phase 12 — three-phase calendar reducer (CIT-79) — landed (PR #25)
 - Pure `(row, now, signal) → row` in `src/calendar/`; MV council fixtures + frozen `now`
 - State machine A/B/C; 60d horizon stays closed; wage publication Phase C at `observedAt`
-- Burns **2376** / clear **2200** untouched; `main` @ `39974f0`
 
-### Phase 13 — jurisdiction nest (CIT-80 / Wave 2) — landed (PR #26)
+#### Phase 13 — jurisdiction nest (CIT-80) — landed (PR #26)
 - Migration `006_jurisdiction_nest.sql`: jurisdictions seed + home/trigger FKs + wage→`mv` backfill
 - Chain filter helper before restack (JS + SQL CTE); peers fail closed
-- Burns **2376** / clear **2200**; firecrawl still rejected; `main` @ `ae91215`
 
-### Phase 14 — campaign restack after ingest (CIT-69 / Wave 2) — landed (PR #27)
+#### Phase 14 — campaign restack after ingest (CIT-69) — landed (PR #27)
 - Optional `campaignId` on ingest CLI/HTTP (default off); nest filter + tier sort before `commitTurn`
 - `changed=false` / zero triggers → no restack; failed restack → ingest_runs error, triggers kept
-- Burns **2376** / clear **2200**; peer Sunnyvale excluded; firecrawl rejected; OpenAPI **0.8.7**
-- `main` @ `5f43d64`
+- OpenAPI **0.8.7**
 
-### Phase 15 — scheduled meetings + due-row sweep (CIT-81 / Wave 2) — this PR
+#### Phase 15 — scheduled meetings + due-row sweep (CIT-81) — landed (PR #28 @ `3420879`)
 - Migration `007_scheduled_meetings.sql` + `ingest_runs.scheduled_meeting_id`
 - Phase A MV council fixture seed; due-row sweep + pure calendar reducer + fixture signals
 - Actions weekly Phase A + twice-daily `:12` due sweep + `workflow_dispatch`; OpenAPI **0.8.8**
 - Restack only when Phase C publication trigger `changed=true`; 60d unchanged stays closed
 
 ## Next Highest-Priority Phases
-### Wave 2 complete after CIT-81
-- Defer dampening, HNSW/embeddings, Firecrawl/AI Judge until after 007 green + merge
+### Backlog (eligible — not started; await direction)
+- Formula dampening
+- HNSW / embeddings
+- Firecrawl / AI Judge
+- Minutes→trigger fixture (minutes remain pointer-only)
+- Companies peer read-model filter
 
 ### Phase 2 continued — Complete business lifecycle (P0)
 - Product development, launch, funding, runway, exit as real mechanics
 - Separate employee productivity from cost
 - Acceptance: player can form company → hire → build → launch → see revenue or insolvency
 
-## Definition of Done for current slice
+## Definition of Done (Wave 2 — met on `main` @ `3420879`)
 007 schema + due-row sweep + Phase A seed; ingest_runs linked; Actions `:12` + dispatch; agenda-seen/empty/blocked → changed=false no commitTurn; publication Phase C may restack; 60d closed; burns 2376/clear 2200; firecrawl rejected; peers unbound; `npm test` green.
 
 ## Open items
 - A1: resolved. Axe is 0 on 5f4f021.
 - P2-M1 (info): the down migration only reverts 003/002, so a full re-run after rollback fails at 001. (004–007 add down sections.)
 - P1-4: live Postgres campaign reload still gated on `npm run test:api` when DB available.
-- CIT-81: meeting minutes ingest is pointer-only (no minutes→trigger fixture yet).
+- CIT-81: meeting minutes ingest is pointer-only (no minutes→trigger fixture yet) — backlog.
 
-Last updated: 2026-10-27, CIT-81 scheduled_meetings off `main` @ `5f43d64`.
+Last updated: 2026-10-28, Wave 2 complete on `main` @ `3420879` (PR #28).
