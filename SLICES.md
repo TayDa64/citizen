@@ -1,5 +1,7 @@
 # Citizen Slices
 
+**Wave 2 status (2026-10-28):** complete on `main` @ `3420879` (PR #28). Path: CIT-68 (#23) → CIT-67 (#24) → CIT-79 (#25) → CIT-80 (#26) → CIT-69 (#27) → CIT-81 (#28). Migrations **`001`–`007`**; scheduled fixture ingest via Actions `:12`; nest + optional restack. Deferred backlog (not started): formula dampening, HNSW/embeddings, Firecrawl/AI Judge, minutes→trigger fixture, companies peer read-model filter. See [STATE.md](STATE.md).
+
 ## Slice 1 (completed in this iteration)
 **Tax policy modulates company burn rate, visible and adjustable.**
 
@@ -161,20 +163,20 @@ Full campaign-loop acceptance suite (P1-4); rewriting the UI as a pure read-mode
 ### Explicit non-goals
 Live Firecrawl; many data sources; AI-generated arbitrary rules; political systems.
 
-## Slice ingest_runs (CIT-68 — audit before the clock)
+## Slice ingest_runs (CIT-68 — audit before the clock) — landed PR #23
 
 **Every `ingestAndPersist` writes a durable `ingest_runs` row; validation failure is not `status=success`.**
 
 ### What works
-- Migration `005_ingest_runs.sql`: `id`, `started_at`, `finished_at`, `adapter`, `fixture_id`, `status`, `changed`, `error`, `trigger_client_ids`, `result_json`. No `scheduled_meeting_id` yet (waits for 007).
+- Migration `005_ingest_runs.sql`: `id`, `started_at`, `finished_at`, `adapter`, `fixture_id`, `status`, `changed`, `error`, `trigger_client_ids`, `result_json`. CIT-81 (007) later added nullable `scheduled_meeting_id` FK.
 - `POST /api/triggers/ingest` always inserts a run (`success` + `changed` when triggers persist; `error` + `changed=false` on validation/adapter rejection, including `firecrawl`).
 - `GET /api/ingest/runs?limit=` (1..200, default 50) lists newest-first on loopback.
-- OpenAPI **0.8.6**. Fixture wage bulletin still burns **2376**; clear still **2200**. TRIGGER_CONTRACT v1 unchanged.
+- OpenAPI **0.8.6** at land; tip OpenAPI **0.8.8**. Fixture wage bulletin still burns **2376**; clear still **2200**. TRIGGER_CONTRACT v1 unchanged.
 
-### Explicit non-goals
-Nest (006); restack (CIT-69); meetings (007); Firecrawl; dampening; HNSW/embeddings; AI Judge. (CIT-67 / CIT-79 landed separately.)
+### Explicit non-goals (at land; later Wave 2 slices closed nest/restack/meetings)
+Firecrawl; dampening; HNSW/embeddings; AI Judge. (CIT-67 / CIT-79 / CIT-80 / CIT-69 / CIT-81 landed after.)
 
-## Slice ingest:once (CIT-67 — fixture runner, dispatch only)
+## Slice ingest:once (CIT-67 — fixture runner) — landed PR #24
 
 **`npm run ingest:once` runs one fixture ingest beside local Postgres; stdout prints `changed=true|false`.**
 
@@ -185,15 +187,15 @@ Nest (006); restack (CIT-69); meetings (007); Firecrawl; dampening; HNSW/embeddi
 - Requires `DATABASE_URL` loopback/socket (same guard as the API). Migrations must already be applied.
 - Fixture wage bulletin still burns **2376**; clear still **2200**. `adapter: firecrawl` stays rejected.
 
-### Actions (docs only — do not arm cron yet)
-Intended GitHub Actions job is **`workflow_dispatch` only** (no `schedule:` key until the calendar due-row sweep exists). The job should: install deps, start local Postgres the way `test:api` does, migrate, then `npm run ingest:once`. It must not POST a remote Host (loopback 403). Do **not** add `.github/workflows` `schedule:` in this slice.
+### Actions
+At land this slice documented **`workflow_dispatch`-ready** fixture once (no `schedule:`). **CIT-81** later shipped `.github/workflows/calendar-ingest.yml` with weekly Phase A + twice-daily `:12` due-row `schedule:` + dispatch (fixture signals; still no scrape-all / weekday wage-only cron).
 
-### Explicit non-goals
-`schedule:` cron; in-process `node-cron`; nest (006); restack / `campaignId` (CIT-69); meetings (007); Firecrawl / live fetch; UI. (Calendar reducer is CIT-79.)
+### Explicit non-goals (at land)
+In-process `node-cron`; Firecrawl / live fetch; UI. Nest / restack / meetings / calendar `schedule:` closed in later Wave 2 PRs.
 
-## Slice calendar reducer (CIT-79 — three-phase fixture clock)
+## Slice calendar reducer (CIT-79 — three-phase fixture clock) — landed PR #25
 
-**Pure `(row, now, signal) → row` reducer for phases A/B/C. Frozen `now` + checked-in signals. No DB table yet.**
+**Pure `(row, now, signal) → row` reducer for phases A/B/C. Frozen `now` + checked-in signals.** Persist + Actions due-row landed in CIT-81 (007).
 
 ### What works
 - `src/calendar/calendarReducer.js` + `scheduleMath.js`: statuses `scheduled` → `agenda_due` → `agenda_seen` → `confirmed` → `minutes_wait` → `ingested` | `unchanged` | `cancelled`.
@@ -201,10 +203,10 @@ Intended GitHub Actions job is **`workflow_dispatch` only** (no `schedule:` key 
 - Locks: Friday 06:00 empty ≠ blocked; Revised agenda updates pointer (zero triggers); morning absent cancels, blocked never cancels; `Final`+null file does not ingest; T+1 null stays wait (`changed=false`); library file ~+29d → one `ingested`; horizon 60d → `unchanged` and **stay closed**; wage pack still burns **2376** / clear **2200**.
 - Vitest: `src/calendar/calendarReducer.test.js`.
 
-### Explicit non-goals
-Migration `006`/`007`; `scheduled_meetings` table; nest FK; CIT-69 restack; live Legistar / Firecrawl; GitHub Actions `schedule:`; due-row sweep runner.
+### Explicit non-goals (at land; closed later in Wave 2)
+Live Legistar / Firecrawl. Migration `006`/`007`, nest, restack, Actions `schedule:`, and due-row runner landed in CIT-80 / CIT-69 / CIT-81.
 
-## Slice jurisdiction nest (CIT-80 — migration 006)
+## Slice jurisdiction nest (CIT-80 — migration 006) — landed PR #26
 
 **Peers do not bind; tiers nest. Home city + ancestors only. `NULL` jurisdiction matches no campaign.**
 
@@ -215,10 +217,10 @@ Migration `006`/`007`; `scheduled_meetings` table; nest FK; CIT-69 restack; live
 - Locks: home `mv` sees `mv`+ancestors; Sunnyvale peer does **not** apply to `mv`; missing outer tier = identity; burns **2376** / clear **2200**; `adapter: firecrawl` still rejected.
 - OpenAPI unchanged in CIT-80 (restack request surface is CIT-69).
 
-### Explicit non-goals
-Migration `007` / `scheduled_meetings`; live Legistar / Firecrawl; GitHub Actions `schedule:`; calendar reducer changes. (CIT-69 restack is a following slice.)
+### Explicit non-goals (at land)
+Live Legistar / Firecrawl. Migration `007` / Actions `schedule:` / restack landed in CIT-69 / CIT-81.
 
-## Slice campaign restack (CIT-69 — one campaign after ingest)
+## Slice campaign restack (CIT-69 — one campaign after ingest) — landed PR #27
 
 **Optional `campaignId` on ingest (default off). Nest filter before `clear_triggers` / `apply_trigger`. Failed restack does not delete triggers or mark ingest success.**
 
@@ -231,11 +233,11 @@ Migration `007` / `scheduled_meetings`; live Legistar / Firecrawl; GitHub Action
 - OpenAPI **0.8.7**.
 
 ### Explicit non-goals
-Migration `007` / `scheduled_meetings`; due-row cron / GitHub `schedule:` (landed in CIT-81); restack of every open campaign; live Firecrawl; `RESTACK_INGEST`; writing companies cash/burn/morale into `state_json`.
+Restack of every open campaign; live Firecrawl; `RESTACK_INGEST`; writing companies cash/burn/morale into `state_json`. (007 / due-row Actions landed in CIT-81.)
 
-## Slice scheduled meetings + due-row sweep (CIT-81 — migration 007)
+## Slice scheduled meetings + due-row sweep (CIT-81 — migration 007) — landed PR #28 @ `3420879`
 
-**Persist the three-phase clock in Postgres; weekly Phase A + twice-daily due-row Actions at `:12`.**
+**Persist the three-phase clock in Postgres; weekly Phase A + twice-daily due-row Actions at `:12`. Wave 2 complete.**
 
 ### What works
 - Migration `007_scheduled_meetings.sql`: `scheduled_meetings` (wave2 sketch + backoff/horizon helpers) with `UNIQUE (source_id, external_event_id)` and index `(status, next_check_at)`; `ingest_runs.scheduled_meeting_id` FK.
@@ -244,8 +246,8 @@ Migration `007` / `scheduled_meetings`; due-row cron / GitHub `schedule:` (lande
 - `npm run calendar:clock -- --phase-a|--due`; GitHub Actions `.github/workflows/calendar-ingest.yml` — weekly Phase A + twice-daily due at minute `:12`, plus `workflow_dispatch`. No scrape-all, no weekday wage-only cron, no T-3 06:00-only job.
 - OpenAPI **0.8.8** (`IngestRun.scheduledMeetingId`). Burns **2376** / clear **2200**; firecrawl rejected; peers still do not bind.
 
-### Explicit non-goals
-Live Legistar / Firecrawl GET; dampening; HNSW/embeddings; AI Judge; restack-all; editing migrations 001–006 in place; minutes→trigger interpretation pack (pointer only until a later fixture).
+### Explicit non-goals / backlog (eligible, not started)
+Live Legistar / Firecrawl GET; formula dampening; HNSW/embeddings; AI Judge; restack-all; editing migrations 001–006 in place; minutes→trigger interpretation pack (pointer only); companies peer read-model filter.
 
 ## Slice causal graph (P1-3 — rule registry is truth; diagram is a view)
 
