@@ -1,4 +1,9 @@
 import {
+  COMPANIES_READ_MODEL_HOME,
+  JURISDICTION_CHAIN_CTE,
+  resolveCreateTriggerJurisdiction
+} from '../src/jurisdictionNest.js';
+import {
   HYPE_BOUNDS,
   TALENT_COST_BOUNDS,
   TRIGGER_TYPES,
@@ -114,28 +119,60 @@ function baselineNumber(stored, current, fallback, places) {
   return firstFinite(places, stored, current, fallback);
 }
 
+async function triggerJurisdictionColumnReady(client) {
+  const result = await client.query(
+    `SELECT 1
+     FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name = 'real_world_triggers'
+       AND column_name = 'jurisdiction_id'
+     LIMIT 1`
+  );
+  return result.rowCount > 0;
+}
+
 // Recompute runs on trigger create, replace, delete, and clear. A company
 // inserted while triggers are already active keeps its own hype and talent
 // cost until the next one of those writes. That write captures a null
 // baseline from the row as it stands, so the new company does not inherit
 // effects that were applied before it existed.
-async function recomputeCompanies(client) {
+//
+// CIT-95: when jurisdiction_id exists, stack only home + ancestors (default mv).
+// Peers (sunnyvale) and NULL jurisdiction_id are fail-closed / omitted.
+export async function recomputeCompanies(
+  client,
+  { homeId = COMPANIES_READ_MODEL_HOME } = {}
+) {
   const companies = await client.query(
     `SELECT id, hype, talent_cost, hype_baseline, talent_cost_baseline
      FROM companies
      ORDER BY id
      FOR UPDATE`
   );
-  const effectRows = await client.query(
-    `SELECT t.client_id, so.name AS target_name, e.formula
-     FROM real_world_triggers t
-     JOIN effects e ON e.trigger_id = t.id AND e.is_active
-     JOIN simulation_objects so ON so.id = e.target_id
-     WHERE t.client_id IS NOT NULL
-       AND t.trigger_type = ANY($1::text[])
-     ORDER BY t.client_id, so.name`,
-    [TRIGGER_TYPES]
-  );
+  const nestReady = await triggerJurisdictionColumnReady(client);
+  const effectRows = nestReady
+    ? await client.query(
+        `${JURISDICTION_CHAIN_CTE}
+SELECT t.client_id, so.name AS target_name, e.formula
+FROM real_world_triggers t
+JOIN effects e ON e.trigger_id = t.id AND e.is_active
+JOIN simulation_objects so ON so.id = e.target_id
+WHERE t.client_id IS NOT NULL
+  AND t.trigger_type = ANY($2::text[])
+  AND t.jurisdiction_id IN (SELECT id FROM chain)
+ORDER BY t.client_id, so.name`,
+        [homeId, TRIGGER_TYPES]
+      )
+    : await client.query(
+        `SELECT t.client_id, so.name AS target_name, e.formula
+         FROM real_world_triggers t
+         JOIN effects e ON e.trigger_id = t.id AND e.is_active
+         JOIN simulation_objects so ON so.id = e.target_id
+         WHERE t.client_id IS NOT NULL
+           AND t.trigger_type = ANY($1::text[])
+         ORDER BY t.client_id, so.name`,
+        [TRIGGER_TYPES]
+      );
   const active = triggerModels(effectRows.rows);
   for (const company of companies.rows) {
     const baselines = {
@@ -169,27 +206,55 @@ export async function createTrigger(pool, payload) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const inserted = await client.query(
-      `INSERT INTO real_world_triggers
-         (client_id, source_url, extracted, trigger_type, label, scraped_at, processed)
-       VALUES ($1, $2, $3::jsonb, $4, $5, $6, true)
-       ON CONFLICT (client_id) DO UPDATE
-         SET source_url = EXCLUDED.source_url,
-             extracted = EXCLUDED.extracted,
-             trigger_type = EXCLUDED.trigger_type,
-             label = EXCLUDED.label,
-             scraped_at = EXCLUDED.scraped_at,
-             processed = true
-       RETURNING id`,
-      [
-        trigger.id,
-        trigger.source,
-        JSON.stringify(trigger),
-        trigger.type,
-        trigger.label,
-        trigger.timestamp
-      ]
-    );
+    const nestReady = await triggerJurisdictionColumnReady(client);
+    const jurisdictionId = nestReady
+      ? resolveCreateTriggerJurisdiction(trigger.id)
+      : null;
+    const inserted = nestReady
+      ? await client.query(
+          `INSERT INTO real_world_triggers
+             (client_id, source_url, extracted, trigger_type, label, scraped_at, processed, jurisdiction_id)
+           VALUES ($1, $2, $3::jsonb, $4, $5, $6, true, $7)
+           ON CONFLICT (client_id) DO UPDATE
+             SET source_url = EXCLUDED.source_url,
+                 extracted = EXCLUDED.extracted,
+                 trigger_type = EXCLUDED.trigger_type,
+                 label = EXCLUDED.label,
+                 scraped_at = EXCLUDED.scraped_at,
+                 processed = true,
+                 jurisdiction_id = EXCLUDED.jurisdiction_id
+           RETURNING id`,
+          [
+            trigger.id,
+            trigger.source,
+            JSON.stringify(trigger),
+            trigger.type,
+            trigger.label,
+            trigger.timestamp,
+            jurisdictionId
+          ]
+        )
+      : await client.query(
+          `INSERT INTO real_world_triggers
+             (client_id, source_url, extracted, trigger_type, label, scraped_at, processed)
+           VALUES ($1, $2, $3::jsonb, $4, $5, $6, true)
+           ON CONFLICT (client_id) DO UPDATE
+             SET source_url = EXCLUDED.source_url,
+                 extracted = EXCLUDED.extracted,
+                 trigger_type = EXCLUDED.trigger_type,
+                 label = EXCLUDED.label,
+                 scraped_at = EXCLUDED.scraped_at,
+                 processed = true
+           RETURNING id`,
+          [
+            trigger.id,
+            trigger.source,
+            JSON.stringify(trigger),
+            trigger.type,
+            trigger.label,
+            trigger.timestamp
+          ]
+        );
     const triggerId = inserted.rows[0].id;
     await client.query('DELETE FROM effects WHERE trigger_id = $1', [triggerId]);
     const impactNames = [];

@@ -1,6 +1,6 @@
 # Citizen Slices
 
-**Wave 2 status (2026-10-28):** complete on `main` @ `3420879` (PR #28). Path: CIT-68 (#23) → CIT-67 (#24) → CIT-79 (#25) → CIT-80 (#26) → CIT-69 (#27) → CIT-81 (#28). Migrations **`001`–`007`**; scheduled fixture ingest via Actions `:12`; nest + optional restack. Deferred backlog (not started): formula dampening, HNSW/embeddings, Firecrawl/AI Judge, minutes→trigger fixture, companies peer read-model filter. See [STATE.md](STATE.md).
+**Wave 2 status (2026-10-28):** complete on `main` @ `3420879` (PR #28). Path: CIT-68 (#23) → CIT-67 (#24) → CIT-79 (#25) → CIT-80 (#26) → CIT-69 (#27) → CIT-81 (#28). Migrations **`001`–`007`**; scheduled fixture ingest via Actions `:12`; nest + optional restack. CIT-95 (this PR): companies peer read-model filter. Remaining backlog: formula dampening, HNSW/embeddings, Firecrawl/AI Judge, minutes→trigger fixture. See [STATE.md](STATE.md).
 
 ## Slice 1 (completed in this iteration)
 **Tax policy modulates company burn rate, visible and adjustable.**
@@ -247,7 +247,20 @@ Restack of every open campaign; live Firecrawl; `RESTACK_INGEST`; writing compan
 - OpenAPI **0.8.8** (`IngestRun.scheduledMeetingId`). Burns **2376** / clear **2200**; firecrawl rejected; peers still do not bind.
 
 ### Explicit non-goals / backlog (eligible, not started)
-Live Legistar / Firecrawl GET; formula dampening; HNSW/embeddings; AI Judge; restack-all; editing migrations 001–006 in place; minutes→trigger interpretation pack (pointer only); companies peer read-model filter.
+Live Legistar / Firecrawl GET; formula dampening; HNSW/embeddings; AI Judge; restack-all; editing migrations 001–006 in place; minutes→trigger interpretation pack (pointer only).
+
+## Slice companies peer read-model (CIT-95)
+
+**Same nest chain filter on companies talent/hype recompute. Peers do not bind the gameplay burn/hype read model.**
+
+### What works
+- `recomputeCompanies` stacks only home + ancestors (`COMPANIES_READ_MODEL_HOME` = `mv`) when `jurisdiction_id` exists (006+); `NULL` fail-closed; Sunnyvale peer omitted.
+- `createTrigger` stamps known wage fixtures → `mv`, else gameplay home `mv` (peers still inserted with explicit peer id).
+- Reuses 006 nest helpers / SQL CTE — **no** new migration. OpenAPI unchanged (no contract change).
+- Locks: mv home ignores sunnyvale peer; chain ancestors still stack; wage→mv burn **2376** / clear **2200**; `adapter: firecrawl` rejected; CIT-69 restack path unchanged.
+
+### Explicit non-goals
+Formula dampening; HNSW/embeddings; Firecrawl / AI Judge; minutes→trigger fixture; new migration; OpenAPI bump.
 
 ## Slice causal graph (P1-3 — rule registry is truth; diagram is a view)
 

@@ -1,12 +1,17 @@
 /**
  * CIT-80 / migration 006 — jurisdiction nest filter.
  * CIT-69 — tier sort before buildTriggerRestackCommands (federal → city).
+ * CIT-95 — same chain filter for companies talent/hype recompute (read model).
  *
- * Applicable set for a campaign home city = that city + ancestors only.
+ * Applicable set for a campaign/companies home city = that city + ancestors only.
  * Peers (same tier, different id) do not apply. NULL jurisdiction_id on a
- * trigger matches no campaign (fail closed). Chain filter runs before
- * buildTriggerRestackCommands (CIT-69); this module does not commit turns.
+ * trigger matches no home (fail closed). Chain filter runs before
+ * buildTriggerRestackCommands (CIT-69) and before companies recompute (CIT-95);
+ * this module does not commit turns.
  */
+
+/** Default home for GET /api/companies talent/hype stack (campaigns DEFAULT). */
+export const COMPANIES_READ_MODEL_HOME = 'mv';
 
 /** Checked-in seed matching migrations/006_jurisdiction_nest.sql. */
 export const JURISDICTION_SEED = Object.freeze([
@@ -157,6 +162,15 @@ export function resolveJurisdictionForClientId(clientId) {
   if (typeof clientId !== 'string' || clientId === '') return null;
   if (clientId.startsWith(WAGE_BULLETIN_CLIENT_ID_PREFIX)) return 'mv';
   return null;
+}
+
+/**
+ * CIT-95 — jurisdiction for createTrigger when migration 006 is present.
+ * Known fixtures (wage → mv); otherwise gameplay home (COMPANIES_READ_MODEL_HOME).
+ * Peers must be inserted with an explicit peer id (not via this default).
+ */
+export function resolveCreateTriggerJurisdiction(clientId) {
+  return resolveJurisdictionForClientId(clientId) ?? COMPANIES_READ_MODEL_HOME;
 }
 
 /**

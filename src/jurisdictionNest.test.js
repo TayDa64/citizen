@@ -3,12 +3,14 @@ import { collectFixtureObservations } from './adapters/fixtureAdapter.js';
 import { runPipelineIngest, validateIngestRequest } from '../server/eventIngest.js';
 import { ingestObservation, toContractTrigger } from './eventPipeline.js';
 import {
+  COMPANIES_READ_MODEL_HOME,
   FILTER_TRIGGERS_FOR_HOME_SQL,
   JURISDICTION_CHAIN_CTE,
   JURISDICTION_SEED,
   ancestorChainIds,
   filterTriggersForHome,
   nestTriggersForRestack,
+  resolveCreateTriggerJurisdiction,
   resolveJurisdictionForClientId,
   sortTriggersForRestack,
 } from './jurisdictionNest.js';
@@ -203,5 +205,26 @@ describe('CIT-80 jurisdiction nest filter', () => {
         triggerCount: 1,
       }),
     ).toBe(true);
+  });
+
+  test('CIT-95 companies read-model home is mv; createTrigger stamps wage→mv else home', () => {
+    expect(COMPANIES_READ_MODEL_HOME).toBe('mv');
+    expect(
+      resolveCreateTriggerJurisdiction('evt-pipeline-obs-civic-wage-bulletin-x'),
+    ).toBe('mv');
+    expect(resolveCreateTriggerJurisdiction('evt-policy-mock')).toBe('mv');
+    expect(resolveJurisdictionForClientId('evt-policy-mock')).toBe(null);
+
+    const applicable = filterTriggersForHome(
+      [mvWage, sunnyvalePeer, countyStack],
+      COMPANIES_READ_MODEL_HOME,
+    );
+    const stacked = stackTriggerEffects(
+      { hype: 0.3, talentCost: 4000 },
+      applicable.map(({ id, effect }) => ({ id, effect })),
+    );
+    // county 0.02 × city wage 0.08 → 1.02 * 1.08
+    expect(stacked.talentCost).toBe(4406.4);
+    expect(applicable.some((row) => row.jurisdictionId === 'sunnyvale')).toBe(false);
   });
 });
