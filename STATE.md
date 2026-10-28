@@ -108,12 +108,17 @@ Migrations on `main`: **`001`–`007`**. OpenAPI **0.8.8**.
 - Restack only when Phase C publication trigger `changed=true`; 60d unchanged stays closed
 
 ## Next Highest-Priority Phases
+### Phase 16 — companies peer read-model filter (CIT-95) — this PR
+- Nest filter on `recomputeCompanies` (home `mv` + ancestors; NULL fail-closed; Sunnyvale ≠ mv)
+- `createTrigger` stamps jurisdiction (wage→`mv`, else home) when 006 present; reuse nest helpers; no new migration
+- Locks: peer excluded from companies talent/hype; ancestors stack; burns **2376** / clear **2200**; firecrawl rejected; restack path still correct
+- OpenAPI unchanged
+
 ### Backlog (eligible — not started; await direction)
 - Formula dampening
 - HNSW / embeddings
 - Firecrawl / AI Judge
 - Minutes→trigger fixture (minutes remain pointer-only)
-- Companies peer read-model filter
 
 ### Phase 2 continued — Complete business lifecycle (P0)
 - Product development, launch, funding, runway, exit as real mechanics
@@ -129,4 +134,4 @@ Migrations on `main`: **`001`–`007`**. OpenAPI **0.8.8**.
 - P1-4: live Postgres campaign reload still gated on `npm run test:api` when DB available.
 - CIT-81: meeting minutes ingest is pointer-only (no minutes→trigger fixture yet) — backlog.
 
-Last updated: 2026-10-28, Wave 2 complete on `main` @ `3420879` (PR #28).
+Last updated: 2026-10-28, CIT-95 companies peer read-model (this PR) on Wave 2 `main` @ `8b74eeb` (#29 docs / #28 product).
