@@ -1,0 +1,118 @@
+# CIT-81 — calendar Phase A + due-row sweep (fixture signals only).
+# Minute :12 (city-scrapers habit). workflow_dispatch beside both.
+# Rejected shapes: nightly full crawl, weekday wage-only cron, T-3 06:00-only.
+# Loopback / local-socket Postgres only — same shape as CI test-api.
+
+name: Calendar ingest
+
+on:
+  schedule:
+    # Weekly Phase A — Monday 14:12 UTC
+    - cron: '12 14 * * 1'
+    # Twice-daily due-row sweep — 06:12 and 18:12 UTC
+    - cron: '12 6,18 * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'phase_a (calendar sync) or due (due-row sweep)'
+        required: true
+        default: 'due'
+        type: choice
+        options:
+          - phase_a
+          - due
+
+jobs:
+  phase-a:
+    if: >
+      github.event_name == 'workflow_dispatch' && inputs.mode == 'phase_a'
+      || (github.event_name == 'schedule' && github.event.schedule == '12 14 * * 1')
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          check-latest: true
+
+      - name: Install Postgres + pgvector
+        run: |
+          set -eux
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+            postgresql postgresql-contrib build-essential git
+          PGVER=$(pg_lsclusters | awk 'NR>1 { print $1; exit }')
+          test -n "$PGVER"
+          sudo pg_ctlcluster "$PGVER" main start
+          if ! sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "postgresql-${PGVER}-pgvector"; then
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "postgresql-server-dev-${PGVER}"
+            git clone --branch v0.8.0 --depth 1 https://github.com/pgvector/pgvector.git /tmp/pgvector
+            make -C /tmp/pgvector
+            sudo make -C /tmp/pgvector install
+          fi
+          sudo -u postgres createuser -s "$USER" || true
+          sudo -u postgres psql -d postgres -c "CREATE EXTENSION IF NOT EXISTS vector;"
+          sudo -u postgres createdb citizen_calendar || true
+
+      - name: Install
+        run: npm ci
+
+      - name: Migrate + Phase A fixture sync
+        env:
+          DATABASE_URL: postgres:///citizen_calendar?host=/var/run/postgresql
+        run: |
+          set -eux
+          node server/migrate.js up
+          npm run calendar:clock -- --phase-a
+
+  due-sweep:
+    if: >
+      github.event_name == 'workflow_dispatch' && inputs.mode == 'due'
+      || (github.event_name == 'schedule' && github.event.schedule == '12 6,18 * * *')
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          check-latest: true
+
+      - name: Install Postgres + pgvector
+        run: |
+          set -eux
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+            postgresql postgresql-contrib build-essential git
+          PGVER=$(pg_lsclusters | awk 'NR>1 { print $1; exit }')
+          test -n "$PGVER"
+          sudo pg_ctlcluster "$PGVER" main start
+          if ! sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "postgresql-${PGVER}-pgvector"; then
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "postgresql-server-dev-${PGVER}"
+            git clone --branch v0.8.0 --depth 1 https://github.com/pgvector/pgvector.git /tmp/pgvector
+            make -C /tmp/pgvector
+            sudo make -C /tmp/pgvector install
+          fi
+          sudo -u postgres createuser -s "$USER" || true
+          sudo -u postgres psql -d postgres -c "CREATE EXTENSION IF NOT EXISTS vector;"
+          sudo -u postgres createdb citizen_calendar || true
+
+      - name: Install
+        run: npm ci
+
+      - name: Migrate + due-row sweep (fixtures)
+        env:
+          DATABASE_URL: postgres:///citizen_calendar?host=/var/run/postgresql
+        run: |
+          set -eux
+          node server/migrate.js up
+          # Seed MV council identity so a cold DB has rows; then sweep due.
+          npm run calendar:clock -- --phase-a
+          npm run calendar:clock -- --due

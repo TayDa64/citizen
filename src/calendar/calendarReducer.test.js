@@ -339,14 +339,17 @@ describe('calendar reducer — fixture registry + guards', () => {
     expect(isPastHorizon(row.startsAt, check, row.horizonDays)).toBe(false);
   });
 
-  test('no GitHub Actions schedule: creep and no migration 007 in calendar reducer', () => {
-    const workflows = readdirSync('.github/workflows');
-    for (const name of workflows) {
-      const body = readFileSync(`.github/workflows/${name}`, 'utf8');
-      expect(/^\s*schedule\s*:/m.test(body)).toBe(false);
-    }
+  test('ci.yml stays schedule-free; calendar-ingest may arm :12; 007 exists for CIT-81', () => {
+    const ci = readFileSync('.github/workflows/ci.yml', 'utf8');
+    expect(/^\s*schedule\s*:/m.test(ci)).toBe(false);
     const migrations = readdirSync('migrations');
-    // 006 nest may land after CIT-79; calendar reducer still must not ship 007.
-    expect(migrations.some((n) => n.startsWith('007'))).toBe(false);
+    expect(migrations.some((n) => n.startsWith('007'))).toBe(true);
+    const calendarWorkflow = readFileSync('.github/workflows/calendar-ingest.yml', 'utf8');
+    expect(/^\s*schedule\s*:/m.test(calendarWorkflow)).toBe(true);
+    expect(calendarWorkflow).toMatch(/cron:\s*'12 /);
+    expect(calendarWorkflow).toMatch(/workflow_dispatch/);
+    // No T-3 06:00-only job and no weekday wage-only scrape-all.
+    expect(calendarWorkflow).not.toMatch(/cron:\s*'0 6 \* \* 1-5'/);
+    expect(calendarWorkflow).not.toMatch(/npm run ingest:once/);
   });
 });

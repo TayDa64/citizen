@@ -7,13 +7,17 @@ import { startServer } from '../../server/index.js';
 test('OpenAPI document publishes TRIGGER_CONTRACT v1', () => {
   const spec = JSON.parse(fs.readFileSync('openapi.json', 'utf8'));
   assert.equal(spec.openapi, '3.0.3');
-  assert.equal(spec.info.version, '0.8.7');
+  assert.equal(spec.info.version, '0.8.8');
   assert.ok(spec.components.schemas.CivicMetrics);
   assert.ok(spec.components.schemas.PoliticsMetrics);
   assert.ok(spec.components.schemas.TurnLedgerEntry);
   assert.ok(spec.components.schemas.IngestRequest);
   assert.ok(spec.components.schemas.IngestResult);
   assert.ok(spec.components.schemas.IngestRun);
+  assert.equal(
+    spec.components.schemas.IngestRun.properties.scheduledMeetingId.format,
+    'uuid',
+  );
   assert.ok(spec.paths['/api/triggers/ingest']);
   assert.ok(spec.paths['/api/ingest/runs']);
   assert.deepEqual(

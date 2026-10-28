@@ -46,15 +46,17 @@ export const UP_MIGRATIONS = Object.freeze([
   'migrations/003_trigger_contract_v1.sql',
   'migrations/004_campaign_turns.sql',
   'migrations/005_ingest_runs.sql',
-  'migrations/006_jurisdiction_nest.sql'
+  'migrations/006_jurisdiction_nest.sql',
+  'migrations/007_scheduled_meetings.sql',
 ]);
 
 export const DOWN_MIGRATIONS = Object.freeze([
+  'migrations/007_scheduled_meetings.sql',
   'migrations/006_jurisdiction_nest.sql',
   'migrations/005_ingest_runs.sql',
   'migrations/004_campaign_turns.sql',
   'migrations/003_trigger_contract_v1.sql',
-  'migrations/002_real_world_trigger_effects.sql'
+  'migrations/002_real_world_trigger_effects.sql',
 ]);
 
 async function applyDirection(databaseUrl, direction) {

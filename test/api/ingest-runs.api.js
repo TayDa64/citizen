@@ -24,9 +24,34 @@ async function migratedDatabase() {
 }
 
 describe('CIT-68 ingest_runs', { concurrency: 1, timeout: 120_000 }, () => {
-  test('migration 005 creates ingest_runs without scheduled_meeting_id', async () => {
-    const db = await migratedDatabase();
+  test('migration 005 creates ingest_runs; 007 adds scheduled_meeting_id', async () => {
+    const db = await createThrowawayDatabase();
     try {
+      for (const file of UP_MIGRATIONS) {
+        await applyMigration(db.pool, file, 'up');
+        if (file === 'migrations/005_ingest_runs.sql') {
+          const columns005 = await db.pool.query(
+            `SELECT column_name
+             FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'ingest_runs'
+             ORDER BY ordinal_position`,
+          );
+          const names005 = columns005.rows.map((row) => row.column_name);
+          assert.deepEqual(names005, [
+            'id',
+            'started_at',
+            'finished_at',
+            'adapter',
+            'fixture_id',
+            'status',
+            'changed',
+            'error',
+            'trigger_client_ids',
+            'result_json',
+          ]);
+          assert.equal(names005.includes('scheduled_meeting_id'), false);
+        }
+      }
       const columns = await db.pool.query(
         `SELECT column_name
          FROM information_schema.columns
@@ -34,19 +59,7 @@ describe('CIT-68 ingest_runs', { concurrency: 1, timeout: 120_000 }, () => {
          ORDER BY ordinal_position`,
       );
       const names = columns.rows.map((row) => row.column_name);
-      assert.deepEqual(names, [
-        'id',
-        'started_at',
-        'finished_at',
-        'adapter',
-        'fixture_id',
-        'status',
-        'changed',
-        'error',
-        'trigger_client_ids',
-        'result_json',
-      ]);
-      assert.equal(names.includes('scheduled_meeting_id'), false);
+      assert.equal(names.includes('scheduled_meeting_id'), true);
     } finally {
       await db.close();
     }

@@ -60,14 +60,16 @@ test('migration 003 is additive and reversible in source', () => {
     'migrations/003_trigger_contract_v1.sql',
     'migrations/004_campaign_turns.sql',
     'migrations/005_ingest_runs.sql',
-    'migrations/006_jurisdiction_nest.sql'
+    'migrations/006_jurisdiction_nest.sql',
+    'migrations/007_scheduled_meetings.sql',
   ]);
   assert.deepEqual(DOWN_MIGRATIONS, [
+    'migrations/007_scheduled_meetings.sql',
     'migrations/006_jurisdiction_nest.sql',
     'migrations/005_ingest_runs.sql',
     'migrations/004_campaign_turns.sql',
     'migrations/003_trigger_contract_v1.sql',
-    'migrations/002_real_world_trigger_effects.sql'
+    'migrations/002_real_world_trigger_effects.sql',
   ]);
 });
 
@@ -113,6 +115,22 @@ test('migration 006 jurisdiction nest is additive and reversible in source', () 
   assert.match(parts.down, /DROP COLUMN IF EXISTS jurisdiction_id/);
   assert.match(parts.down, /DROP COLUMN IF EXISTS home_jurisdiction_id/);
   assert.match(parts.down, /DROP TABLE IF EXISTS jurisdictions/);
+});
+
+test('migration 007 scheduled_meetings is additive and reversible in source', () => {
+  const sql = fs.readFileSync('migrations/007_scheduled_meetings.sql', 'utf8');
+  const parts = splitMigration(sql);
+  assert.match(parts.up, /CREATE TABLE IF NOT EXISTS scheduled_meetings/);
+  assert.match(parts.up, /UNIQUE \(source_id, external_event_id\)/);
+  assert.match(parts.up, /'meeting', 'publication'/);
+  assert.match(parts.up, /'A', 'B', 'C'/);
+  assert.match(parts.up, /agenda_due/);
+  assert.match(parts.up, /minutes_wait/);
+  assert.match(parts.up, /idx_scheduled_meetings_due/);
+  assert.match(parts.up, /scheduled_meeting_id uuid REFERENCES scheduled_meetings/);
+  assert.doesNotMatch(parts.up, /001_initial|002_real_world|Firecrawl|node-cron/i);
+  assert.match(parts.down, /DROP COLUMN IF EXISTS scheduled_meeting_id/);
+  assert.match(parts.down, /DROP TABLE IF EXISTS scheduled_meetings/);
 });
 
 test('node:test filenames stay outside the vitest default include', () => {
