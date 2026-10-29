@@ -4,7 +4,7 @@ import { createCitizenApi } from '../citizenApi';
 /**
  * Campaign desk: bind GET /api/ingest/runs when API-backed.
  * No fake rows — empty / unavailable states only. Minutes appear via
- * scheduledMeetingId on real run rows (no nest/calendar GET).
+ * scheduledMeetingId on real run rows (calendar board is a sibling panel).
  */
 export default function IngestRunsPanel({ apiBase, refreshKey = 0 }) {
   const [runs, setRuns] = useState([]);
@@ -48,7 +48,8 @@ export default function IngestRunsPanel({ apiBase, refreshKey = 0 }) {
       <h3 id="ingest-runs-heading">Ingest runs</h3>
       <p className="ingest-runs-panel__blurb">
         Audit of <code>GET /api/ingest/runs</code> (fixture / http_stub → TRIGGER_CONTRACT). Minutes
-        gameplay shows up here when a run carries <code>scheduledMeetingId</code> — no calendar GET.
+        gameplay shows up here when a run carries <code>scheduledMeetingId</code>; the council
+        calendar panel lists meetings separately.
       </p>
 
       {status === 'offline' ? (

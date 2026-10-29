@@ -267,6 +267,32 @@ export function createCitizenApi({ fetchImpl = globalThis.fetch, baseUrl } = {})
       const suffix = query ? `?${query}` : '';
       return send(`/api/ingest/runs${suffix}`);
     },
+    /**
+     * Jurisdiction nest explorer (CIT-116 / OpenAPI 0.8.9).
+     * Optional home defaults to mv on the server. Peers bindHome=false.
+     */
+    getJurisdictionNest({ home } = {}) {
+      const params = new URLSearchParams();
+      if (home != null && home !== '') params.set('home', String(home));
+      const query = params.toString();
+      const suffix = query ? `?${query}` : '';
+      return send(`/api/jurisdictions${suffix}`);
+    },
+    /**
+     * Persisted scheduled_meetings calendar board (CIT-116 / OpenAPI 0.8.9).
+     * Optional limit, jurisdictionId, asOf (marks due). No invent.
+     */
+    listScheduledMeetings({ limit, jurisdictionId, asOf } = {}) {
+      const params = new URLSearchParams();
+      if (limit != null) params.set('limit', String(limit));
+      if (jurisdictionId != null && jurisdictionId !== '') {
+        params.set('jurisdictionId', String(jurisdictionId));
+      }
+      if (asOf != null && asOf !== '') params.set('asOf', String(asOf));
+      const query = params.toString();
+      const suffix = query ? `?${query}` : '';
+      return send(`/api/scheduled-meetings${suffix}`);
+    },
   };
 }
 

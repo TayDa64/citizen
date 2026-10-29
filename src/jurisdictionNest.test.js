@@ -8,8 +8,10 @@ import {
   JURISDICTION_CHAIN_CTE,
   JURISDICTION_SEED,
   ancestorChainIds,
+  buildJurisdictionNestView,
   filterTriggersForHome,
   nestTriggersForRestack,
+  peerJurisdictionIds,
   resolveCreateTriggerJurisdiction,
   resolveJurisdictionForClientId,
   sortTriggersForRestack,
@@ -68,6 +70,32 @@ describe('CIT-80 jurisdiction nest filter', () => {
       'mv',
       'sunnyvale',
     ]);
+  });
+
+  test('nest explorer view: sunnyvale peer bindsHome=false; chain binds', () => {
+    const nest = buildJurisdictionNestView('mv');
+    expect(nest.homeId).toBe('mv');
+    expect(nest.homeKnown).toBe(true);
+    expect(nest.chain.map((row) => row.id)).toEqual(['mv', 'sc_county', 'ca', 'us']);
+    expect(nest.chain.every((row) => row.bindsHome === true)).toBe(true);
+    expect(peerJurisdictionIds('mv')).toEqual(['sunnyvale']);
+    expect(nest.peers).toEqual([
+      {
+        id: 'sunnyvale',
+        name: 'Sunnyvale',
+        tier: 'city',
+        parentId: 'sc_county',
+        bindsHome: false,
+      },
+    ]);
+    expect(nest.jurisdictions.find((row) => row.id === 'sunnyvale').bindsHome).toBe(false);
+  });
+
+  test('unknown home nest view fails closed (empty chain/peers)', () => {
+    const nest = buildJurisdictionNestView('not-a-city');
+    expect(nest.homeKnown).toBe(false);
+    expect(nest.chain).toEqual([]);
+    expect(nest.peers).toEqual([]);
   });
 
   test('home mv sees mv + ancestors; sunnyvale peer does not apply', () => {

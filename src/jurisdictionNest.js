@@ -98,6 +98,76 @@ export function ancestorChainIds(homeId, jurisdictions = JURISDICTION_SEED) {
   return chain;
 }
 
+function mapJurisdictionPublic(row) {
+  return {
+    id: String(row.id),
+    name: row.name == null ? String(row.id) : String(row.name),
+    tier: row.tier == null ? null : String(row.tier),
+    parentId:
+      row.parentId == null && row.parent_id == null
+        ? null
+        : String(row.parentId ?? row.parent_id),
+  };
+}
+
+/**
+ * Peer units: same parent as home, different id (e.g. sunnyvale next to mv).
+ * Peers never bind the home campaign — fail closed.
+ */
+export function peerJurisdictionIds(homeId, jurisdictions = JURISDICTION_SEED) {
+  if (homeId == null || homeId === '') return [];
+  const byId = jurisdictionById(jurisdictions);
+  const home = String(homeId);
+  const homeRow = byId.get(home);
+  if (!homeRow) return [];
+  const parentId = homeRow.parentId ?? null;
+  const peers = [];
+  for (const row of byId.values()) {
+    if (row.id === home) continue;
+    const sameParent =
+      (row.parentId ?? null) === parentId
+      || (row.parentId == null && parentId == null);
+    if (!sameParent) continue;
+    if (row.tier != null && homeRow.tier != null && row.tier !== homeRow.tier) continue;
+    peers.push(row.id);
+  }
+  return peers.sort();
+}
+
+/**
+ * CIT-116 nest explorer projection — home ancestor chain + non-binding peers.
+ * Unknown home → empty chain / peers (fail closed). Does not invent jurisdictions.
+ */
+export function buildJurisdictionNestView(homeId, jurisdictions = JURISDICTION_SEED) {
+  const list = Array.isArray(jurisdictions) ? jurisdictions.map(mapJurisdictionPublic) : [];
+  const byId = jurisdictionById(list);
+  const home =
+    homeId == null || homeId === ''
+      ? COMPANIES_READ_MODEL_HOME
+      : String(homeId);
+  const homeKnown = byId.has(home);
+  const chainIds = homeKnown ? ancestorChainIds(home, list) : [];
+  const peerIds = homeKnown ? peerJurisdictionIds(home, list) : [];
+  const chainSet = new Set(chainIds);
+
+  return {
+    homeId: home,
+    homeKnown,
+    chain: chainIds.map((id) => ({
+      ...byId.get(id),
+      bindsHome: true,
+    })),
+    peers: peerIds.map((id) => ({
+      ...byId.get(id),
+      bindsHome: false,
+    })),
+    jurisdictions: list.map((row) => ({
+      ...row,
+      bindsHome: chainSet.has(row.id),
+    })),
+  };
+}
+
 /**
  * Filter triggers to those on the home ancestor chain.
  * NULL / missing jurisdictionId → omit (matches no campaign).

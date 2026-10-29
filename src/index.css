@@ -705,7 +705,9 @@ button:focus-visible {
 .campaign-desk .causal-rules-panel,
 .campaign-desk .trigger-panel,
 .campaign-desk .turn-ledger,
-.campaign-desk .ingest-runs-panel {
+.campaign-desk .ingest-runs-panel,
+.campaign-desk .nest-explorer,
+.campaign-desk .council-calendar {
   margin-left: 0;
   margin-right: 0;
 }
@@ -879,6 +881,96 @@ button:focus-visible {
 .ingest-runs-panel__error,
 .ingest-runs-panel__run-error {
   color: #fecaca;
+}
+
+.nest-explorer,
+.council-calendar {
+  margin: 0.75rem 0 0;
+  padding: 1rem;
+  background: #12121f;
+  border: 1px solid #334155;
+  border-radius: 12px;
+  color: #e2e8f0;
+}
+
+.nest-explorer h3,
+.council-calendar h3 {
+  margin: 0 0 0.35rem;
+  color: #f8fafc;
+}
+
+.nest-explorer__blurb,
+.council-calendar__blurb {
+  margin: 0 0 0.65rem;
+  color: #cbd5e1;
+  line-height: 1.4;
+  font-size: 0.9rem;
+}
+
+.nest-explorer__subhead {
+  margin: 0.75rem 0 0.35rem;
+  color: #e2e8f0;
+  font-size: 0.95rem;
+}
+
+.nest-explorer__chain,
+.nest-explorer__peers,
+.council-calendar__list {
+  margin: 0.35rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nest-explorer__node,
+.council-calendar__item {
+  margin: 0 0 0.5rem;
+  padding: 0.55rem 0.7rem;
+  background: #1e293b;
+  border-radius: 8px;
+  border-left: 4px solid #64748b;
+}
+
+.nest-explorer__node--binds {
+  border-left-color: #4ade80;
+}
+
+.nest-explorer__node--peer {
+  border-left-color: #f87171;
+}
+
+.nest-explorer__name {
+  display: block;
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.nest-explorer__meta,
+.council-calendar__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.75rem;
+  margin-top: 0.25rem;
+  font-size: 0.85rem;
+  color: #cbd5e1;
+}
+
+.nest-explorer__error,
+.council-calendar__error {
+  color: #fecaca;
+}
+
+.council-calendar__due {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #fde68a;
+}
+
+.council-calendar__when,
+.council-calendar__fixture {
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+  color: #cbd5e1;
 }
 
 .dashboard__authority {

@@ -271,6 +271,38 @@ describe('createCitizenApi', () => {
       'http://127.0.0.1:8787/api/ingest/runs?limit=10',
     );
   });
+
+  test('getJurisdictionNest hits GET /api/jurisdictions with optional home', async () => {
+    const nest = {
+      homeId: 'mv',
+      homeKnown: true,
+      chain: [],
+      peers: [],
+      jurisdictions: [],
+    };
+    const fetchImpl = vi.fn(async () => jsonResponse(nest));
+    const api = createCitizenApi({ fetchImpl, baseUrl: 'http://127.0.0.1:8787' });
+    await expect(api.getJurisdictionNest({ home: 'mv' })).resolves.toEqual(nest);
+    expect(String(fetchImpl.mock.calls[0][0])).toBe(
+      'http://127.0.0.1:8787/api/jurisdictions?home=mv',
+    );
+  });
+
+  test('listScheduledMeetings hits GET /api/scheduled-meetings with filters', async () => {
+    const rows = [];
+    const fetchImpl = vi.fn(async () => jsonResponse(rows));
+    const api = createCitizenApi({ fetchImpl, baseUrl: 'http://127.0.0.1:8787' });
+    await expect(
+      api.listScheduledMeetings({
+        limit: 5,
+        jurisdictionId: 'mv',
+        asOf: '2026-10-29T00:00:00.000Z',
+      }),
+    ).resolves.toEqual(rows);
+    expect(String(fetchImpl.mock.calls[0][0])).toBe(
+      'http://127.0.0.1:8787/api/scheduled-meetings?limit=5&jurisdictionId=mv&asOf=2026-10-29T00%3A00%3A00.000Z',
+    );
+  });
 });
 
 describe('loadCitizenWorld', () => {

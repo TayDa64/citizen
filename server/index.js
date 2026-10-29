@@ -17,12 +17,15 @@ import {
   listTurnCommits
 } from './campaigns.js';
 import { ingestAndPersist, listIngestRuns } from './eventIngest.js';
+import { getJurisdictionNest } from './jurisdictions.js';
+import { listScheduledMeetings } from './scheduledMeetings.js';
 import {
   mockTriggerPayload,
   TriggerValidationError,
   validateMockRequest
 } from '../src/triggerContract.js';
 import { TurnCommandError } from '../src/turnEngine.js';
+import { COMPANIES_READ_MODEL_HOME } from '../src/jurisdictionNest.js';
 
 const MAX_BODY_BYTES = 16 * 1024;
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
@@ -181,6 +184,34 @@ async function handleRequest(req, res, pool) {
     return;
   }
 
+  if (req.method === 'GET' && pathname === '/api/jurisdictions') {
+    const homeRaw = requestUrl.searchParams.get('home');
+    const homeId =
+      homeRaw == null || homeRaw.trim() === ''
+        ? COMPANIES_READ_MODEL_HOME
+        : homeRaw.trim();
+    sendJson(res, 200, await getJurisdictionNest(pool, homeId), origin);
+    return;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/scheduled-meetings') {
+    const limitRaw = requestUrl.searchParams.get('limit');
+    const limit = limitRaw == null ? 50 : Number(limitRaw);
+    const jurisdictionId = requestUrl.searchParams.get('jurisdictionId');
+    const asOf = requestUrl.searchParams.get('asOf');
+    sendJson(
+      res,
+      200,
+      await listScheduledMeetings(pool, {
+        limit,
+        jurisdictionId: jurisdictionId == null || jurisdictionId === '' ? null : jurisdictionId,
+        asOf: asOf == null || asOf === '' ? null : asOf,
+      }),
+      origin,
+    );
+    return;
+  }
+
   if (req.method === 'POST' && (pathname === '/api/triggers' || pathname === '/api/triggers/mock')) {
     const raw = await readBody(req);
     const contentType = req.headers['content-type'] || '';
@@ -269,6 +300,8 @@ async function handleRequest(req, res, pool) {
     pathname === '/api/triggers/mock' ||
     pathname === '/api/triggers/ingest' ||
     pathname === '/api/ingest/runs' ||
+    pathname === '/api/jurisdictions' ||
+    pathname === '/api/scheduled-meetings' ||
     pathname === '/api/companies' ||
     pathname === '/api/campaigns' ||
     /^\/api\/campaigns\/[^/]+$/.test(pathname) ||

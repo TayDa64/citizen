@@ -697,7 +697,8 @@ function App({ initialPlayerRole } = {}) {
           />
         ) : (
           <p className="island-hint" data-testid="ops-campaign-hint">
-            World events, causal hub, ingest runs, and the turn ledger live on the{' '}
+            World events, causal hub, jurisdiction nest, council calendar, ingest runs, and the
+            turn ledger live on the{' '}
             <button
               type="button"
               className="island-hint__link"
