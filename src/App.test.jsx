@@ -166,10 +166,11 @@ describe('world event trigger', () => {
 });
 
 describe('product header', () => {
-  test('describes tax and world events without Slice-1-only copy', () => {
+  test('describes campaign lens without Slice-1-only copy', () => {
     render(<App />);
     expect(screen.getByRole('heading', { level: 1, name: 'Citizen' })).toBeInTheDocument();
-    expect(screen.getByText(/budget headroom into hype/i)).toBeInTheDocument();
+    expect(screen.getByText(/campaign causal runner/i)).toBeInTheDocument();
+    expect(screen.getByTestId('island-switcher')).toBeInTheDocument();
     expect(screen.queryByText(/Slice 1/i)).not.toBeInTheDocument();
   });
 });

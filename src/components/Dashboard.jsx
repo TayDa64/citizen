@@ -40,6 +40,7 @@ import {
   talentEquation,
 } from '../triggers';
 import { loadChartAccessibility } from './loadChartAccessibility';
+import EmployeeRoster from './EmployeeRoster';
 import TurnLedger from './TurnLedger';
 import {
   axisGuideOptions,
@@ -249,7 +250,7 @@ function WorldEventEffect({ state }) {
   );
 }
 
-export default function Dashboard({ state, ledger = [] }) {
+export default function Dashboard({ state, ledger = [], showLedger = true, showPolitics = true }) {
   const factorClampNote = talentCostFactorClampNote(talentCostFactorClampOf(state));
   const { cash, burnRate } = state.history;
   const categories = cash.map((_, i) => simulatedMonthLabel(i));
@@ -283,15 +284,18 @@ export default function Dashboard({ state, ledger = [] }) {
   return (
     <div className="dashboard" style={{ padding: '1rem', background: '#12121f', color: '#e0e0e0' }}>
       <h3 style={{ margin: '0 0 0.5rem' }}>Company Metrics</h3>
+      <p className="dashboard__authority" data-testid="campaign-authority-note">
+        Cash and burn below are <strong>campaign authority</strong> (GameState / turn commits). Never copy GET /api/companies cash or burnRate.
+      </p>
       <dl className="metrics-grid">
         <div>
-          <dt>Cash</dt>
+          <dt>Campaign cash</dt>
           <dd>
             <span data-testid="cash-value">Cash: ${state.company.cash.toFixed(0)}</span>
           </dd>
         </div>
         <div>
-          <dt>Burn / month</dt>
+          <dt>Campaign burn / month</dt>
           <dd>
             <span id="burn-value" data-testid="burn-value">
               Burn/mo: {formatCurrency(previewBurnRate(state))}
@@ -347,10 +351,11 @@ export default function Dashboard({ state, ledger = [] }) {
         </div>
       </dl>
       <TalentBurnSummary state={state} />
+      <EmployeeRoster employees={state.employees} />
       <CivicFeedbackReadout state={state} />
-      <PoliticalSurvivalReadout state={state} />
+      {showPolitics ? <PoliticalSurvivalReadout state={state} /> : null}
       <WorldEventEffect state={state} />
-      <TurnLedger entries={ledger} />
+      {showLedger ? <TurnLedger entries={ledger} /> : null}
       <figure className="metrics-chart" aria-busy={ChartAccessibility === undefined}>
         <figcaption id="metrics-chart-description" className="chart-caption">
           {description}

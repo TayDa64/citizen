@@ -1,6 +1,6 @@
 # Citizen Slices
 
-**Wave 2 status (2026-10-28):** complete on `main` @ `3420879` (PR #28). Path: CIT-68 (#23) → CIT-67 (#24) → CIT-79 (#25) → CIT-80 (#26) → CIT-69 (#27) → CIT-81 (#28). Migrations **`001`–`007`**; scheduled fixture ingest via Actions `:12`; nest + optional restack. CIT-95 (#30): companies peer read-model. CIT-101 (#31): minutes→gameplay. CIT-107 (this PR): one allowlisted live fetch. Dampening **NO-GO**. HNSW / Firecrawl product / AI Judge stay reject/defer. See [STATE.md](STATE.md).
+**Wave 2 status (2026-10-28):** complete on `main` @ `3420879` (PR #28). Path: CIT-68 (#23) → CIT-67 (#24) → CIT-79 (#25) → CIT-80 (#26) → CIT-69 (#27) → CIT-81 (#28). Migrations **`001`–`007`**; scheduled fixture ingest via Actions `:12`; nest + optional restack. CIT-95 (#30): companies peer read-model. CIT-101 (#31): minutes→gameplay. CIT-107 (#32): allowlisted live fetch. CIT-113 (this PR): role select + company ops UI vertical. Dampening **NO-GO**. HNSW / Firecrawl product / AI Judge stay reject/defer. See [STATE.md](STATE.md).
 
 ## Slice 1 (completed in this iteration)
 **Tax policy modulates company burn rate, visible and adjustable.**
@@ -341,6 +341,20 @@ Support refreshes when tax/hype move; survival flips only on `advance_turn` (rec
 
 ### Explicit non-goals
 Full election calendar / parties; funding / exit / Firecrawl; changing Slice 1/2 burn baselines.
+
+## Slice role select + company ops (CIT-113 — first gameplay UI vertical)
+
+**Approach A dual islands: role is a lens on the same total backend; first modular desk = company ops.**
+
+### What works
+- Role select gate before the main desk (`company_ops` | `campaign`); island switcher after entry.
+- Persist: `localStorage` key `citizen.playerRole`; optional echo on campaign `state_json.playerRole` (no migration — `normalizeGameState` spreads unknown fields).
+- Company ops: tax budget + hire requisition forms → `set_tax` / `hire_employee` TurnCommands; Hire still on diagram node `3`; talent/hype/clamp + campaign-authority cash/burn chart; employee roster from real hire.
+- Campaign island: existing WorkflowDiagram + TriggerPanel + turn ledger / politics + `CAUSAL_RULES` registry panel (enter-campaign stub — no fake Democracy chrome).
+- Locks: Slice tax burns **2000 / 2200 / 2800**; fixture **2376** / clear **2200**; Hire-only; no inventory/Gantt/kanban/funding/exit; firecrawl rejected.
+
+### Explicit non-goals
+Nest/calendar GET UI; ingest-runs UI (next module); registration POST; HNSW; Convex; demographic popularity; full D4 causal hub redesign.
 
 ## Merge train
 

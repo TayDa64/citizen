@@ -1,6 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import WorkflowDiagram from './WorkflowDiagram';
+import CausalRulesPanel from './components/CausalRulesPanel';
+import CompanyOpsForms from './components/CompanyOpsForms';
 import Dashboard from './components/Dashboard';
+import IslandSwitcher from './components/IslandSwitcher';
+import RoleSelect from './components/RoleSelect';
 import TriggerPanel from './components/TriggerPanel';
 import {
   CONNECTED_NOTE,
@@ -17,6 +21,14 @@ import {
   readCitizenApiBase,
   skippedTriggerAlert,
 } from './citizenApi';
+import {
+  PLAYER_ROLE_CAMPAIGN,
+  PLAYER_ROLE_COMPANY_OPS,
+  parsePlayerRole,
+  readStoredPlayerRole,
+  roleLabel,
+  writeStoredPlayerRole,
+} from './playerRole';
 import {
   applyTrigger,
   clearTriggers,
@@ -74,9 +86,24 @@ function sourceNotes(reading) {
   return notes.join(' ');
 }
 
-function App() {
+function App({ initialPlayerRole } = {}) {
   const configuredBase = readCitizenApiBase();
-  const [state, setState] = useState(initialState);
+  const [playerRole, setPlayerRole] = useState(() => {
+    // Explicit null forces the role gate (tests); undefined falls back to storage.
+    if (initialPlayerRole === null) return null;
+    const fromProp = parsePlayerRole(initialPlayerRole);
+    if (fromProp) return fromProp;
+    return readStoredPlayerRole();
+  });
+  const [state, setState] = useState(() => {
+    const seededRole = initialPlayerRole === null
+      ? null
+      : (parsePlayerRole(initialPlayerRole) ?? readStoredPlayerRole());
+    return {
+      ...initialState,
+      playerRole: seededRole ?? undefined,
+    };
+  });
   const stateRef = useRef(state);
   stateRef.current = state;
   const [announcement, setAnnouncement] = useState('');
@@ -88,9 +115,23 @@ function App() {
   const [pipelineEvents, setPipelineEvents] = useState([]);
   const campaignIdRef = useRef(null);
 
+  const applyPlayerRole = (role) => {
+    const nextRole = writeStoredPlayerRole(role);
+    setPlayerRole(nextRole);
+    setState((prev) => {
+      const next = { ...prev, playerRole: nextRole ?? undefined };
+      stateRef.current = next;
+      return next;
+    });
+  };
+
   const showSampleData = (note) => {
-    setState(initialState);
-    stateRef.current = initialState;
+    const sample = {
+      ...initialState,
+      playerRole: playerRole ?? undefined,
+    };
+    setState(sample);
+    stateRef.current = sample;
     setApiBase(null);
     campaignIdRef.current = null;
     setLedger([]);
@@ -157,6 +198,8 @@ function App() {
         state: {
           taxRate: simState.taxRate,
           turn: simState.turn ?? 0,
+          // Lens only — no migration; normalizeGameState spreads unknown fields.
+          playerRole: parsePlayerRole(simState.playerRole) ?? playerRole ?? undefined,
           company: {
             cash: simState.company.cash,
             burnRate: simState.company.burnRate,
@@ -310,6 +353,17 @@ function App() {
   // cash drains only on advance_turn. Persists through campaign turns when live.
   const onHire = ({ department = 'tech', skill = 1 } = {}) => {
     void commitCommands([{ type: 'hire_employee', department, skill }]);
+  };
+
+  // Ops desk tax form: same TurnCommand path as the diagram civic-tax slider.
+  const onOpsSetTax = (taxRate) => {
+    void commitCommands(
+      [
+        { type: 'set_tax', taxRate },
+        { type: 'advance_turn' },
+      ],
+      { restackTriggers: true },
+    );
   };
 
   const refreshApi = async (baseUrl) => {
@@ -572,11 +626,36 @@ function App() {
     }
   };
 
+  if (!playerRole) {
+    return (
+      <div className="App" style={{ background: '#0f0f1a', minHeight: '100vh', color: 'white' }}>
+        <header style={{ padding: '1rem', background: '#1a1a2e', textAlign: 'center' }}>
+          <h1>Citizen</h1>
+          <p>Civic + Startup Simulation — one backend, two lenses</p>
+        </header>
+        <main>
+          <RoleSelect onSelect={applyPlayerRole} />
+        </main>
+      </div>
+    );
+  }
+
+  const isCompanyOps = playerRole === PLAYER_ROLE_COMPANY_OPS;
+  const isCampaign = playerRole === PLAYER_ROLE_CAMPAIGN;
+
   return (
     <div className="App" style={{ background: '#0f0f1a', minHeight: '100vh', color: 'white' }}>
       <header style={{ padding: '1rem', background: '#1a1a2e', textAlign: 'center' }}>
         <h1>Citizen</h1>
-        <p>Civic + Startup Simulation — tax moves city budget headroom into hype; world events shape burn and talent</p>
+        <p>
+          {isCompanyOps
+            ? 'Company ops desk — tax, hire, talent & burn (campaign authority). Same sim as campaign.'
+            : 'Campaign causal runner — world events, ledger, pathways. Same sim as company ops.'}
+        </p>
+        <IslandSwitcher role={playerRole} onChange={applyPlayerRole} />
+        <p className="role-active" data-testid="active-role-label">
+          Active lens: {roleLabel(playerRole)}
+        </p>
       </header>
       <main>
         <WorkflowDiagram state={state} setState={handleSetState} onTick={onTick} onHire={onHire} />
@@ -595,16 +674,43 @@ function App() {
             {actionError}
           </p>
         ) : null}
-        <TriggerPanel
+        {isCompanyOps ? (
+          <CompanyOpsForms
+            taxRate={state.taxRate}
+            onSetTax={onOpsSetTax}
+            onHire={onHire}
+          />
+        ) : null}
+        {isCampaign ? (
+          <TriggerPanel
+            state={state}
+            announcement={announcement}
+            busy={sourceBusy}
+            pipelineEvents={pipelineEvents}
+            onToggleTrigger={onToggleTrigger}
+            onClearTriggers={onClearTriggers}
+            onIngestFixture={onIngestFixture}
+          />
+        ) : (
+          <p className="island-hint" data-testid="ops-campaign-hint">
+            World events, ingest, and the turn ledger live on the{' '}
+            <button
+              type="button"
+              className="island-hint__link"
+              onClick={() => applyPlayerRole(PLAYER_ROLE_CAMPAIGN)}
+            >
+              Campaign
+            </button>{' '}
+            island — enter campaign when you want the causal runner.
+          </p>
+        )}
+        {isCampaign ? <CausalRulesPanel /> : null}
+        <Dashboard
           state={state}
-          announcement={announcement}
-          busy={sourceBusy}
-          pipelineEvents={pipelineEvents}
-          onToggleTrigger={onToggleTrigger}
-          onClearTriggers={onClearTriggers}
-          onIngestFixture={onIngestFixture}
+          ledger={ledger}
+          showLedger={isCampaign}
+          showPolitics={isCampaign}
         />
-        <Dashboard state={state} ledger={ledger} />
       </main>
     </div>
   );
