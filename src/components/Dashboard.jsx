@@ -8,12 +8,6 @@ import {
   formatHypeBias,
 } from '../civicFeedback';
 import { PATHWAY_BUDGET_HEADROOM_TO_HYPE, previewPathway } from '../pathways';
-import {
-  VOTER_SUPPORT_FLOOR,
-  defaultPolitics,
-  formatSurvivalStatus,
-  formatVoterSupport,
-} from '../politicalObjectives';
 import { talentCostShowsDollars } from '../dataSource';
 import { BASE_TALENT_COST, previewBurnRate } from '../simulation';
 import {
@@ -41,6 +35,7 @@ import {
 } from '../triggers';
 import { loadChartAccessibility } from './loadChartAccessibility';
 import EmployeeRoster from './EmployeeRoster';
+import PoliticsMeter from './PoliticsMeter';
 import TurnLedger from './TurnLedger';
 import {
   axisGuideOptions,
@@ -164,47 +159,6 @@ function CivicFeedbackReadout({ state }) {
           value={
             <span data-testid="civic-company-hype-value">
               {formatHypePercent(shownHype(state.company.hype))}
-            </span>
-          }
-        />
-      </dl>
-    </section>
-  );
-}
-
-function PoliticalSurvivalReadout({ state }) {
-  const civic = state.civic ?? computeCivicFromTax(state.taxRate);
-  const politics = state.politics ?? defaultPolitics(civic, state.company?.hype);
-  const floorPct = Math.round(VOTER_SUPPORT_FLOOR * 100);
-  return (
-    <section className="political-survival" aria-labelledby="political-survival-heading">
-      <h3 id="political-survival-heading">Political survival</h3>
-      <p>
-        Voter support = ½ budget headroom + ½ company hype. After Advance Month,
-        support below {floorPct}% ousts the incumbent (recoverable on a later advance).
-      </p>
-      <dl className="political-survival__stats">
-        <ReadoutRow
-          label="Voter support"
-          value={
-            <span data-testid="politics-voter-support-value">
-              {formatVoterSupport(politics.voterSupport)}
-            </span>
-          }
-        />
-        <ReadoutRow
-          label="Survival"
-          value={
-            <span data-testid="politics-survival-status-value">
-              {formatSurvivalStatus(politics.survivalStatus)}
-            </span>
-          }
-        />
-        <ReadoutRow
-          label="Survival floor"
-          value={
-            <span data-testid="politics-survival-floor-value">
-              {floorPct}%
             </span>
           }
         />
@@ -353,7 +307,7 @@ export default function Dashboard({ state, ledger = [], showLedger = true, showP
       <TalentBurnSummary state={state} />
       <EmployeeRoster employees={state.employees} />
       <CivicFeedbackReadout state={state} />
-      {showPolitics ? <PoliticalSurvivalReadout state={state} /> : null}
+      {showPolitics ? <PoliticsMeter state={state} /> : null}
       <WorldEventEffect state={state} />
       {showLedger ? <TurnLedger entries={ledger} /> : null}
       <figure className="metrics-chart" aria-busy={ChartAccessibility === undefined}>

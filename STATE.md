@@ -10,7 +10,7 @@
 
 Sequence complete. Post-merge regression on main 5f4f021: PASS (trace diag-20261026-8e1cd230), CI green.
 
-Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/Playwright; PR #12 authoritative turns; PR #13 campaign↔trigger coherence; PR #14 business lifecycle hire; PR #15 civic feedback; PR #16 connect pathways; PR #17 turn ledger; PR #18 real-world pipeline; PR #19 causal graph; PR #20 campaign acceptance; PR #21 political objectives; PR #22 test:api harness; **Wave 2** PR #23–#28 (ingest_runs → meetings + `:12`); peer #30; minutes #31; allowlisted live fetch #32 @ `3ca2b13`; CIT-113 role select + company ops (this PR).
+Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/Playwright; PR #12 authoritative turns; PR #13 campaign↔trigger coherence; PR #14 business lifecycle hire; PR #15 civic feedback; PR #16 connect pathways; PR #17 turn ledger; PR #18 real-world pipeline; PR #19 causal graph; PR #20 campaign acceptance; PR #21 political objectives; PR #22 test:api harness; **Wave 2** PR #23–#28 (ingest_runs → meetings + `:12`); peer #30; minutes #31; allowlisted live fetch #32; CIT-113 role select + company ops #33 @ `31b06a2`; CIT-114 campaign causal UI (this PR).
 
 **Rule:** Each PR must be green, rebased clean on main, and meet its acceptance criteria before the next is merged. Update this file after every merge.
 
@@ -127,17 +127,22 @@ Migrations on `main`: **`001`–`007`**. OpenAPI **0.8.8**.
 - CI network-off recorded bodies; `adapter: firecrawl` stays rejected; burns **2376** / clear **2200**; peers unbound; 60d closed
 - OpenAPI unchanged (no new adapter enum); dampening formula untouched
 
-### Phase 19 — role select + company ops UI (CIT-113) — this PR
+### Phase 19 — role select + company ops UI (CIT-113) — landed (PR #33 @ `31b06a2`)
 - Approach A dual islands: role select entry (**company ops** | **campaign**); role is a lens on the same backend
 - Persist role in `localStorage` (`citizen.playerRole`) + echo `playerRole` on campaign `state_json` (no migration)
 - Company ops desk: tax budget + hire requisition forms → TurnCommands; talent/hype/clamp; campaign-authority cash/burn chart; employee roster from real hire; Hire-only node 3
-- Campaign island: existing diagram + TriggerPanel + ledger/politics + `CAUSAL_RULES` registry panel (enter-campaign stub; no fake Democracy chrome)
-- Out of scope: nest/calendar GET UI, ingest-runs UI, inventory/Gantt/kanban/funding/exit, registration POST, HNSW, Convex
+- Campaign island enter-path stub: diagram + TriggerPanel + ledger/politics + `CAUSAL_RULES` registry list
 
-**Done-when (stop when green):** Role gate + island switch; ops forms drive `set_tax` / `hire_employee`; campaign path loads causal/ledger/triggers; burns **2376** / clear **2200** + Slice tax locks untouched; firecrawl rejected; `npm test` green.
+### Phase 20 — campaign causal UI vertical (CIT-114) — this PR
+- Coherent **Campaign desk**: politics meter (`voterSupport` + survivalFloor **0.25**), causal hub from real `CAUSAL_RULES` (green/red influence; hub = `company.burnRate`), TriggerPanel, turn ledger, ingest runs
+- Bind `GET /api/ingest/runs` via `listIngestRuns`; minutes via `scheduledMeetingId` on real rows only (no nest/calendar GET)
+- Role switch company↔campaign preserves `citizen.playerRole`
+- Out of scope: nest/calendar GET UI, company ops rewrite, HNSW, Convex, AI Judge, Firecrawl, fake demographics/inventory/Gantt
+
+**Done-when (stop when green):** Campaign desk coherent; causal edges from registry with polarity; politics floor visible; ingest bound or honest offline stub; lens persistence; burns **2376** / clear **2200** + Slice tax locks untouched; firecrawl rejected; `npm test` green; no OpenAPI/TRIGGER_CONTRACT/Slice burn changes unless read-only already in schema.
 
 ### Backlog (eligible — not started; await direction)
-- Ingest-runs UI (next modular Wave-1 surface)
+- Nest / calendar GET UI (Wave 1b — needs thin read APIs)
 - Formula dampening Adapt (**only if** SOT reopen bar fails — currently **NO-GO**)
 - HNSW / embeddings
 - Firecrawl product path / AI Judge (stay rejected)
@@ -156,4 +161,4 @@ Migrations on `main`: **`001`–`007`**. OpenAPI **0.8.8**.
 - P1-4: live Postgres campaign reload still gated on `npm run test:api` when DB available.
 - CIT-81 pointer-only minutes gap closed by CIT-101 (this PR).
 
-Last updated: 2026-10-29, CIT-113 role select + company ops UI (this PR); main tip `3ca2b13` (#32 allowlisted fetch).
+Last updated: 2026-10-29, CIT-114 campaign causal UI (this PR); main tip `31b06a2` (#33 role + company ops).

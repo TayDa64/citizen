@@ -5,8 +5,12 @@ import App from './App';
 import {
   PLAYER_ROLE_CAMPAIGN,
   PLAYER_ROLE_COMPANY_OPS,
+  PLAYER_ROLE_STORAGE_KEY,
+  readStoredPlayerRole,
   writeStoredPlayerRole,
 } from './playerRole';
+import { INFLUENCE_NEGATIVE } from './causalInfluence';
+import { TAX_BURN_RULE } from './causalGraph';
 
 describe('role select gate (CIT-113)', () => {
   test('shows role select when no role is set', () => {
@@ -34,7 +38,7 @@ describe('role select gate (CIT-113)', () => {
     expect(screen.getByTestId('employee-roster')).toBeInTheDocument();
   });
 
-  test('choosing campaign opens triggers and causal registry view', async () => {
+  test('choosing campaign opens campaign desk with triggers and causal hub', async () => {
     const user = userEvent.setup();
     writeStoredPlayerRole(null);
     render(<App initialPlayerRole={null} />);
@@ -42,6 +46,7 @@ describe('role select gate (CIT-113)', () => {
     await user.click(screen.getByTestId('role-campaign'));
 
     expect(screen.getByTestId('active-role-label')).toHaveTextContent(/campaign/i);
+    expect(screen.getByTestId('campaign-desk')).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'World events' })).toBeInTheDocument();
     expect(screen.getByTestId('causal-rules-panel')).toBeInTheDocument();
     expect(screen.queryByTestId('company-ops-forms')).not.toBeInTheDocument();
@@ -59,6 +64,22 @@ describe('role select gate (CIT-113)', () => {
 
     await user.click(screen.getByTestId('island-company-ops'));
     expect(screen.getByTestId('company-ops-forms')).toBeInTheDocument();
+  });
+
+  test('role switch persists citizen.playerRole lens across islands', async () => {
+    const user = userEvent.setup();
+    writeStoredPlayerRole(PLAYER_ROLE_COMPANY_OPS);
+    render(<App initialPlayerRole={PLAYER_ROLE_COMPANY_OPS} />);
+
+    expect(readStoredPlayerRole()).toBe(PLAYER_ROLE_COMPANY_OPS);
+    expect(globalThis.localStorage.getItem(PLAYER_ROLE_STORAGE_KEY)).toBe(PLAYER_ROLE_COMPANY_OPS);
+
+    await user.click(screen.getByTestId('island-campaign'));
+    expect(readStoredPlayerRole()).toBe(PLAYER_ROLE_CAMPAIGN);
+    expect(globalThis.localStorage.getItem(PLAYER_ROLE_STORAGE_KEY)).toBe(PLAYER_ROLE_CAMPAIGN);
+
+    await user.click(screen.getByTestId('island-company-ops'));
+    expect(readStoredPlayerRole()).toBe(PLAYER_ROLE_COMPANY_OPS);
   });
 });
 
@@ -99,10 +120,42 @@ describe('company ops forms drive TurnCommands', () => {
   });
 });
 
-describe('campaign island clarity', () => {
-  test('campaign role shows causal rules list from CAUSAL_RULES', () => {
+describe('campaign desk causal hub (CIT-114)', () => {
+  test('campaign desk shows politics meter with survivalFloor 0.25', () => {
     render(<App initialPlayerRole={PLAYER_ROLE_CAMPAIGN} />);
-    expect(screen.getByTestId('causal-rules-panel')).toBeInTheDocument();
+
+    const desk = screen.getByTestId('campaign-desk');
+    expect(within(desk).getByTestId('politics-meter')).toBeInTheDocument();
+    expect(within(desk).getByTestId('politics-survival-floor-value')).toHaveTextContent('25%');
+    expect(within(desk).getByTestId('politics-voter-support-meter')).toBeInTheDocument();
+    expect(within(desk).getByTestId('politics-voter-support-value')).toHaveTextContent('53%');
+  });
+
+  test('causal hub renders CAUSAL_RULES edges with green/red polarity', () => {
+    render(<App initialPlayerRole={PLAYER_ROLE_CAMPAIGN} />);
+
+    expect(screen.getByTestId('causal-hub')).toBeInTheDocument();
+    expect(screen.getByTestId('causal-hub-focus')).toHaveTextContent('company.burnRate');
+    expect(screen.getByTestId(`causal-rule-${TAX_BURN_RULE.id}`)).toHaveAttribute(
+      'data-polarity',
+      INFLUENCE_NEGATIVE,
+    );
     expect(screen.getByText(/rule\.tax→company\.burnRate/)).toBeInTheDocument();
+    expect(screen.getByTestId('causal-node-company.burnRate')).toHaveAttribute('data-hub', 'true');
+  });
+
+  test('campaign desk includes turn ledger and ingest runs surface', () => {
+    render(<App initialPlayerRole={PLAYER_ROLE_CAMPAIGN} />);
+
+    const desk = screen.getByTestId('campaign-desk');
+    expect(within(desk).getByTestId('turn-ledger')).toBeInTheDocument();
+    expect(within(desk).getByTestId('ingest-runs-panel')).toBeInTheDocument();
+    expect(within(desk).getByTestId('ingest-runs-offline')).toBeInTheDocument();
+  });
+
+  test('company ops hides campaign desk and ingest panel', () => {
+    render(<App initialPlayerRole={PLAYER_ROLE_COMPANY_OPS} />);
+    expect(screen.queryByTestId('campaign-desk')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('ingest-runs-panel')).not.toBeInTheDocument();
   });
 });

@@ -253,6 +253,24 @@ describe('createCitizenApi', () => {
     const api = createCitizenApi({ fetchImpl, baseUrl: 'http://127.0.0.1:8787' });
     await expect(api.createMock('news_spike')).rejects.toThrow(/between -1 and 1/);
   });
+
+  test('listIngestRuns hits GET /api/ingest/runs with optional limit', async () => {
+    const rows = [
+      {
+        id: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+        startedAt: '2026-10-29T00:00:00.000Z',
+        status: 'success',
+        changed: false,
+        triggerClientIds: [],
+      },
+    ];
+    const fetchImpl = vi.fn(async () => jsonResponse(rows));
+    const api = createCitizenApi({ fetchImpl, baseUrl: 'http://127.0.0.1:8787' });
+    await expect(api.listIngestRuns({ limit: 10 })).resolves.toEqual(rows);
+    expect(String(fetchImpl.mock.calls[0][0])).toBe(
+      'http://127.0.0.1:8787/api/ingest/runs?limit=10',
+    );
+  });
 });
 
 describe('loadCitizenWorld', () => {

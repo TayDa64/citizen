@@ -256,6 +256,17 @@ export function createCitizenApi({ fetchImpl = globalThis.fetch, baseUrl } = {})
       const suffix = query ? `?${query}` : '';
       return send(`/api/campaigns/${encodeURIComponent(id)}/turns${suffix}`);
     },
+    /**
+     * Recent ingest_runs audit rows (CIT-68 / OpenAPI 0.8.8).
+     * Newest first; optional limit 1..200 (server default 50).
+     */
+    listIngestRuns({ limit } = {}) {
+      const params = new URLSearchParams();
+      if (limit != null) params.set('limit', String(limit));
+      const query = params.toString();
+      const suffix = query ? `?${query}` : '';
+      return send(`/api/ingest/runs${suffix}`);
+    },
   };
 }
 
