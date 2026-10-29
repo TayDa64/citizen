@@ -1,6 +1,8 @@
 # CIT-81 — calendar Phase A + due-row sweep (fixture signals only).
+# CIT-107 — allowlisted Legistar MV HTTPS fetch outside API (recorded default).
 # Minute :12 (city-scrapers habit). workflow_dispatch beside both.
-# Rejected shapes: nightly full crawl, weekday wage-only cron, T-3 06:00-only.
+# Rejected shapes: nightly full crawl, weekday wage-only cron, T-3 06:00-only,
+# Firecrawl / webhook-202 / scrape-all / API keys in CI.
 # Loopback / local-socket Postgres only — same shape as CI test-api.
 
 name: Calendar ingest
@@ -14,13 +16,19 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'phase_a (calendar sync) or due (due-row sweep)'
+        description: 'phase_a | due | allowlisted (CIT-107 recorded/live fetch→reducer)'
         required: true
         default: 'due'
         type: choice
         options:
           - phase_a
           - due
+          - allowlisted
+      allowlisted_live:
+        description: 'CIT-107: when mode=allowlisted, use live HTTPS (default recorded / network-off)'
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   phase-a:
@@ -116,3 +124,61 @@ jobs:
           # Seed MV council identity so a cold DB has rows; then sweep due.
           npm run calendar:clock -- --phase-a
           npm run calendar:clock -- --due
+
+  # CIT-107 — allowlisted host fetch outside API process.
+  # Default: recorded body (network-off). Live HTTPS only when dispatch sets allowlisted_live.
+  allowlisted-fetch:
+    if: >
+      github.event_name == 'workflow_dispatch' && inputs.mode == 'allowlisted'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          check-latest: true
+
+      - name: Install Postgres + pgvector
+        run: |
+          set -eux
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+            postgresql postgresql-contrib build-essential git
+          PGVER=$(pg_lsclusters | awk 'NR>1 { print $1; exit }')
+          test -n "$PGVER"
+          sudo pg_ctlcluster "$PGVER" main start
+          if ! sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "postgresql-${PGVER}-pgvector"; then
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "postgresql-server-dev-${PGVER}"
+            git clone --branch v0.8.0 --depth 1 https://github.com/pgvector/pgvector.git /tmp/pgvector
+            make -C /tmp/pgvector
+            sudo make -C /tmp/pgvector install
+          fi
+          sudo -u postgres createuser -s "$USER" || true
+          sudo -u postgres psql -d postgres -c "CREATE EXTENSION IF NOT EXISTS vector;"
+          sudo -u postgres createdb citizen_calendar || true
+
+      - name: Install
+        run: npm ci
+
+      - name: Allowlisted fetch → reducer / http_stub ingest (outside API)
+        env:
+          DATABASE_URL: postgres:///citizen_calendar?host=/var/run/postgresql
+          CITIZEN_ALLOWLISTED_FETCH: ${{ inputs.allowlisted_live && 'live' || 'recorded' }}
+        run: |
+          set -eux
+          node server/migrate.js up
+          # Phase A: allowlisted calendar envelope → same three-phase reducer.
+          if [ "${CITIZEN_ALLOWLISTED_FETCH}" = "live" ]; then
+            npm run fetch:allowlisted -- --live --kind calendar --apply
+          else
+            npm run fetch:allowlisted -- --recorded --kind calendar --apply
+          fi
+          # Minutes recorded body → http_stub ingestAndPersist (CI network-off).
+          # Live minutes path stays recorded here — no second host / Firecrawl.
+          npm run fetch:allowlisted -- --recorded --kind minutes --ingest-http-stub
+          # Blocked envelope → changed=false (no pointer delete).
+          npm run fetch:allowlisted -- --recorded --kind blocked

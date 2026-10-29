@@ -1,0 +1,9 @@
+{
+  "kind": "calendar_fetch",
+  "sourceId": "legistar:mountainview",
+  "fetchedUrl": "https://mountainview.legistar.com/Calendar.aspx",
+  "fetchedAt": "2026-07-06T20:12:00.000Z",
+  "status": 200,
+  "ok": true,
+  "bodyText": "<html><body><a href=\"MeetingDetail.aspx?ID=3367\">City Council</a><a href=\"MeetingDetail.aspx?ID=3363\">City Council</a><a href=\"MeetingDetail.aspx?ID=3458\">Board of Library Trustees</a></body></html>"
+}

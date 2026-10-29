@@ -1,6 +1,6 @@
 # Citizen Slices
 
-**Wave 2 status (2026-10-28):** complete on `main` @ `3420879` (PR #28). Path: CIT-68 (#23) → CIT-67 (#24) → CIT-79 (#25) → CIT-80 (#26) → CIT-69 (#27) → CIT-81 (#28). Migrations **`001`–`007`**; scheduled fixture ingest via Actions `:12`; nest + optional restack. CIT-95 (#30): companies peer read-model. CIT-101 (this PR): minutes→gameplay vertical. Remaining backlog: dampening Adapt (only if bar fails), HNSW/embeddings, Firecrawl/AI Judge. See [STATE.md](STATE.md).
+**Wave 2 status (2026-10-28):** complete on `main` @ `3420879` (PR #28). Path: CIT-68 (#23) → CIT-67 (#24) → CIT-79 (#25) → CIT-80 (#26) → CIT-69 (#27) → CIT-81 (#28). Migrations **`001`–`007`**; scheduled fixture ingest via Actions `:12`; nest + optional restack. CIT-95 (#30): companies peer read-model. CIT-101 (#31): minutes→gameplay. CIT-107 (this PR): one allowlisted live fetch. Dampening **NO-GO**. HNSW / Firecrawl product / AI Judge stay reject/defer. See [STATE.md](STATE.md).
 
 ## Slice 1 (completed in this iteration)
 **Tax policy modulates company burn rate, visible and adjustable.**
@@ -276,6 +276,24 @@ Formula dampening production change; HNSW/embeddings; Firecrawl / AI Judge; new 
 
 ### Explicit non-goals
 Gemini decay / soft dampening production change; HNSW; Firecrawl enable; AI Judge; restack-all; cash writes; calendar/nest/runs UI; editing `001`–`007` in place; fixture-only intermediate PR.
+
+## Slice allowlisted live fetch (CIT-107)
+
+**One allowlisted HTTPS host (Legistar MV already in catalog) fetched outside the API process; same three-phase reducer + `http_stub` / recorded CI body.**
+
+### What works
+- Git SOT allowlist: `src/sourceAllowlist.js` — host `mountainview.legistar.com`, Calendar + MeetingDetail catalog URLs (HTTPS, no userinfo).
+- Mapper `src/adapters/allowlistedHttps.js` (narrow name — **not** Firecrawl): recorded/live envelope → `calendar_sync` / `minutes_check` signals + `http_stub` Observation bodies.
+- Recorded bodies under `src/adapters/recorded/` (network-off CI). CLI `npm run fetch:allowlisted` (`--recorded` default, `--live` Actions opt-in).
+- Actions `.github/workflows/calendar-ingest.yml` mode `allowlisted`: fetch outside API → Phase A reducer apply + minutes `http_stub` ingest; blocked envelope → `changed=false`.
+- Blocked/empty → `changed=false`, no pointer/trigger delete. Ingest remains sync **201** via existing `ingestAndPersist`. Burns **2376** / clear **2200**; peers unbound; 60d closed; `adapter: firecrawl` rejected.
+- OpenAPI **unchanged** (adapter enum still `fixture` | `http_stub` only).
+
+### Done-when
+Allowlisted host fetches in Actions (outside API), maps into the existing reducer, CI remains network-off with recorded body, blocked/empty → `changed=false`, locks hold. **Stop** — no second host, Monitoring, webhook-202, or Firecrawl product enable without new direction.
+
+### Explicit non-goals
+`adapter: firecrawl`; webhook-202; Firecrawl Monitoring changeTracking; AI Judge; restack-all; `RESTACK_INGEST`; API keys in CI; scrape-all; second host; HNSW; dampening formula Adapt; calendar/nest UI; editing `001`–`007` in place; thin readiness stub without fetch→reducer→ingest proof.
 
 ## Slice causal graph (P1-3 — rule registry is truth; diagram is a view)
 

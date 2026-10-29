@@ -1,0 +1,10 @@
+{
+  "kind": "calendar_fetch",
+  "sourceId": "legistar:mountainview",
+  "fetchedUrl": "https://mountainview.legistar.com/Calendar.aspx",
+  "fetchedAt": "2026-07-06T20:12:00.000Z",
+  "status": 0,
+  "ok": false,
+  "error": "legistar_unreachable",
+  "bodyText": ""
+}
