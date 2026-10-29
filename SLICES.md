@@ -1,6 +1,6 @@
 # Citizen Slices
 
-**Wave 2 status (2026-10-28):** complete on `main` @ `3420879` (PR #28). Path: CIT-68 (#23) → CIT-67 (#24) → CIT-79 (#25) → CIT-80 (#26) → CIT-69 (#27) → CIT-81 (#28). Migrations **`001`–`007`**; scheduled fixture ingest via Actions `:12`; nest + optional restack. CIT-95 (#30): companies peer read-model. CIT-101 (#31): minutes→gameplay. CIT-107 (#32): allowlisted live fetch. CIT-113 (#33): role select + company ops. CIT-114 (this PR): campaign causal UI vertical. Dampening **NO-GO**. HNSW / Firecrawl product / AI Judge stay reject/defer. See [STATE.md](STATE.md).
+**Wave 2 status (2026-10-28):** complete on `main` @ `3420879` (PR #28). Path: CIT-68 (#23) → CIT-67 (#24) → CIT-79 (#25) → CIT-80 (#26) → CIT-69 (#27) → CIT-81 (#28). Migrations **`001`–`007`**; scheduled fixture ingest via Actions `:12`; nest + optional restack. CIT-95 (#30): companies peer read-model. CIT-101 (#31): minutes→gameplay. CIT-107 (#32): allowlisted live fetch. CIT-113 (#33): role select + company ops. CIT-114 (#34): campaign causal UI. CIT-116 (this PR): nest explorer + council calendar reads/UI (OpenAPI **0.8.9**). Dampening **NO-GO**. HNSW / Firecrawl product / AI Judge stay reject/defer. See [STATE.md](STATE.md).
 
 ## Slice 1 (completed in this iteration)
 **Tax policy modulates company burn rate, visible and adjustable.**
@@ -67,7 +67,7 @@ Slice 3 (authoritative turns) — see below and [STATE.md](STATE.md) Phase 1.
 
 ### API dependency
 
-Live company and world-event data comes from Citizen API OpenAPI **0.8.8** (CIT-81 scheduledMeetingId + CIT-69 optional campaign restack + ingest_runs audit + political survival + real-world ingest + turn ledger + civic feedback + hire TurnCommand + campaign turns + prior 0.7.1 talent fields). Trigger contract paths below still apply.
+Live company and world-event data comes from Citizen API OpenAPI **0.8.9** (CIT-116 jurisdictions nest + scheduled-meetings reads; CIT-81 scheduledMeetingId + CIT-69 optional campaign restack + ingest_runs audit + political survival + real-world ingest + turn ledger + civic feedback + hire TurnCommand + campaign turns + prior 0.7.1 talent fields). Trigger contract paths below still apply.
 
 **Authority boundary:** The companies service is the source of truth for hype, talent cost, baselines, and (until a campaign hire) talent multiplier / mix / factors. After `hire_employee`, campaign GameState owns the roster. `hydrateFromApi` / `readApiSnapshot` never copy `company.cash` or `company.burnRate` from the companies payload. Cash / burn history / tax / turn / hire commit through the turn engine and, when connected, `POST /api/campaigns/{id}/turns`. Advance Month never POSTs to `/api/companies`.
 
@@ -87,7 +87,7 @@ Live company and world-event data comes from Citizen API OpenAPI **0.8.8** (CIT-
 
 `APPLY_TALENT_COST_TO_BURN` in `src/talentMultiplier.js` is on. Trigger talent cost scales burn in local mode and API mode. `talentMultiplier` stays employee-only.
 
-OpenAPI **0.8.8** (CIT-81 `scheduledMeetingId` + CIT-69 optional `campaignId` restack + CIT-68 `ingest_runs` + political `GameState.politics` + prior 0.8.4 ingest / 0.8.3 ledger / 0.8.2 civic / hire / turns / 0.7.1 talent) includes `talentCostFactor` and `effectiveMultiplier` on `GET /api/companies`, campaign GameState / TurnCommand routes, `GameState.civic` (`budgetHeadroom`, `hypeBias`), `GameState.politics` (`voterSupport`, `survivalStatus`, `survivalFloor`), shaped turn ledger entries, fixture/http_stub ingest behind TRIGGER_CONTRACT v1, and `GET /api/ingest/runs`. `talentMultiplier` remains employee-only. A 0.5.0 payload omits the new talent fields and the client computes them. Parsing stays in `src/talentMultiplier.js`. A missing Host is 400 `Host required`, two Host headers are 400 `Duplicate host`, and any other host is 403 `Forbidden host`. Those alerts keep the current numbers. Hype outside 0–1 and talent cost outside $0–$9,999,999,999.99 are clamped, and the status says so.
+OpenAPI **0.8.9** (CIT-116 `GET /api/jurisdictions` + `GET /api/scheduled-meetings`; CIT-81 `scheduledMeetingId` + CIT-69 optional `campaignId` restack + CIT-68 `ingest_runs` + political `GameState.politics` + prior 0.8.4 ingest / 0.8.3 ledger / 0.8.2 civic / hire / turns / 0.7.1 talent) includes nest explorer + council calendar reads, `talentCostFactor` and `effectiveMultiplier` on `GET /api/companies`, campaign GameState / TurnCommand routes, `GameState.civic` (`budgetHeadroom`, `hypeBias`), `GameState.politics` (`voterSupport`, `survivalStatus`, `survivalFloor`), shaped turn ledger entries, fixture/http_stub ingest behind TRIGGER_CONTRACT v1, and `GET /api/ingest/runs`. `talentMultiplier` remains employee-only. A 0.5.0 payload omits the new talent fields and the client computes them. Parsing stays in `src/talentMultiplier.js`. A missing Host is 400 `Host required`, two Host headers are 400 `Duplicate host`, and any other host is 403 `Forbidden host`. Those alerts keep the current numbers. Hype outside 0–1 and talent cost outside $0–$9,999,999,999.99 are clamped, and the status says so.
 
 ## Slice lifecycle hire (P0 business lifecycle — first PR)
 
@@ -367,7 +367,20 @@ Nest/calendar GET UI; registration POST; HNSW; Convex; demographic popularity; f
 - Island switch preserves `citizen.playerRole`; Hire stays company/node-3; no OpenAPI / TRIGGER_CONTRACT / Slice burn changes.
 
 ### Explicit non-goals
-Nest/calendar GET UI; company ops rewrite; demographic popularity; inventory/Gantt/funding/exit; HNSW; Convex; AI Judge; Firecrawl.
+Nest/calendar GET UI (moved to CIT-116); company ops rewrite; demographic popularity; inventory/Gantt/funding/exit; HNSW; Convex; AI Judge; Firecrawl.
+
+## Slice nest explorer + council calendar (CIT-116 — Wave 1b)
+
+**Thin OpenAPI reads for 006/007 then campaign-island bind-only UI. Peers do not bind. No invent meetings.**
+
+### What works
+- `GET /api/jurisdictions?home=` (default `mv`): ancestor chain with `bindsHome=true`; same-parent peers (sunnyvale) with `bindsHome=false`; unknown home → empty chain/peers (fail closed). OpenAPI **0.8.9**.
+- `GET /api/scheduled-meetings?limit=&jurisdictionId=&asOf=`: lists persisted `scheduled_meetings` only; optional `asOf` annotates `due`. No create/update on these routes.
+- Campaign desk: `NestExplorer` + `CouncilCalendarPanel` modular panels; company ops keeps optional campaign hint. Offline = honest stubs (no fake rows).
+- Locks: role lens; Slice tax **2000/2200/2800**; fixture **2376** / clear **2200**; TRIGGER_CONTRACT **hype** + **talentCost** only; `adapter: firecrawl` rejected.
+
+### Explicit non-goals
+Company inventory/Gantt; fake registration; HNSW; Convex; AI Judge; Firecrawl in-process; meeting invent/writes; dampening Adapt.
 
 ## Merge train
 

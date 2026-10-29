@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Citizen API",
-    "version": "0.8.8",
-    "description": "TRIGGER_CONTRACT v1. effect.hype is an absolute delta on the 0..1 scale and the result is clamped to 0..1. effect.talentCost is a relative delta: 0.12 multiplies companies.talent_cost by 1.12 and the result is floored at 0. At least one effect must be non-zero. Posting the same id replaces that trigger and reapplies the stack from each company's captured baseline; it does not stack a second copy. DELETE /api/triggers/{id} removes one trigger. DELETE /api/triggers clears every v1 trigger and restores hype and talent cost to the captured baselines. Input deltas are bounded (hype -1..1, talentCost -100..100, at most 4 decimal places) so the NUMERIC(12,2) talent column cannot overflow from a single field. A company inserted while triggers are already active keeps its own hype and talent cost until the next trigger create, replace, delete, or clear. talentMultiplier stays the 0.5.0 employee mean. talentCostFactor is the stacked ratio talentCost / baselines.talentCost, clamped once to [0.1, 3] and rounded to 4 decimal places. It is 1, and talentCostFactorClamped is false, when there is no trigger or the baseline is missing, 0, negative, or non-finite. talentCostFactorClamped is true only when the raw ratio fell outside that range. Stored talentCost and hype stay raw. effectiveMultiplier is round(talentMultiplier * talentCostFactor, 4). API burnRate is round(baseBurnRate * talentMultiplier * talentCostFactor), rounded once, with no tax. The client simulation uses the same product after baseBurnRate = round(2000 * (1 + taxRate * 0.4)). Trigger writes do not change stored companies.burn_rate or companies.cash. A null, blank, NaN, or Infinity skill counts as 0.5. An empty talentMix means talentMultiplier is 1; contributions sum to talentMultiplier only when the mix is non-empty. The Host header must be localhost, 127.0.0.1, or [::1] on the bound port; anything else is 403. A missing Host is 400 {\"error\":\"Host required\"}. More than one Host header is 400 {\"error\":\"Duplicate host\"}. A validation failure is 400 with error and an issues array. A method the route does not implement is 405 {\"error\":\"Method not allowed\",\"issues\":[]}. Campaign turns (0.8.0): POST /api/campaigns creates a versioned GameState. POST /api/campaigns/{id}/turns atomically commits a TurnCommand (set_tax, advance_turn, apply_trigger, remove_trigger, clear_triggers) and appends a turn_commits ledger row in the same transaction; a failed commit leaves no partial advance. GET /api/campaigns/{id} reloads the last committed state. GET /api/companies cash and burnRate remain non-authoritative for the client sim. TurnCommand hire_employee appends an employee to campaign GameState, recomputes talentMultiplier / burn preview, and drains cash only on advance_turn. Civic feedback (0.8.2): GameState.civic.budgetHeadroom = clamp(1 - taxRate, 0, 1); civic.hypeBias = (budgetHeadroom - 0.75) * 0.2 folds into company.hype on set_tax (bias 0 at 25% tax). Does not change Slice 1 burn baselines. civic-infra shows budget headroom as a readout only. Turn ledger (0.8.3): GET /api/campaigns/{id}/turns returns recent append-only ledger entries (seq, turnBefore/turnAfter, command, before/after metrics, appliedEffects, explanations). POST commit persists before/after in turn_commits.result_json. Optional ?limit= (1..200, default 50) returns the most recent N in ascending seq order. Chart history remains a 24-month client ring buffer; the ledger is the durable decision log. Real-world pipeline (0.8.4): POST /api/triggers/ingest runs observation \u2192 interpretation \u2192 validated TRIGGER_CONTRACT effect with lifecycle (discovered/normalized \u2192 pending/active \u2192 expired/cleared). Default adapter is fixture (civic-wage-bulletin); http_stub accepts preloaded observations. Supersession and same-id replace never compound. Firecrawl is not required; live scrape can later implement the same Observation shape. Political survival (0.8.5): GameState.politics.voterSupport = 0.5*civic.budgetHeadroom + 0.5*company.hype (0..1). On advance_turn, voterSupport < 0.25 \u2192 survivalStatus ousted; otherwise incumbent. Support refreshes with tax/hype; survival flips only after turn advance. Does not change Slice 1 burn baselines. Ingest audit (0.8.6 / CIT-68): every POST /api/triggers/ingest inserts an ingest_runs row (status success|error; validation failure is not success). GET /api/ingest/runs?limit= (1..200, default 50) lists recent runs newest first on loopback. adapter firecrawl stays rejected. Migration 005 only \u2014 scheduled_meeting_id waits for 007. Campaign restack (0.8.7 / CIT-69): optional IngestRequest.campaignId (UUID, default omitted/off) restacks that one campaign after a changed ingest \u2014 nest filter (006) then clear_triggers + apply_trigger via commitTurn. changed=false / zero triggers \u2192 no commitTurn. Failed restack keeps real_world_triggers and records ingest_runs status=error. Does not write companies.cash / burn_rate / morale; no RESTACK_INGEST; no restack of every open campaign; firecrawl still rejected."
+    "version": "0.8.9",
+    "description": "TRIGGER_CONTRACT v1. effect.hype is an absolute delta on the 0..1 scale and the result is clamped to 0..1. effect.talentCost is a relative delta: 0.12 multiplies companies.talent_cost by 1.12 and the result is floored at 0. At least one effect must be non-zero. Posting the same id replaces that trigger and reapplies the stack from each company's captured baseline; it does not stack a second copy. DELETE /api/triggers/{id} removes one trigger. DELETE /api/triggers clears every v1 trigger and restores hype and talent cost to the captured baselines. Input deltas are bounded (hype -1..1, talentCost -100..100, at most 4 decimal places) so the NUMERIC(12,2) talent column cannot overflow from a single field. A company inserted while triggers are already active keeps its own hype and talent cost until the next trigger create, replace, delete, or clear. talentMultiplier stays the 0.5.0 employee mean. talentCostFactor is the stacked ratio talentCost / baselines.talentCost, clamped once to [0.1, 3] and rounded to 4 decimal places. It is 1, and talentCostFactorClamped is false, when there is no trigger or the baseline is missing, 0, negative, or non-finite. talentCostFactorClamped is true only when the raw ratio fell outside that range. Stored talentCost and hype stay raw. effectiveMultiplier is round(talentMultiplier * talentCostFactor, 4). API burnRate is round(baseBurnRate * talentMultiplier * talentCostFactor), rounded once, with no tax. The client simulation uses the same product after baseBurnRate = round(2000 * (1 + taxRate * 0.4)). Trigger writes do not change stored companies.burn_rate or companies.cash. A null, blank, NaN, or Infinity skill counts as 0.5. An empty talentMix means talentMultiplier is 1; contributions sum to talentMultiplier only when the mix is non-empty. The Host header must be localhost, 127.0.0.1, or [::1] on the bound port; anything else is 403. A missing Host is 400 {\"error\":\"Host required\"}. More than one Host header is 400 {\"error\":\"Duplicate host\"}. A validation failure is 400 with error and an issues array. A method the route does not implement is 405 {\"error\":\"Method not allowed\",\"issues\":[]}. Campaign turns (0.8.0): POST /api/campaigns creates a versioned GameState. POST /api/campaigns/{id}/turns atomically commits a TurnCommand (set_tax, advance_turn, apply_trigger, remove_trigger, clear_triggers) and appends a turn_commits ledger row in the same transaction; a failed commit leaves no partial advance. GET /api/campaigns/{id} reloads the last committed state. GET /api/companies cash and burnRate remain non-authoritative for the client sim. TurnCommand hire_employee appends an employee to campaign GameState, recomputes talentMultiplier / burn preview, and drains cash only on advance_turn. Civic feedback (0.8.2): GameState.civic.budgetHeadroom = clamp(1 - taxRate, 0, 1); civic.hypeBias = (budgetHeadroom - 0.75) * 0.2 folds into company.hype on set_tax (bias 0 at 25% tax). Does not change Slice 1 burn baselines. civic-infra shows budget headroom as a readout only. Turn ledger (0.8.3): GET /api/campaigns/{id}/turns returns recent append-only ledger entries (seq, turnBefore/turnAfter, command, before/after metrics, appliedEffects, explanations). POST commit persists before/after in turn_commits.result_json. Optional ?limit= (1..200, default 50) returns the most recent N in ascending seq order. Chart history remains a 24-month client ring buffer; the ledger is the durable decision log. Real-world pipeline (0.8.4): POST /api/triggers/ingest runs observation \u2192 interpretation \u2192 validated TRIGGER_CONTRACT effect with lifecycle (discovered/normalized \u2192 pending/active \u2192 expired/cleared). Default adapter is fixture (civic-wage-bulletin); http_stub accepts preloaded observations. Supersession and same-id replace never compound. Firecrawl is not required; live scrape can later implement the same Observation shape. Political survival (0.8.5): GameState.politics.voterSupport = 0.5*civic.budgetHeadroom + 0.5*company.hype (0..1). On advance_turn, voterSupport < 0.25 \u2192 survivalStatus ousted; otherwise incumbent. Support refreshes with tax/hype; survival flips only after turn advance. Does not change Slice 1 burn baselines. Ingest audit (0.8.6 / CIT-68): every POST /api/triggers/ingest inserts an ingest_runs row (status success|error; validation failure is not success). GET /api/ingest/runs?limit= (1..200, default 50) lists recent runs newest first on loopback. adapter firecrawl stays rejected. Migration 005 only \u2014 scheduled_meeting_id waits for 007. Campaign restack (0.8.7 / CIT-69): optional IngestRequest.campaignId (UUID, default omitted/off) restacks that one campaign after a changed ingest \u2014 nest filter (006) then clear_triggers + apply_trigger via commitTurn. changed=false / zero triggers \u2192 no commitTurn. Failed restack keeps real_world_triggers and records ingest_runs status=error. Does not write companies.cash / burn_rate / morale; no RESTACK_INGEST; no restack of every open campaign; firecrawl still rejected. Jurisdiction nest + council calendar reads (0.8.9 / CIT-116): GET /api/jurisdictions?home= (default mv) returns the ancestor chain (bindsHome=true) plus same-parent peers (bindsHome=false; sunnyvale does not bind mv). Unknown home \u2192 empty chain/peers (fail closed). GET /api/scheduled-meetings?limit=&jurisdictionId=&asOf= lists persisted scheduled_meetings rows only (no invent). Optional asOf marks due=true when nextCheckAt \u2264 asOf and status is non-terminal. Read-only \u2014 no meeting create/update on these routes."
   },
   "paths": {
     "/api/triggers": {
@@ -328,6 +328,101 @@
                   "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/IngestRun"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RejectedHost"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenHost"
+          }
+        }
+      }
+    },
+    "/api/jurisdictions": {
+      "get": {
+        "summary": "Jurisdiction nest explorer for a home city (default mv)",
+        "description": "Read-only projection of jurisdictions (migration 006). Optional ?home= defaults to mv. Returns home ancestor chain with bindsHome=true and same-parent peer cities with bindsHome=false (peers do not bind). Unknown home \u2192 empty chain and peers (fail closed).",
+        "parameters": [
+          {
+            "name": "home",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "mv"
+            },
+            "description": "Campaign/companies home jurisdiction id (default mv)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Nest explorer payload from jurisdictions rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JurisdictionNest"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RejectedHost"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenHost"
+          }
+        }
+      }
+    },
+    "/api/scheduled-meetings": {
+      "get": {
+        "summary": "List persisted scheduled_meetings (council calendar board)",
+        "description": "Read-only list of scheduled_meetings (migration 007). Optional ?limit= (1..200, default 50), ?jurisdictionId=, ?asOf= (ISO timestamptz). When asOf is set, each row includes due=true iff nextCheckAt \u2264 asOf and status is non-terminal. Does not invent meetings or run the due-row clock.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            }
+          },
+          {
+            "name": "jurisdictionId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter to one jurisdiction (e.g. mv)."
+          },
+          {
+            "name": "asOf",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "When set, annotate due relative to this instant."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Scheduled meeting rows, ascending starts_at.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ScheduledMeeting"
                   }
                 }
               }
@@ -1426,6 +1521,200 @@
             "format": "uuid",
             "nullable": true,
             "description": "Optional scheduled_meetings.id when this run was produced by the calendar due-row / Phase C clock (CIT-81)."
+          }
+        }
+      },
+      "Jurisdiction": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "tier",
+          "parentId",
+          "bindsHome"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "tier": {
+            "type": "string",
+            "enum": [
+              "federal",
+              "state",
+              "county",
+              "city"
+            ],
+            "nullable": true
+          },
+          "parentId": {
+            "type": "string",
+            "nullable": true
+          },
+          "bindsHome": {
+            "type": "boolean",
+            "description": "True only for home + ancestors. Peers are always false."
+          }
+        }
+      },
+      "JurisdictionNest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "homeId",
+          "homeKnown",
+          "chain",
+          "peers",
+          "jurisdictions"
+        ],
+        "properties": {
+          "homeId": {
+            "type": "string"
+          },
+          "homeKnown": {
+            "type": "boolean",
+            "description": "False when home is missing from jurisdictions (fail closed)."
+          },
+          "chain": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Jurisdiction"
+            },
+            "description": "Home first, then parents to federal. Each bindsHome=true."
+          },
+          "peers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Jurisdiction"
+            },
+            "description": "Same-parent siblings. Each bindsHome=false."
+          },
+          "jurisdictions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Jurisdiction"
+            }
+          }
+        }
+      },
+      "ScheduledMeeting": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "jurisdictionId",
+          "sourceId",
+          "externalEventId",
+          "kind",
+          "startsAt",
+          "timezone",
+          "nextCheckAt",
+          "phase",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "jurisdictionId": {
+            "type": "string"
+          },
+          "sourceId": {
+            "type": "string"
+          },
+          "externalEventId": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "meeting",
+              "publication"
+            ]
+          },
+          "startsAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "nextCheckAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "A",
+              "B",
+              "C"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "fixtureId": {
+            "type": "string",
+            "nullable": true
+          },
+          "expectedUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "agendaUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "agendaPublishedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "minutesUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "minutesPublishedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "observedSourceUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "lastError": {
+            "type": "string",
+            "nullable": true
+          },
+          "backoffIndex": {
+            "type": "integer"
+          },
+          "horizonDays": {
+            "type": "integer"
+          },
+          "bodyName": {
+            "type": "string",
+            "nullable": true
+          },
+          "changed": {
+            "type": "boolean"
+          },
+          "stdout": {
+            "type": "string",
+            "nullable": true
+          },
+          "due": {
+            "type": "boolean",
+            "description": "Present only when asOf query is set."
           }
         }
       }

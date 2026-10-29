@@ -153,9 +153,22 @@ describe('campaign desk causal hub (CIT-114)', () => {
     expect(within(desk).getByTestId('ingest-runs-offline')).toBeInTheDocument();
   });
 
+  test('campaign desk includes nest explorer + council calendar (offline stubs)', () => {
+    render(<App initialPlayerRole={PLAYER_ROLE_CAMPAIGN} />);
+
+    const desk = screen.getByTestId('campaign-desk');
+    expect(within(desk).getByTestId('nest-explorer')).toBeInTheDocument();
+    expect(within(desk).getByTestId('nest-explorer-offline')).toBeInTheDocument();
+    expect(within(desk).getByTestId('council-calendar')).toBeInTheDocument();
+    expect(within(desk).getByTestId('council-calendar-offline')).toBeInTheDocument();
+  });
+
   test('company ops hides campaign desk and ingest panel', () => {
     render(<App initialPlayerRole={PLAYER_ROLE_COMPANY_OPS} />);
     expect(screen.queryByTestId('campaign-desk')).not.toBeInTheDocument();
     expect(screen.queryByTestId('ingest-runs-panel')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('nest-explorer')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('council-calendar')).not.toBeInTheDocument();
+    expect(screen.getByTestId('ops-campaign-hint')).toHaveTextContent(/jurisdiction nest/i);
   });
 });

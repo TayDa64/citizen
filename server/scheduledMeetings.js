@@ -227,6 +227,49 @@ export async function listDueScheduledMeetings(client, nowIso, { forUpdate = tru
 }
 
 /**
+ * CIT-116 — read-only calendar board list (no invent / no writes).
+ * Optional jurisdictionId filter; optional asOf marks due rows (next_check ≤ asOf, non-terminal).
+ */
+export async function listScheduledMeetings(pool, {
+  limit = 50,
+  jurisdictionId = null,
+  asOf = null,
+} = {}) {
+  const capped = Math.max(1, Math.min(200, Number(limit) || 50));
+  const params = [];
+  const where = [];
+  if (jurisdictionId != null && jurisdictionId !== '') {
+    params.push(String(jurisdictionId));
+    where.push(`jurisdiction_id = $${params.length}`);
+  }
+  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  params.push(capped);
+  const result = await pool.query(
+    `SELECT ${SELECT_COLUMNS}
+     FROM scheduled_meetings
+     ${whereSql}
+     ORDER BY starts_at ASC, source_id ASC, external_event_id ASC
+     LIMIT $${params.length}`,
+    params,
+  );
+  const asOfMs = asOf == null || asOf === ''
+    ? null
+    : Date.parse(typeof asOf === 'string' ? asOf : new Date(asOf).toISOString());
+  return result.rows.map((row) => {
+    const mapped = mapScheduledMeetingRow(row);
+    if (asOfMs == null || Number.isNaN(asOfMs)) {
+      return mapped;
+    }
+    const nextMs = mapped.nextCheckAt == null ? NaN : Date.parse(mapped.nextCheckAt);
+    const due =
+      Number.isFinite(nextMs)
+      && nextMs <= asOfMs
+      && !TERMINAL.has(mapped.status);
+    return { ...mapped, due };
+  });
+}
+
+/**
  * Phase A seed/upsert from MV council calendar fixture (no PDF, no network).
  * @returns {Promise<{ upserted: object[], fixtureId: string }>}
  */
