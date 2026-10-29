@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { test } from 'node:test';
 import {
   resolveFixtureSignal,
+  resolveIngestFixtureId,
   resolveSweepOptions,
   shouldCommitTurnFromSweep,
   shouldPersistTriggers,
@@ -71,7 +72,7 @@ test('resolveFixtureSignal: morning still_on; library file only after frozenNowF
   assert.ok(file.minutesUrl);
 });
 
-test('shouldPersistTriggers only for publication wage ingested', () => {
+test('shouldPersistTriggers: publication wage + library minutes; not Final+null/empty', () => {
   const pub = seedWageBulletinPublicationRow();
   const ingested = reduceMeetingRow(
     pub,
@@ -80,6 +81,16 @@ test('shouldPersistTriggers only for publication wage ingested', () => {
   );
   assert.equal(ingested.status, 'ingested');
   assert.equal(shouldPersistTriggers(pub, ingested), true);
+
+  const library = seedRow3458MinutesWait(4);
+  const libraryIngested = reduceMeetingRow(
+    library,
+    mvLibraryMinutes3458.frozenNowFile,
+    mvLibraryMinutes3458.signalFile,
+  );
+  assert.equal(libraryIngested.status, 'ingested');
+  assert.equal(libraryIngested.stdout, 'minutes=ingested');
+  assert.equal(shouldPersistTriggers(library, libraryIngested), true);
 
   const meeting = seedConfirmed3367();
   const minutes = reduceMeetingRow(
@@ -97,6 +108,29 @@ test('shouldPersistTriggers only for publication wage ingested', () => {
   );
   assert.equal(finalNull.status, 'minutes_wait');
   assert.equal(shouldPersistTriggers(nullFile, finalNull), false);
+});
+
+test('resolveIngestFixtureId maps wage publication and library minutes packs', () => {
+  const pub = reduceMeetingRow(
+    seedWageBulletinPublicationRow(),
+    civicWageBulletinPublication.frozenNow,
+    civicWageBulletinPublication.signalBody,
+  );
+  assert.equal(resolveIngestFixtureId(pub), 'civic-wage-bulletin');
+
+  const library = reduceMeetingRow(
+    seedRow3458MinutesWait(4),
+    mvLibraryMinutes3458.frozenNowFile,
+    mvLibraryMinutes3458.signalFile,
+  );
+  assert.equal(resolveIngestFixtureId(library), 'mv-library-minutes-3458');
+
+  const agenda = reduceMeetingRow(
+    seedRow3367Scheduled(),
+    mvCouncilAgenda3367.frozenNowFirstPost,
+    mvCouncilAgenda3367.signalFirst,
+  );
+  assert.equal(resolveIngestFixtureId(agenda), null);
 });
 
 test('shouldCommitTurnFromSweep requires trigger changed', () => {

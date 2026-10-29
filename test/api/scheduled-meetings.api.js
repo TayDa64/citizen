@@ -146,7 +146,7 @@ describe('CIT-81 scheduled_meetings + due-row sweep', { concurrency: 1, timeout:
     }
   });
 
-  test('Final+null minutes stay wait; library file ingests pointer without commitTurn; peers unbound', async () => {
+  test('Final+null minutes stay wait; library file → triggers via ingest; peers unbound', async () => {
     const db = await migratedDatabase();
     try {
       const nullFile = await upsertScheduledMeeting(db.pool, seedRow3363MinutesWait());
@@ -158,6 +158,7 @@ describe('CIT-81 scheduled_meetings + due-row sweep', { concurrency: 1, timeout:
       );
       assert.equal(waited.meeting.status, 'minutes_wait');
       assert.equal(waited.triggerChanged, false);
+      assert.equal(waited.triggers.length, 0);
 
       const library = await upsertScheduledMeeting(db.pool, seedRow3458MinutesWait(4));
       const withFile = await processDueMeeting(
@@ -168,8 +169,20 @@ describe('CIT-81 scheduled_meetings + due-row sweep', { concurrency: 1, timeout:
       );
       assert.equal(withFile.meeting.status, 'ingested');
       assert.ok(withFile.meeting.minutesUrl);
-      assert.equal(withFile.triggerChanged, false);
+      // CIT-101: minutes file+timestamp → TRIGGER_CONTRACT (not pointer-only).
+      assert.equal(withFile.triggerChanged, true);
+      assert.equal(withFile.triggers.length, 1);
+      assert.equal(withFile.triggers[0].effect.talentCost, 0.05);
+      assert.equal(withFile.triggers[0].effect.hype, 0.04);
       assert.equal(withFile.restack, null);
+
+      const runs = await listIngestRuns(db.pool, { limit: 5 });
+      const minutesRun = runs.find(
+        (run) => run.fixtureId === 'mv-library-minutes-3458' && run.changed === true,
+      );
+      assert.ok(minutesRun);
+      assert.equal(minutesRun.scheduledMeetingId, library.id);
+      assert.equal(minutesRun.status, 'success');
 
       // Peer sunnyvale still does not bind mv burn pack.
       const observations = collectFixtureObservations('civic-wage-bulletin');
@@ -191,22 +204,27 @@ describe('CIT-81 scheduled_meetings + due-row sweep', { concurrency: 1, timeout:
 
       const campaign = await createCampaign(db.pool, { seed: 'cit-81-restack' });
 
-      const noRestack = await processDueMeeting(
+      // First ingest with campaignId → changed=true + restack (CIT-69).
+      const withRestack = await processDueMeeting(
         db.pool,
         pub,
         civicWageBulletinPublication.frozenNow,
-        { signal: civicWageBulletinPublication.signalBody },
+        {
+          signal: civicWageBulletinPublication.signalBody,
+          campaignId: campaign.id,
+        },
       );
-      assert.equal(noRestack.meeting.status, 'ingested');
-      assert.equal(noRestack.triggerChanged, true);
-      assert.equal(noRestack.restack, null);
+      assert.equal(withRestack.meeting.status, 'ingested');
+      assert.equal(withRestack.triggerChanged, true);
+      assert.ok(withRestack.restack);
+      assert.equal(withRestack.restack.campaignId, campaign.id);
 
       const runs = await listIngestRuns(db.pool, { limit: 5 });
       const wageRun = runs.find((run) => run.fixtureId === 'civic-wage-bulletin' && run.changed);
       assert.ok(wageRun);
       assert.equal(wageRun.scheduledMeetingId, pub.id);
 
-      // Re-seed a fresh publication-like row for restack path (natural key already ingested).
+      // Identical document timestamp re-run → changed=false, no second restack / commitTurn.
       await db.pool.query(
         `UPDATE scheduled_meetings
          SET status = 'scheduled', phase = 'A', next_check_at = $2, minutes_published_at = NULL,
@@ -219,7 +237,7 @@ describe('CIT-81 scheduled_meetings + due-row sweep', { concurrency: 1, timeout:
         'fixture:civic-wage-bulletin',
         'obs-civic-wage-bulletin-2026-04',
       );
-      const withRestack = await processDueMeeting(
+      const identical = await processDueMeeting(
         db.pool,
         again,
         civicWageBulletinPublication.frozenNow,
@@ -228,9 +246,9 @@ describe('CIT-81 scheduled_meetings + due-row sweep', { concurrency: 1, timeout:
           campaignId: campaign.id,
         },
       );
-      assert.equal(withRestack.triggerChanged, true);
-      assert.ok(withRestack.restack);
-      assert.equal(withRestack.restack.campaignId, campaign.id);
+      assert.equal(identical.triggerChanged, false);
+      assert.equal(identical.restack, null);
+      assert.equal(identical.triggers.length, 1);
 
       // Morning confirmed → no triggers / no commitTurn.
       const confirmed = await upsertScheduledMeeting(db.pool, seedConfirmed3367());

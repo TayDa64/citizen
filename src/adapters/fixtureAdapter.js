@@ -8,11 +8,18 @@
  */
 
 import { civicWageBulletin } from './fixtures/civicWageBulletin.js';
+import { mvLibraryMinutes3458Fixture } from './fixtures/mvLibraryMinutes3458.js';
 
 export const FIXTURE_ADAPTER_ID = 'fixture';
 
+/** Calendar Phase C meeting fixture ids that emit TRIGGER_CONTRACT via ingest. */
+export const MINUTES_GAMEPLAY_FIXTURE_IDS = Object.freeze([
+  'mv-library-minutes-3458',
+]);
+
 const FIXTURES = Object.freeze({
   'civic-wage-bulletin': civicWageBulletin,
+  'mv-library-minutes-3458': mvLibraryMinutes3458Fixture,
 });
 
 export function listFixtureIds() {

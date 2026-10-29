@@ -214,6 +214,8 @@ export function seedRow3363MinutesWait() {
 
 /**
  * Phase C positive — library EventId 3458: file ~29 days later → one upsert.
+ * CIT-101: due-sweep maps this fixture into TRIGGER_CONTRACT via ingestAndPersist
+ * (see src/adapters/fixtures/mvLibraryMinutes3458.js).
  */
 export const mvLibraryMinutes3458 = Object.freeze({
   fixtureId: 'mv-library-minutes-3458',

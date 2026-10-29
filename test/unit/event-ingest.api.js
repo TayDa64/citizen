@@ -52,6 +52,19 @@ test('runPipelineIngest fixture produces one active contract trigger after super
   assert.deepEqual(lifecycles, ['active', 'expired']);
 });
 
+test('runPipelineIngest library minutes pack → hype + talentCost contract keys only', () => {
+  const result = runPipelineIngest({
+    adapter: 'fixture',
+    fixtureId: 'mv-library-minutes-3458',
+  });
+  assert.equal(result.triggers.length, 1);
+  assert.equal(result.triggers[0].id, 'evt-pipeline-obs-mv-library-minutes-3458');
+  assert.equal(result.triggers[0].effect.talentCost, 0.05);
+  assert.equal(result.triggers[0].effect.hype, 0.04);
+  assert.equal(result.triggers[0].timestamp, '2026-10-20T16:35:16.597Z');
+  assert.equal(Object.keys(result.triggers[0].effect).sort().join(','), 'hype,talentCost');
+});
+
 test('runPipelineIngest http_stub accepts preloaded observations without network', () => {
   const result = runPipelineIngest({
     adapter: 'http_stub',

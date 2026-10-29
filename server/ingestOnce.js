@@ -142,8 +142,8 @@ export async function runIngestOnce(
     request.campaignId = campaignId;
   }
   const result = await ingestAndPersist(pool, request);
-  // Match CIT-68 ingest_runs.changed: true when at least one trigger was persisted.
-  const changed = result.triggers.length > 0;
+  // CIT-101: changed mirrors ingest_runs — identical id+timestamp → false.
+  const changed = result.changed === true;
   return {
     adapter: result.adapter,
     fixtureId: result.fixtureId,

@@ -207,10 +207,16 @@ describe('CIT-80 jurisdiction nest filter', () => {
     ).toBe(true);
   });
 
-  test('CIT-95 companies read-model home is mv; createTrigger stamps wage→mv else home', () => {
+  test('CIT-95 / CIT-101 companies home is mv; wage + library minutes stamp → mv', () => {
     expect(COMPANIES_READ_MODEL_HOME).toBe('mv');
     expect(
       resolveCreateTriggerJurisdiction('evt-pipeline-obs-civic-wage-bulletin-x'),
+    ).toBe('mv');
+    expect(
+      resolveJurisdictionForClientId('evt-pipeline-obs-mv-library-minutes-3458'),
+    ).toBe('mv');
+    expect(
+      resolveCreateTriggerJurisdiction('evt-pipeline-obs-mv-library-minutes-3458'),
     ).toBe('mv');
     expect(resolveCreateTriggerJurisdiction('evt-policy-mock')).toBe('mv');
     expect(resolveJurisdictionForClientId('evt-policy-mock')).toBe(null);

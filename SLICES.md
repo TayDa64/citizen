@@ -1,6 +1,6 @@
 # Citizen Slices
 
-**Wave 2 status (2026-10-28):** complete on `main` @ `3420879` (PR #28). Path: CIT-68 (#23) → CIT-67 (#24) → CIT-79 (#25) → CIT-80 (#26) → CIT-69 (#27) → CIT-81 (#28). Migrations **`001`–`007`**; scheduled fixture ingest via Actions `:12`; nest + optional restack. CIT-95 (this PR): companies peer read-model filter. Remaining backlog: formula dampening, HNSW/embeddings, Firecrawl/AI Judge, minutes→trigger fixture. See [STATE.md](STATE.md).
+**Wave 2 status (2026-10-28):** complete on `main` @ `3420879` (PR #28). Path: CIT-68 (#23) → CIT-67 (#24) → CIT-79 (#25) → CIT-80 (#26) → CIT-69 (#27) → CIT-81 (#28). Migrations **`001`–`007`**; scheduled fixture ingest via Actions `:12`; nest + optional restack. CIT-95 (#30): companies peer read-model. CIT-101 (this PR): minutes→gameplay vertical. Remaining backlog: dampening Adapt (only if bar fails), HNSW/embeddings, Firecrawl/AI Judge. See [STATE.md](STATE.md).
 
 ## Slice 1 (completed in this iteration)
 **Tax policy modulates company burn rate, visible and adjustable.**
@@ -242,14 +242,14 @@ Restack of every open campaign; live Firecrawl; `RESTACK_INGEST`; writing compan
 ### What works
 - Migration `007_scheduled_meetings.sql`: `scheduled_meetings` (wave2 sketch + backoff/horizon helpers) with `UNIQUE (source_id, external_event_id)` and index `(status, next_check_at)`; `ingest_runs.scheduled_meeting_id` FK.
 - Persist/load + Phase A seed from `mv-council-calendar-2026h2` (MV council alone); due-row sweep selects `next_check_at <= now()`, applies pure calendar reducer with **fixture signals** (frozen `now` in tests); host loopback / no network.
-- Every sweep attempt writes `ingest_runs` (`changed=false` for agenda-seen / empty / blocked / minutes pointer-only). Phase C publication wage body calls `ingestAndPersist`; optional CIT-69 restack only when trigger `changed=true`. 60d `unchanged` stays closed.
+- Every sweep attempt writes `ingest_runs` (`changed=false` for agenda-seen / empty / blocked). Phase C publication wage body calls `ingestAndPersist`; CIT-101 also wires meeting minutes file+timestamp. Optional CIT-69 restack only when trigger `changed=true`. 60d `unchanged` stays closed.
 - `npm run calendar:clock -- --phase-a|--due`; GitHub Actions `.github/workflows/calendar-ingest.yml` — weekly Phase A + twice-daily due at minute `:12`, plus `workflow_dispatch`. No scrape-all, no weekday wage-only cron, no T-3 06:00-only job.
 - OpenAPI **0.8.8** (`IngestRun.scheduledMeetingId`). Burns **2376** / clear **2200**; firecrawl rejected; peers still do not bind.
 
-### Explicit non-goals / backlog (eligible, not started)
-Live Legistar / Firecrawl GET; formula dampening; HNSW/embeddings; AI Judge; restack-all; editing migrations 001–006 in place; minutes→trigger interpretation pack (pointer only).
+### Explicit non-goals / backlog
+Live Legistar / Firecrawl GET; formula dampening Adapt; HNSW/embeddings; AI Judge; restack-all; editing migrations 001–006 in place. (Minutes→gameplay landed in CIT-101.)
 
-## Slice companies peer read-model (CIT-95)
+## Slice companies peer read-model (CIT-95) — landed PR #30 @ `3d8182d`
 
 **Same nest chain filter on companies talent/hype recompute. Peers do not bind the gameplay burn/hype read model.**
 
@@ -260,7 +260,22 @@ Live Legistar / Firecrawl GET; formula dampening; HNSW/embeddings; AI Judge; res
 - Locks: mv home ignores sunnyvale peer; chain ancestors still stack; wage→mv burn **2376** / clear **2200**; `adapter: firecrawl` rejected; CIT-69 restack path unchanged.
 
 ### Explicit non-goals
-Formula dampening; HNSW/embeddings; Firecrawl / AI Judge; minutes→trigger fixture; new migration; OpenAPI bump.
+Formula dampening production change; HNSW/embeddings; Firecrawl / AI Judge; new migration; OpenAPI bump.
+
+## Slice minutes→gameplay vertical (CIT-101)
+
+**Compound: Phase C minutes pack + due-sweep→`ingestAndPersist` + nest/restack + lock regressions. Not pointer-only.**
+
+### What works
+- Fixture pack `mv-library-minutes-3458` (file + document timestamp) → `TRIGGER_CONTRACT` `hype` **and** `talentCost` only.
+- Due-row / calendar Phase C meeting path calls `ingestAndPersist` when minutes body present; writes `ingest_runs` (+ `scheduled_meeting_id`); optional one-`campaignId` restack only when `changed=true`.
+- Idempotent source id + document timestamp: identical re-run → `changed=false`, no restack, no `commitTurn`.
+- Nest + peer: MV home; Sunnyvale does not bind; NULL fail-closed; federal→city sort; companies nest recompute remains.
+- Regressions: Final+null → `minutes_wait` / no trigger; agenda-seen → zero triggers / no restack; wage **2376** / clear **2200**; `adapter: firecrawl` rejected; 60d `unchanged` stays closed.
+- Dampening go/no-go note from the same stacks (no production formula change). Prefer **no** new migration.
+
+### Explicit non-goals
+Gemini decay / soft dampening production change; HNSW; Firecrawl enable; AI Judge; restack-all; cash writes; calendar/nest/runs UI; editing `001`–`007` in place; fixture-only intermediate PR.
 
 ## Slice causal graph (P1-3 — rule registry is truth; diagram is a view)
 
