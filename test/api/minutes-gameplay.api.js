@@ -274,8 +274,8 @@ describe('CIT-101 minutes→gameplay vertical', { concurrency: 1, timeout: 120_0
         client2.release();
       }
       const withCounty = await listCompanies(db.pool);
-      // 1.08 × 1.05 × 1.02 = 1.15668
-      assert.ok(Math.abs(withCounty[0].talentCostFactor - 1.15668) < 1e-6);
+      // 1.08 × 1.05 × 1.02 = 1.15668 → listCompanies publishes round4 1.1567
+      assert.equal(withCounty[0].talentCostFactor, 1.1567);
       assert.equal(withCounty[0].talentCostFactorClamped, false);
 
       await insertTriggerWithTalentEffect(db.pool, {
@@ -293,7 +293,7 @@ describe('CIT-101 minutes→gameplay vertical', { concurrency: 1, timeout: 120_0
         client3.release();
       }
       const afterNull = await listCompanies(db.pool);
-      assert.ok(Math.abs(afterNull[0].talentCostFactor - 1.15668) < 1e-6);
+      assert.equal(afterNull[0].talentCostFactor, 1.1567);
 
       await assert.rejects(
         () => ingestAndPersist(db.pool, { adapter: 'firecrawl' }),
