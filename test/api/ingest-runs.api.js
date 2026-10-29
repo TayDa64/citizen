@@ -86,6 +86,7 @@ describe('CIT-68 ingest_runs', { concurrency: 1, timeout: 120_000 }, () => {
         fixtureId: 'civic-wage-bulletin',
       });
       assert.equal(second.triggers.length, 1);
+      assert.equal(second.changed, false);
       const afterSecond = await listCompanies(db.pool);
       assert.equal(afterSecond[0].talentCostFactor, 1.08);
       assert.equal(afterSecond[0].burnRate, 2160);
@@ -93,13 +94,14 @@ describe('CIT-68 ingest_runs', { concurrency: 1, timeout: 120_000 }, () => {
       const runs = await listIngestRuns(db.pool, { limit: 10 });
       assert.equal(runs.length, 2);
       assert.equal(runs[0].status, 'success');
-      assert.equal(runs[0].changed, true);
+      assert.equal(runs[0].changed, false);
       assert.equal(runs[0].adapter, 'fixture');
       assert.equal(runs[0].fixtureId, 'civic-wage-bulletin');
       assert.deepEqual(runs[0].triggerClientIds, [
         'evt-pipeline-obs-civic-wage-bulletin-2026-04-revision',
       ]);
       assert.equal(runs[1].status, 'success');
+      assert.equal(runs[1].changed, true);
     } finally {
       await db.close();
     }

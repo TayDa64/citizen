@@ -35,6 +35,9 @@ export const TIER_RESTACK_ORDER = Object.freeze({
 /** Wage bulletin client_id prefix — migration backfill + ingest stamp target. */
 export const WAGE_BULLETIN_CLIENT_ID_PREFIX = 'evt-pipeline-obs-civic-wage-bulletin-';
 
+/** CIT-101 library minutes client_id prefix — stamp to home city `mv`. */
+export const LIBRARY_MINUTES_CLIENT_ID_PREFIX = 'evt-pipeline-obs-mv-library-minutes-';
+
 /**
  * Recursive CTE matching wave2 schema sketch.
  * Bind $1 = campaign home jurisdiction id.
@@ -161,6 +164,7 @@ export function nestTriggersForRestack(triggers, homeId, jurisdictions = JURISDI
 export function resolveJurisdictionForClientId(clientId) {
   if (typeof clientId !== 'string' || clientId === '') return null;
   if (clientId.startsWith(WAGE_BULLETIN_CLIENT_ID_PREFIX)) return 'mv';
+  if (clientId.startsWith(LIBRARY_MINUTES_CLIENT_ID_PREFIX)) return 'mv';
   return null;
 }
 

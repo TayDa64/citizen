@@ -21,7 +21,11 @@ import {
   restackCampaignTriggers,
   shouldRestackAfterIngest,
 } from './campaignRestack.js';
-import { createTrigger } from './triggers.js';
+import {
+  createTrigger,
+  isIdenticalTriggerDocument,
+  listTriggersByClientIds,
+} from './triggers.js';
 
 const CAMPAIGN_ID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -263,14 +267,29 @@ export async function ingestAndPersist(pool, request, { scheduledMeetingId = nul
     }
     const campaignId = validated.value.campaignId;
     const result = runPipelineIngest(request);
+    // CIT-101: idempotent on source id + document timestamp — identical re-run
+    // → changed=false (no createTrigger restack of companies, no campaign restack).
+    const existingRows = await listTriggersByClientIds(
+      pool,
+      result.triggers.map((trigger) => trigger.id),
+    );
+    const existingById = new Map(existingRows.map((row) => [row.id, row]));
     const stored = [];
+    let changed = false;
     for (const trigger of result.triggers) {
+      const existing = existingById.get(trigger.id);
+      if (isIdenticalTriggerDocument(existing, trigger)) {
+        stored.push(existing);
+        continue;
+      }
+      changed = true;
       stored.push(await createTrigger(pool, trigger));
     }
     const triggerClientIds = stored.map((trigger) => trigger.id);
-    // CIT-80: stamp known fixture jurisdictions (wage → mv) without contract change.
-    await stampTriggerJurisdictions(pool, triggerClientIds);
-    const changed = stored.length > 0;
+    // CIT-80 / CIT-101: stamp known fixture jurisdictions (wage / library → mv).
+    if (changed) {
+      await stampTriggerJurisdictions(pool, triggerClientIds);
+    }
     let restack = null;
     if (
       shouldRestackAfterIngest({
@@ -333,6 +352,7 @@ export async function ingestAndPersist(pool, request, { scheduledMeetingId = nul
       fixtureId: result.fixtureId,
       events: result.events,
       triggers: stored,
+      changed,
       ...(restack
         ? {
             restack: {

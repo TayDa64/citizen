@@ -1,16 +1,18 @@
 /**
- * CIT-81 — Phase A calendar sync + due-row sweep.
+ * CIT-81 / CIT-101 — Phase A calendar sync + due-row sweep.
  *
  * Fixture signals only (no live Legistar / Firecrawl). Host loopback DB.
  * Applies the pure calendar reducer; writes ingest_runs every attempt.
- * Calls ingestAndPersist (+ optional CIT-69 restack) only when Phase C
- * actually persists triggers (publication wage body). Agenda-seen / empty /
- * blocked → changed=false, no commitTurn. 60d unchanged stays closed.
+ * Calls ingestAndPersist (+ optional CIT-69 restack) when Phase C persists
+ * triggers: publication wage body **or** meeting minutes file+timestamp
+ * (library minutes pack). Agenda-seen / empty / blocked / Final+null →
+ * changed=false, no commitTurn. 60d unchanged stays closed.
  */
 
 import path from 'node:path';
 import pg from 'pg';
 import { pathToFileURL } from 'node:url';
+import { MINUTES_GAMEPLAY_FIXTURE_IDS } from '../src/adapters/fixtureAdapter.js';
 import {
   reduceMeetingRow,
   mvCouncilAgenda3367,
@@ -31,6 +33,8 @@ import {
   updateScheduledMeeting,
   upsertScheduledMeeting,
 } from './scheduledMeetings.js';
+
+const MINUTES_GAMEPLAY_SET = new Set(MINUTES_GAMEPLAY_FIXTURE_IDS);
 
 const CAMPAIGN_ID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -106,16 +110,54 @@ function stripReducerMeta(row) {
   return { ...rest, id, jurisdictionId };
 }
 
+function minutesArtifactReady(row) {
+  const hasUrl = typeof row?.minutesUrl === 'string' && row.minutesUrl.trim() !== '';
+  const hasTs = typeof row?.minutesPublishedAt === 'string'
+    && !Number.isNaN(Date.parse(row.minutesPublishedAt));
+  return hasUrl && hasTs;
+}
+
+/**
+ * Map a Phase C ingested row to the fixture adapter id for ingestAndPersist.
+ * Null → audit-only (pointer path without a gameplay pack).
+ */
+export function resolveIngestFixtureId(after) {
+  if (!after || after.status !== 'ingested') return null;
+  if (after.kind === 'publication' || after.fixtureId === 'civic-wage-bulletin') {
+    if (after.fixtureId === 'civic-wage-bulletin') return 'civic-wage-bulletin';
+  }
+  if (after.kind === 'meeting' && MINUTES_GAMEPLAY_SET.has(after.fixtureId)) {
+    return after.fixtureId;
+  }
+  return null;
+}
+
 /**
  * Whether this reducer result should call ingestAndPersist for triggers.
- * Only publication wage body with ingested status emits the burn pack.
+ * Publication wage body **or** meeting minutes file+timestamp with a
+ * checked-in gameplay fixture pack (CIT-101). Agenda / Final+null stay out.
  */
 export function shouldPersistTriggers(before, after) {
   if (after.status !== 'ingested') return false;
-  if (before.kind !== 'publication' && after.kind !== 'publication') return false;
-  if (after.fixtureId !== 'civic-wage-bulletin') return false;
-  if (after.stdout !== 'publication=ingested') return false;
-  return true;
+
+  if (
+    (before.kind === 'publication' || after.kind === 'publication')
+    && after.fixtureId === 'civic-wage-bulletin'
+    && after.stdout === 'publication=ingested'
+  ) {
+    return true;
+  }
+
+  if (
+    after.kind === 'meeting'
+    && after.stdout === 'minutes=ingested'
+    && minutesArtifactReady(after)
+    && MINUTES_GAMEPLAY_SET.has(after.fixtureId)
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 /**
@@ -193,15 +235,17 @@ export async function processDueMeeting(pool, row, nowIso, {
 
   if (shouldPersistTriggers(row, after)) {
     try {
+      const ingestFixtureId = resolveIngestFixtureId(after) ?? 'civic-wage-bulletin';
       const request = {
         adapter: 'fixture',
-        fixtureId: 'civic-wage-bulletin',
+        fixtureId: ingestFixtureId,
       };
       if (campaignId) request.campaignId = campaignId;
       const ingest = await ingestAndPersist(pool, request, {
         scheduledMeetingId: row.id,
       });
-      const triggerChanged = ingest.triggers.length > 0;
+      // CIT-101: restack / commitTurn only when ingest changed=true (not mere upsert).
+      const triggerChanged = ingest.changed === true;
       return {
         meeting: saved,
         stdout,
@@ -209,6 +253,7 @@ export async function processDueMeeting(pool, row, nowIso, {
         triggers: ingest.triggers,
         restack: ingest.restack ?? null,
         ingestRunChanged: triggerChanged,
+        changed: triggerChanged,
       };
     } catch (error) {
       // Meeting row already advanced; audit error without deleting pointers.
@@ -225,7 +270,7 @@ export async function processDueMeeting(pool, row, nowIso, {
     }
   }
 
-  // Phase A/B and empty/blocked/minutes Phase C: audit only, changed=false.
+  // Phase A/B and empty/blocked / Final+null Phase C: audit only, changed=false.
   await recordSweepRun(pool, {
     startedAt,
     meetingId: row.id,
@@ -449,7 +494,8 @@ export function helpText() {
     '',
     'Phase A: weekly MV council calendar upsert + calendar_sync (fixture signals).',
     'Due: twice-daily sweep of next_check_at <= now (fixture signals; no network).',
-    'Optional --campaign restacks one campaign only when Phase C publication ingest changed=true.',
+    'Optional --campaign restacks one campaign only when Phase C ingest changed=true',
+    '(publication wage or minutes gameplay pack). Identical document timestamp → changed=false.',
     'Requires DATABASE_URL pointing at local Postgres (migrations through 007).',
     'Stdout: changed=true|false',
     'GitHub Actions: weekly Phase A + twice-daily due at minute :12, plus workflow_dispatch.',

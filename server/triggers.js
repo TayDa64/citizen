@@ -363,6 +363,36 @@ export async function listTriggers(pool) {
   return rowsToTriggerRecords(result.rows);
 }
 
+/**
+ * CIT-101 — load stored contract triggers by client_id for idempotent ingest
+ * (source id + document timestamp → changed=false on identical re-run).
+ */
+export async function listTriggersByClientIds(pool, clientIds) {
+  const ids = [...new Set((Array.isArray(clientIds) ? clientIds : []).filter(
+    (id) => typeof id === 'string' && id.trim() !== '',
+  ))];
+  if (ids.length === 0) return [];
+  const result = await pool.query(
+    `${TRIGGER_SELECT} AND t.client_id = ANY($2::text[])
+     ORDER BY t.scraped_at DESC, t.client_id DESC, so.name ASC`,
+    [TRIGGER_TYPES, ids],
+  );
+  return rowsToTriggerRecords(result.rows);
+}
+
+/** True when an existing row matches the incoming contract id + document timestamp. */
+export function isIdenticalTriggerDocument(existing, incoming) {
+  if (!existing || !incoming) return false;
+  if (existing.id !== incoming.id) return false;
+  const left = existing.timestamp == null
+    ? null
+    : new Date(existing.timestamp).toISOString();
+  const right = incoming.timestamp == null
+    ? null
+    : new Date(incoming.timestamp).toISOString();
+  return left != null && right != null && left === right;
+}
+
 export async function listCompanies(pool) {
   const result = await pool.query(
     `SELECT id, name, cash, burn_rate, hype, talent_cost, hype_baseline, talent_cost_baseline

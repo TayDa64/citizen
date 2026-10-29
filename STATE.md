@@ -10,7 +10,7 @@
 
 Sequence complete. Post-merge regression on main 5f4f021: PASS (trace diag-20261026-8e1cd230), CI green.
 
-Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/Playwright; PR #12 authoritative turns; PR #13 campaign↔trigger coherence; PR #14 business lifecycle hire; PR #15 civic feedback; PR #16 connect pathways; PR #17 turn ledger; PR #18 real-world pipeline; PR #19 causal graph; PR #20 campaign acceptance; PR #21 political objectives; PR #22 test:api harness; **Wave 2** PR #23–#28 (ingest_runs → meetings + `:12`). Tip: `main` @ `3420879` (PR #28).
+Later merges: PR #7 Slice 2 checklist; PR #8 authority boundary; PR #9–#11 UI/Playwright; PR #12 authoritative turns; PR #13 campaign↔trigger coherence; PR #14 business lifecycle hire; PR #15 civic feedback; PR #16 connect pathways; PR #17 turn ledger; PR #18 real-world pipeline; PR #19 causal graph; PR #20 campaign acceptance; PR #21 political objectives; PR #22 test:api harness; **Wave 2** PR #23–#28 (ingest_runs → meetings + `:12`); peer #30; CIT-101 minutes→gameplay (this PR). Tip product: `main` @ `3d8182d` (#30).
 
 **Rule:** Each PR must be green, rebased clean on main, and meet its acceptance criteria before the next is merged. Update this file after every merge.
 
@@ -108,17 +108,22 @@ Migrations on `main`: **`001`–`007`**. OpenAPI **0.8.8**.
 - Restack only when Phase C publication trigger `changed=true`; 60d unchanged stays closed
 
 ## Next Highest-Priority Phases
-### Phase 16 — companies peer read-model filter (CIT-95) — this PR
+### Phase 16 — companies peer read-model filter (CIT-95) — landed PR #30 @ `3d8182d`
 - Nest filter on `recomputeCompanies` (home `mv` + ancestors; NULL fail-closed; Sunnyvale ≠ mv)
 - `createTrigger` stamps jurisdiction (wage→`mv`, else home) when 006 present; reuse nest helpers; no new migration
 - Locks: peer excluded from companies talent/hype; ancestors stack; burns **2376** / clear **2200**; firecrawl rejected; restack path still correct
 - OpenAPI unchanged
 
+### Phase 17 — minutes→gameplay vertical (CIT-101) — this PR
+- Library minutes pack + due-sweep Phase C → `ingestAndPersist` (not pointer-only)
+- `ingest_runs` + optional one-campaign restack when `changed=true`; idempotent id+timestamp
+- Nest/peer locks; Final+null / agenda / wage 2376 / clear 2200 / firecrawl / 60d regressions
+- Dampening go/no-go note from stacks (no production formula change); no new migration
+
 ### Backlog (eligible — not started; await direction)
-- Formula dampening
+- Formula dampening Adapt (**only if** go/no-go bar fails)
 - HNSW / embeddings
-- Firecrawl / AI Judge
-- Minutes→trigger fixture (minutes remain pointer-only)
+- Firecrawl / AI Judge (one allowlisted live fetch later)
 
 ### Phase 2 continued — Complete business lifecycle (P0)
 - Product development, launch, funding, runway, exit as real mechanics
@@ -132,6 +137,6 @@ Migrations on `main`: **`001`–`007`**. OpenAPI **0.8.8**.
 - A1: resolved. Axe is 0 on 5f4f021.
 - P2-M1 (info): the down migration only reverts 003/002, so a full re-run after rollback fails at 001. (004–007 add down sections.)
 - P1-4: live Postgres campaign reload still gated on `npm run test:api` when DB available.
-- CIT-81: meeting minutes ingest is pointer-only (no minutes→trigger fixture yet) — backlog.
+- CIT-81 pointer-only minutes gap closed by CIT-101 (this PR).
 
-Last updated: 2026-10-28, CIT-95 companies peer read-model (this PR) on Wave 2 `main` @ `8b74eeb` (#29 docs / #28 product).
+Last updated: 2026-10-29, CIT-101 minutes→gameplay vertical (this PR) on `main` @ `3d8182d` (#30 peer).
