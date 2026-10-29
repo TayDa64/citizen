@@ -1,0 +1,12 @@
+{
+  "kind": "minutes_fetch",
+  "sourceId": "legistar:mountainview",
+  "fetchedUrl": "https://mountainview.legistar.com/MeetingDetail.aspx?ID=3458",
+  "fetchedAt": "2026-10-20T16:35:16.597Z",
+  "status": 200,
+  "ok": true,
+  "externalEventId": "3458",
+  "bodyText": "Board of Library Trustees minutes record a community talent stipend and local attention around the advisory board session; interpret as modest talent-cost pressure plus a small hype bump (contract keys only).",
+  "minutesUrl": "https://legistar1.granicus.com/mountainview/meetings/2026/9/3458_M_Board_of_Library_Trustees_26-09-21_Advisory_Board_Minutes.pdf",
+  "minutesPublishedAt": "2026-10-20T16:35:16.597Z"
+}
