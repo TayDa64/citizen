@@ -421,6 +421,233 @@ button:focus-visible {
   line-height: 1.4;
 }
 
+.role-select {
+  margin: 2rem auto;
+  max-width: 42rem;
+  padding: 1.5rem;
+  background: #12121f;
+  border: 1px solid #334155;
+  border-radius: 12px;
+  color: #e2e8f0;
+}
+
+.role-select h2 {
+  margin: 0 0 0.5rem;
+  color: #f8fafc;
+}
+
+.role-select__lede {
+  margin: 0 0 1.25rem;
+  line-height: 1.45;
+  color: #cbd5e1;
+}
+
+.role-select__choices {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.role-select__choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+  width: 100%;
+  padding: 1rem 1.1rem;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  background: #1e293b;
+  color: #f8fafc;
+  border: 1px solid #94a3b8;
+  border-radius: 10px;
+}
+
+.role-select__choice:hover {
+  background: #273549;
+}
+
+.role-select__choice strong {
+  font-size: 1.1rem;
+}
+
+.island-switcher {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  margin: 0.75rem 0 0.25rem;
+}
+
+.island-switcher__label {
+  color: #cbd5e1;
+  font-size: 0.9rem;
+}
+
+.island-switcher__tabs {
+  display: inline-flex;
+  gap: 0.35rem;
+}
+
+.island-switcher__tabs button {
+  font: inherit;
+  cursor: pointer;
+  padding: 0.4rem 0.85rem;
+  background: #1e293b;
+  color: #f8fafc;
+  border: 1px solid #64748b;
+  border-radius: 6px;
+}
+
+.island-switcher__tabs button.is-active,
+.island-switcher__tabs button[aria-pressed='true'] {
+  background: #334155;
+  border-color: #fde68a;
+  color: #fffbeb;
+}
+
+.role-active {
+  margin: 0.35rem 0 0;
+  color: #cbd5e1;
+  font-size: 0.9rem;
+}
+
+.island-hint {
+  margin: 0.75rem 1rem 0;
+  padding: 0.75rem 0.9rem;
+  background: #12121f;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  color: #e2e8f0;
+  line-height: 1.45;
+}
+
+.island-hint__link {
+  font: inherit;
+  cursor: pointer;
+  color: #fde68a;
+  background: none;
+  border: none;
+  text-decoration: underline;
+  padding: 0;
+}
+
+.company-ops-forms {
+  margin: 0.75rem 1rem 0;
+  padding: 1rem;
+  background: #12121f;
+  border: 1px solid #334155;
+  border-radius: 12px;
+  color: #e2e8f0;
+}
+
+.company-ops-forms h3,
+.company-ops-forms h4 {
+  margin: 0 0 0.35rem;
+  color: #f8fafc;
+}
+
+.company-ops-forms form {
+  margin: 1rem 0 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid #334155;
+}
+
+.company-ops-forms label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0.5rem 0;
+  max-width: 20rem;
+}
+
+.company-ops-forms button[type='submit'] {
+  font: inherit;
+  cursor: pointer;
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.85rem;
+  background: #334155;
+  color: #f8fafc;
+  border: 1px solid #94a3b8;
+  border-radius: 6px;
+}
+
+.employee-roster {
+  margin: 0.75rem 0 0;
+  color: #f8fafc;
+}
+
+.employee-roster h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+}
+
+.employee-roster__table {
+  width: 100%;
+  max-width: 28rem;
+  border-collapse: collapse;
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.employee-roster__table th,
+.employee-roster__table td {
+  border: 1px solid #334155;
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+}
+
+.causal-rules-panel {
+  margin: 0.75rem 1rem 0;
+  padding: 1rem;
+  background: #12121f;
+  border: 1px solid #334155;
+  border-radius: 12px;
+  color: #e2e8f0;
+}
+
+.causal-rules-panel h3 {
+  margin: 0 0 0.35rem;
+  color: #f8fafc;
+}
+
+.causal-rules-panel__list {
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.causal-rules-panel__list li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin: 0 0 0.65rem;
+  padding: 0.5rem 0.65rem;
+  background: #1e293b;
+  border-radius: 8px;
+}
+
+.causal-rules-panel__kind {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.causal-rules-panel__explain {
+  color: #cbd5e1;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.dashboard__authority {
+  margin: 0 0 0.75rem;
+  color: #cbd5e1;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
 @media (max-width: 640px) {
   .trigger-button {
     flex: 1 1 100%;

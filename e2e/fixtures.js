@@ -52,6 +52,15 @@ export function equationNumber(value) {
 export const test = base.extend({
   page: async ({ page, request }, use) => {
     await clearServerTriggers(request);
+    // Seed campaign lens so legacy smokes see TriggerPanel + full desk without
+    // clicking role select (product first visit still shows the gate).
+    await page.addInitScript(() => {
+      try {
+        window.localStorage.setItem('citizen.playerRole', 'campaign');
+      } catch {
+        // ignore quota / private-mode
+      }
+    });
     await use(page);
     await clearServerTriggers(request);
   },

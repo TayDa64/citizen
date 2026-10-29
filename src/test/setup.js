@@ -1,6 +1,16 @@
 import '@testing-library/jest-dom/vitest';
-import { afterEach } from 'vitest';
+import { afterEach, beforeEach } from 'vitest';
 import { cleanup } from '@testing-library/react';
+import {
+  PLAYER_ROLE_CAMPAIGN,
+  writeStoredPlayerRole,
+} from '../playerRole.js';
+
+beforeEach(() => {
+  // Existing Slice 1/2 UI tests expect diagram + TriggerPanel; campaign lens
+  // matches that surface. Role-gate tests pass initialPlayerRole={null}.
+  writeStoredPlayerRole(PLAYER_ROLE_CAMPAIGN);
+});
 
 afterEach(() => {
   cleanup();
