@@ -1,11 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import WorkflowDiagram from './WorkflowDiagram';
-import CausalRulesPanel from './components/CausalRulesPanel';
+import CampaignDesk from './components/CampaignDesk';
 import CompanyOpsForms from './components/CompanyOpsForms';
 import Dashboard from './components/Dashboard';
 import IslandSwitcher from './components/IslandSwitcher';
 import RoleSelect from './components/RoleSelect';
-import TriggerPanel from './components/TriggerPanel';
 import {
   CONNECTED_NOTE,
   LOADING_NOTE,
@@ -113,6 +112,7 @@ function App({ initialPlayerRole } = {}) {
   const [apiBase, setApiBase] = useState(configuredBase);
   const [ledger, setLedger] = useState([]);
   const [pipelineEvents, setPipelineEvents] = useState([]);
+  const [ingestRefreshKey, setIngestRefreshKey] = useState(0);
   const campaignIdRef = useRef(null);
 
   const applyPlayerRole = (role) => {
@@ -509,6 +509,7 @@ function App({ initialPlayerRole } = {}) {
       });
       saved = true;
       setPipelineEvents(Array.isArray(ingested?.events) ? ingested.events : []);
+      setIngestRefreshKey((key) => key + 1);
       let reading = null;
       try {
         reading = await refreshApi(apiBase);
@@ -682,18 +683,21 @@ function App({ initialPlayerRole } = {}) {
           />
         ) : null}
         {isCampaign ? (
-          <TriggerPanel
+          <CampaignDesk
             state={state}
+            ledger={ledger}
             announcement={announcement}
             busy={sourceBusy}
             pipelineEvents={pipelineEvents}
+            apiBase={apiBase}
+            ingestRefreshKey={ingestRefreshKey}
             onToggleTrigger={onToggleTrigger}
             onClearTriggers={onClearTriggers}
             onIngestFixture={onIngestFixture}
           />
         ) : (
           <p className="island-hint" data-testid="ops-campaign-hint">
-            World events, ingest, and the turn ledger live on the{' '}
+            World events, causal hub, ingest runs, and the turn ledger live on the{' '}
             <button
               type="button"
               className="island-hint__link"
@@ -704,12 +708,11 @@ function App({ initialPlayerRole } = {}) {
             island — enter campaign when you want the causal runner.
           </p>
         )}
-        {isCampaign ? <CausalRulesPanel /> : null}
         <Dashboard
           state={state}
           ledger={ledger}
-          showLedger={isCampaign}
-          showPolitics={isCampaign}
+          showLedger={false}
+          showPolitics={false}
         />
       </main>
     </div>
