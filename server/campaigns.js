@@ -1,4 +1,5 @@
 import {
+  LEDGER_ONLY_COMMAND_TYPES,
   TurnCommandError,
   applyTurnCommand,
   createGameState,
@@ -133,10 +134,19 @@ export async function listTurnCommits(pool, campaignId, { limit = 50 } = {}) {
   return ledgerEntriesFromApiCommits(rows);
 }
 
-/**
- * Atomically apply one TurnCommand. Failed commits leave no partial row.
- */
-export async function commitTurn(pool, campaignId, commandBody) {
+function lockedRowToState(row) {
+  return normalizeGameState({
+    ...row.state_json,
+    campaignId: row.id,
+    turn: row.turn,
+    seed: row.seed,
+    ruleVersion: row.rule_version,
+    stateVersion: row.state_version,
+    taxRate: Number(row.tax_rate),
+  });
+}
+
+function parseCommandBody(commandBody, { allowLedgerOnly = false } = {}) {
   let command;
   try {
     command = parseTurnCommand(commandBody);
@@ -144,98 +154,119 @@ export async function commitTurn(pool, campaignId, commandBody) {
     if (error instanceof TurnCommandError) throw error;
     throw badRequest(error.message, error.issues || []);
   }
+  if (!allowLedgerOnly && LEDGER_ONLY_COMMAND_TYPES.includes(command.type)) {
+    throw badRequest(`${command.type} is written by the server restack only`, [
+      { path: 'type', code: 'invalid_value', message: `${command.type} cannot be committed by a client` },
+    ]);
+  }
+  return command;
+}
 
+/**
+ * Lock one campaign row for the rest of the caller's transaction.
+ * Every writer of a campaign's GameState takes this lock first, so a restack
+ * and an advance_turn (or two restacks) for the same campaign serialize.
+ */
+export async function lockCampaign(client, campaignId) {
+  const locked = await client.query(
+    `SELECT * FROM campaigns WHERE id = $1 FOR UPDATE`,
+    [campaignId],
+  );
+  if (locked.rowCount === 0) throw notFound('Campaign not found');
+  return locked.rows[0];
+}
+
+/**
+ * Apply one TurnCommand on a client that is already inside a transaction.
+ * Appends the turn_commits row and updates campaigns in that transaction;
+ * the caller owns BEGIN / COMMIT / ROLLBACK.
+ */
+export async function commitTurnOnClient(client, campaignId, commandBody, options = {}) {
+  const command = parseCommandBody(commandBody, options);
+  const row = await lockCampaign(client, campaignId);
+  const before = lockedRowToState(row);
+
+  let turnResult;
+  try {
+    turnResult = applyTurnCommand(before, command);
+  } catch (error) {
+    if (error instanceof TurnCommandError) throw error;
+    throw badRequest(error.message, error.issues || []);
+  }
+
+  const next = turnResult.state;
+  const seqResult = await client.query(
+    `SELECT COALESCE(MAX(seq), 0) + 1 AS next_seq FROM turn_commits WHERE campaign_id = $1`,
+    [campaignId],
+  );
+  const seq = Number(seqResult.rows[0].next_seq);
+
+  const resultPayload = ledgerResultPayload(turnResult, toGameStateView(next));
+  await client.query(
+    `INSERT INTO turn_commits
+       (campaign_id, seq, turn_before, turn_after, command_json, result_json)
+     VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb)`,
+    [
+      campaignId,
+      seq,
+      before.turn,
+      next.turn,
+      JSON.stringify(command),
+      JSON.stringify(resultPayload),
+    ],
+  );
+
+  const updated = await client.query(
+    `UPDATE campaigns
+     SET turn = $2,
+         tax_rate = $3,
+         state_version = $4,
+         rule_version = $5,
+         seed = $6,
+         state_json = $7::jsonb,
+         updated_at = now()
+     WHERE id = $1
+     RETURNING *`,
+    [
+      campaignId,
+      next.turn,
+      next.taxRate,
+      next.stateVersion,
+      next.ruleVersion,
+      next.seed ?? row.seed,
+      JSON.stringify({ ...next, campaignId }),
+    ],
+  );
+
+  const payload = asStatePayload(updated.rows[0]);
+  return {
+    ...payload,
+    commit: {
+      seq,
+      turnBefore: before.turn,
+      turnAfter: next.turn,
+      command,
+      before: turnResult.before,
+      after: turnResult.after,
+      deltas: turnResult.deltas,
+      appliedEffects: turnResult.appliedEffects,
+      explanations: turnResult.explanations,
+    },
+  };
+}
+
+/**
+ * Run `work(client)` in one transaction that holds the campaign row lock from
+ * its first statement. Everything `work` commits lands together or not at all.
+ */
+export async function withCampaignTransaction(pool, campaignId, work) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const locked = await client.query(
-      `SELECT * FROM campaigns WHERE id = $1 FOR UPDATE`,
-      [campaignId],
-    );
-    if (locked.rowCount === 0) {
-      await client.query('ROLLBACK');
-      throw notFound('Campaign not found');
-    }
-    const row = locked.rows[0];
-    const before = normalizeGameState({
-      ...row.state_json,
-      campaignId: row.id,
-      turn: row.turn,
-      seed: row.seed,
-      ruleVersion: row.rule_version,
-      stateVersion: row.state_version,
-      taxRate: Number(row.tax_rate),
-    });
-
-    let turnResult;
-    try {
-      turnResult = applyTurnCommand(before, command);
-    } catch (error) {
-      await client.query('ROLLBACK');
-      if (error instanceof TurnCommandError) throw error;
-      throw badRequest(error.message, error.issues || []);
-    }
-
-    const next = turnResult.state;
-    const seqResult = await client.query(
-      `SELECT COALESCE(MAX(seq), 0) + 1 AS next_seq FROM turn_commits WHERE campaign_id = $1`,
-      [campaignId],
-    );
-    const seq = Number(seqResult.rows[0].next_seq);
-
-    const resultPayload = ledgerResultPayload(turnResult, toGameStateView(next));
-    await client.query(
-      `INSERT INTO turn_commits
-         (campaign_id, seq, turn_before, turn_after, command_json, result_json)
-       VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb)`,
-      [
-        campaignId,
-        seq,
-        before.turn,
-        next.turn,
-        JSON.stringify(command),
-        JSON.stringify(resultPayload),
-      ],
-    );
-
-    const updated = await client.query(
-      `UPDATE campaigns
-       SET turn = $2,
-           tax_rate = $3,
-           state_version = $4,
-           rule_version = $5,
-           seed = $6,
-           state_json = $7::jsonb,
-           updated_at = now()
-       WHERE id = $1
-       RETURNING *`,
-      [
-        campaignId,
-        next.turn,
-        next.taxRate,
-        next.stateVersion,
-        next.ruleVersion,
-        next.seed ?? row.seed,
-        JSON.stringify({ ...next, campaignId }),
-      ],
-    );
-
+    await lockCampaign(client, campaignId);
+    const result = await work(client);
     await client.query('COMMIT');
-    const payload = asStatePayload(updated.rows[0]);
-    return {
-      ...payload,
-      commit: {
-        seq,
-        turnBefore: before.turn,
-        turnAfter: next.turn,
-        command,
-        before: turnResult.before,
-        after: turnResult.after,
-        deltas: turnResult.deltas,
-        appliedEffects: turnResult.appliedEffects,
-        explanations: turnResult.explanations,
-      },
-    };
+    return result;
   } catch (error) {
     try {
       await client.query('ROLLBACK');
@@ -247,6 +278,16 @@ export async function commitTurn(pool, campaignId, commandBody) {
   } finally {
     client.release();
   }
+}
+
+/**
+ * Atomically apply one TurnCommand. Failed commits leave no partial row.
+ * Ledger-only commands (compensate_torn_month) are rejected here.
+ */
+export async function commitTurn(pool, campaignId, commandBody) {
+  const command = parseCommandBody(commandBody);
+  return withCampaignTransaction(pool, campaignId, (client) =>
+    commitTurnOnClient(client, campaignId, command));
 }
 
 /**
@@ -266,17 +307,7 @@ export async function commitTurnFailBeforePersist(pool, campaignId, commandBody)
       await client.query('ROLLBACK');
       throw notFound('Campaign not found');
     }
-    const row = locked.rows[0];
-    const before = normalizeGameState({
-      ...row.state_json,
-      campaignId: row.id,
-      turn: row.turn,
-      seed: row.seed,
-      ruleVersion: row.rule_version,
-      stateVersion: row.state_version,
-      taxRate: Number(row.tax_rate),
-    });
-    applyTurnCommand(before, command);
+    applyTurnCommand(lockedRowToState(locked.rows[0]), command);
     await client.query('ROLLBACK');
     return getCampaign(pool, campaignId);
   } finally {
