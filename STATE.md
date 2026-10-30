@@ -293,7 +293,7 @@ Squash diff `4722573..23a9a5b`: `.github/workflows/ci.yml` adds an `e2e-a11y` jo
 
 Green on the pull_request event — run `41097010359` (workflow `CI`, head `ea9a763`), jobs `build`, `test-api`, and `e2e-a11y` all `success`, Playwright **8 passed / 1 skipped**. The push of `23a9a5b` to `main` is the same three jobs, also `success` — run `41108338460`.
 
-**Branch protection still decides whether a red `e2e-a11y` blocks a merge — the job adds the check without making it required.** `main` is protected (`protected: true`, `protection.enabled: true`), `e2e-a11y` is a required status check (app GitHub Actions, app_id 15368), enforcement level `non_admins`, so a red `e2e-a11y` now blocks a merge for non-admin actors. This changed during the same session: a push of STATE.md to `main` was refused with GH006 saying the required check `e2e-a11y` is expected.
+**Whether a red `e2e-a11y` blocks a merge is now decided by branch protection, and it does block: `e2e-a11y` is a required status check.** `main` is protected (`protected: true`, `protection.enabled: true`), `e2e-a11y` is a required status check (app GitHub Actions, app_id 15368), enforcement level `non_admins`, so a red `e2e-a11y` now blocks a merge for non-admin actors. This changed during the same session: a push of STATE.md to `main` was refused with GH006 saying the required check `e2e-a11y` is expected.
 
 ### Open item status (appended 2026-10-30, post-#43)
 
