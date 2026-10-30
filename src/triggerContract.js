@@ -424,7 +424,9 @@ export function stackTriggerEffects(baselines, triggers) {
   let factor = 1;
   for (const trigger of ordered) {
     if (trigger.effect?.hype != null) hype += trigger.effect.hype;
-    if (trigger.effect?.talentCost != null) factor *= 1 + trigger.effect.talentCost;
+    // Same floor as the client (simulationCore combinedEffects): a cut of
+    // -100% or more is $0, and two such cuts must not multiply back up.
+    if (trigger.effect?.talentCost != null) factor *= Math.max(0, 1 + trigger.effect.talentCost);
   }
   const talent = talentBaseline * factor;
   if (!Number.isFinite(hype) || !Number.isFinite(talent)) {

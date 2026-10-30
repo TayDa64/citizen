@@ -39,6 +39,7 @@
     "test": "npm run test:unit && npm run test:ui",
     "test:api": "node --test test/api/*.api.js",
     "check:restack": "node --test test/model/campaign-restack-atomicity.api.js test/api/campaign-restack-race.api.js test/api/campaign-restack-compensation.api.js",
+    "check:model": "node --test test/model/*.api.js",
     "test:browser": "playwright test"
   }
 }

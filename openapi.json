@@ -875,7 +875,7 @@
             "type": "number",
             "minimum": -100,
             "maximum": 100,
-            "description": "Relative delta. 0.12 multiplies the company talent-cost baseline by 1.12. Results are floored at 0."
+            "description": "Relative delta. 0.12 multiplies the company talent-cost baseline by 1.12. Each trigger's factor (1 + delta) is floored at 0, so a cut of -100% or more takes talent cost to 0 and a second such cut cannot raise it again. Results are floored at 0."
           }
         }
       },
