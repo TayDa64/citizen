@@ -66,3 +66,63 @@ jobs:
 
       - name: API tests
         run: npm run test:api
+
+  # Browser gate: the full e2e suite, including e2e/a11y.spec.js — the full-page
+  # WCAG 2.2 A/AA scan that caught `aria-meter-name` on the voter-support meter
+  # (#42). The build job runs `npm run build` + `npm test` only, and npm test is
+  # test:unit + test:ui, so until now the scan ran only on someone's machine.
+  #
+  # Browser: chromium, not `channel: 'chrome'`. The runner image does ship Chrome,
+  # but pinning the Playwright-managed build (installed from the lockfile) keeps
+  # the gate reproducible and off the image's Chrome churn. playwright.config.js
+  # reads the channel from PLAYWRIGHT_CHANNEL; `chrome` stays the local default.
+  #
+  # api-contract.spec.js needs a live API on 127.0.0.1:8787 and skips itself
+  # without CITIZEN_API_E2E — same as today, left skipped here.
+  e2e-a11y:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          check-latest: true
+
+      - name: Install
+        run: npm ci
+
+      # --with-deps pulls the shared libs headless chromium needs (libnss3,
+      # libatk, libgbm, fonts…). The download is keyed on the Playwright version
+      # in package-lock.json, so it only re-runs when the browser is bumped.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      # retries: 0 lives in playwright.config.js — a red run here is a real
+      # failure, not a flake to be papered over. The a11y scan is the whole
+      # point, so this job must not go green on a retry.
+      - name: E2E + WCAG 2.2 AA scan
+        env:
+          PLAYWRIGHT_CHANNEL: chromium
+        run: npm run test:browser
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
