@@ -277,3 +277,71 @@ Live follow-ups still open after #42:
 - **(b) Throwaway-db race in `test/api/throwaway-db.js`.** Trace **`diag-20261030-60e4dc88`**, `diag-kb v1.1.0`. `close()` does `await pool.end()` and then `DROP DATABASE ... WITH (FORCE)`, but pg-pool 3.14.0's `Pool.end()` resolves before the client sockets have actually closed (`_remove()` filters `_clients` synchronously, so `_endCallback` fires early) — measured: the socket is still open when `end()` resolves in 100/100 trials, median 1.7 ms, max 3.2 ms. The FORCE drop then intermittently SIGTERMs a backend still being closed (2 hits in 930 drops), and because the helper registers no pool `'error'` listener, `makeIdleListener`'s `pool.emit('error', err)` has no handler, so the recoverable `terminating connection due to administrator command` becomes an **uncaughtException** that aborts a whole test file. Pre-existing on pristine `ca92668`; sequential runs are safe (3/3 clean, and 63/63 on every sequential invocation here); it only bites at ~3× concurrency (~27 % of runs measured, 4 failing runs / 15). Not caused by concurrent runs colliding — the DB name embeds the creating pid, so no two runs ever share a database. **Unowned.**
 
 Last updated: 2026-10-30, post-merge regression on `a9c6c53` (#42 squash-merged on top of `3f9f473`; #36/#37/#40/#41 recorded earlier) — PASS, trace `diag-20261030-3d44e700` (`diag-kb v1.1.0`); main tip `a9c6c53`.
+
+
+---
+
+## Merge record — #43 (appended 2026-10-30, CI a11y gate)
+
+`main` tip: **`23a9a5b90cddd7838bda27cb0119c9cd261e7f5c`** (`23a9a5b`), "*ci: gate the full-page WCAG 2.2 AA scan in GitHub Actions (#43)*", authored by **TayDa64**, single parent `4722573`.
+
+| PR | State | Landing commit on `main` | Head | Files |
+| --- | --- | --- | --- | --- |
+| #43 — gate the full-page WCAG 2.2 AA scan | **MERGED (squash)** | `23a9a5b` | `ea9a763` | 2 |
+
+Squash diff `4722573..23a9a5b`: `.github/workflows/ci.yml` adds an `e2e-a11y` job that installs Playwright's chromium and runs `npm run test:browser` with `PLAYWRIGHT_CHANNEL=chromium`; `playwright.config.js` now reads `channel: process.env.PLAYWRIGHT_CHANNEL || 'chrome'` so a local hand-run keeps system Chrome. 2 files, +65/−1.
+
+Green on the pull_request event — run `41097010359` (workflow `CI`, head `ea9a763`), jobs `build`, `test-api`, and `e2e-a11y` all `success`, Playwright **8 passed / 1 skipped**. The push of `23a9a5b` to `main` is the same three jobs, also `success` — run `41108338460`.
+
+**Branch protection still decides whether a red `e2e-a11y` blocks a merge — the job adds the check without making it required.** `main`'s protection currently shows `enabled: false`, so a red run is advisory until the owner flips it in repo settings.
+
+### Open item status (appended 2026-10-30, post-#43)
+
+- **CLOSED at the workflow level on `main` at `23a9a5b` — follow-up (a), the full-page WCAG scan was local-only.** The original item recorded under "Live follow-ups still open after #42" is **kept as written and not deleted**; this line records its disposition. This closes open follow-up (a) from the previous block, at the workflow level: CI now runs the scan. With protection `enabled: false`, a red `e2e-a11y` stays advisory. Follow-up (b), the throwaway-db race, is unchanged by #43 and stays as written.
+
+## Open PR — #44 (awaiting merge decision)
+
+PR #44 `fix(ui): rebase clamped campaign hype with the set_tax rule` is **OPEN, not merged.** Head `f74dddd`, base `23a9a5b`, 3 files, +172/−26.
+
+| PR | State | Base | Head | Files |
+| --- | --- | --- | --- | --- |
+| #44 — rebase clamped campaign hype with the `set_tax` rule | **OPEN, not merged** | `23a9a5b` | `f74dddd` | 3 (+172/−26) |
+
+**Bug.** `mergeCampaignTurnState` in `src/turnCommands.js` subtracted the old civic bias from an already-clamped `company.hype`, so once hype sat on 0 or 1 the client drifted from the server. The fix rebases through the same `set_tax` rule the engine uses.
+
+### Regression on `f74dddd` — PASS
+
+Trace **`diag-20261030-7f606495`**, `diag-kb v1.1.0`.
+
+| Command | Result |
+| --- | --- |
+| unit | **87/87** |
+| ui | **294 passed \| 1 skipped** (29 files) |
+| `npm run test:api` | **63/63** |
+| `npm run check:restack` | **10/10** |
+| `npm run check:model` | **21/21** |
+| `npm run build` | exit **0** |
+| Playwright | **8 passed \| 1 skipped** |
+
+CI on the head: **success** — run `41114203655` (workflow `CI`, `pull_request` event), jobs `build`, `test-api`, and `e2e-a11y` all `success`.
+
+Independent drift measurement (separate probe, real `applyTurnCommand` on both sides):
+
+- On `23a9a5b` the ceiling is server **0.99** vs client **0.95**, and the floor is server **0** vs client **0.05**.
+- On `f74dddd` both land **0.99** and **0** exactly.
+
+The four new tests gate the fix: with only `src/turnCommands.js` reverted, **4/4 new fail** and **12/12 pre-existing pass**.
+
+Invariants: **24/24 exact** against the `a9c6c53` baseline. Full-page WCAG 2.2 AA: **0 violations**.
+
+### Follow-ups worth filing
+
+Both confirmed real, both confirmed unreachable in the UI, both pre-existing on `main`:
+
+- **(i)** `pathwayPreview` / `TurnResult.pathwayPreview.targetAfter` still subtracts from clamped hype and reports **0.95** where the commit lands **0.99**. No UI consumes the field, and the Dashboard previews the current tax, which round-trips.
+- **(ii)** A restack that only changes hype leaves the merged value stale. `onToggleTrigger` and `onIngestFixture` both call `refreshApi()` before restacking, so final drift is **0** on every real path.
+
+Non-blocking: if `prev.taxRate` is `undefined` or `NaN`, the new rebase throws `TurnCommandError` where `main` silently degraded to hype **0.45**. Unreachable for a hydrated API state.
+
+**Status: open, green, regression-cleared, awaiting the orchestrator's merge decision.**
+Last updated: 2026-10-30, #43 merged at `23a9a5b`; #44 open and regression-cleared, trace `diag-20261030-7f606495` (`diag-kb v1.1.0`); main tip `23a9a5b`.
