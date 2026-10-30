@@ -166,3 +166,55 @@ Migrations on `main`: **`001`–`007`**. OpenAPI tip **0.8.9** (this PR; Wave 2 
 - CIT-81 pointer-only minutes gap closed by CIT-101 (this PR).
 
 Last updated: 2026-10-29, CIT-116 nest + council calendar (this PR); main tip `80169ab` (#34 campaign causal).
+
+---
+
+## Merge record — 2026-10-30 (appended)
+
+main tip: **`ca926681bfc3915ef6b1953e5dd9c913260f21c5`** (`ca92668`), "*fix(ui): no silent local fallback when a campaign commit fails (#41)*", authored 2026-10-30 09:30 PDT, single parent `5d9eeb4`, GitHub-verified. **Open PRs: none.**
+
+| PR | State | Landing commit on `main` | Head | Files |
+| --- | --- | --- | --- | --- |
+| #36 — torn campaign restack check (product code unchanged) | MERGED | `51ce1db` | `8d53ff0` | 8 |
+| #37 — restack as one locked transaction + `compensate_torn_month` (squash) | MERGED | `e8390cd` | `4e5718f` | 19 |
+| #38 — model checks + fixes (stacked on `fix/atomic-restack`) | **CLOSED, not merged — superseded by #40** | — | `e6d8d31` | 15 |
+| #40 — trigger nest/effect-math model checks, rebased on `main` | MERGED | `5d9eeb4` | `4846fba` | 15 |
+| #41 — no silent local fallback when a campaign commit fails | MERGED | `ca92668` | `e9680b4` | 20 |
+
+Merge order held: #36 → #37 (squash of the atomic restack) → #40 (retargeted to `main` as `check/trigger-math-v2` after the squash) → #41 (rebased to `*-v2`). #38's API object carries a non-null `merge_commit_sha` (`65f0dc7`) even though `merged=false`; that commit does not exist on `main`. Read `merged`/`merged_at`, not `merge_commit_sha`.
+
+CI on `ca92668`: **success** — run `41090467945` (workflow `CI`, run #90), jobs `build` and `test-api` both `success`.
+
+### Post-merge regression on `ca92668` — PASS
+
+Trace **`diag-20261030-23d25c95`**, `diag-kb v1.1.0`. Clean local checkout of `ca92668`, Node 22.23.4, local Postgres 17 over the unix socket, scratch DBs only (no remote DB). Logs: `/workspace/grace/probes/citizen-main-ca92668/`. Baseline: `/workspace/grace/baselines/citizen-main-ca92668.json`.
+
+| Command | Result |
+| --- | --- |
+| `npm ci` | exit 0 |
+| `npm run build` | exit 0 (`assets/index-9zjuXizP.js`) |
+| `npm test` | node unit **87/87**, vitest **287 passed \| 1 skipped** (28 files) — exit 0 |
+| `npm run test:api` | **63/63** — exit 0 |
+| `npm run check:restack` | **10/10** — exit 0 |
+| `npm run check:model` | **21/21** — exit 0 |
+| Playwright `e2e/ux-smokes.spec.js` + `e2e/world-events.spec.js` | **6 passed** (8.3 s), `--workers=1` — exit 0 |
+
+Every number matches Brainiac's corroborating invariants run on the same SHA; no discrepancy. Both runs are listed here because one alone is not proof — the two agree suite by suite.
+
+Invariants re-checked independently (sim in-process, live API on a scratch DB, and the browser build):
+
+- Slice 1 unchanged: init 15000 / burn 2000 / tax 0.25; tick 1 → 14817 / 2200; fresh at 30 % → 14813 / 2240; tick then 100 % → 14583 / 2800. Browser: 15000 → 14817 with burn 2200; tax slider 0 / 0.25 / 1 → burn (and base) 2000 / 2200 / 2800 in both lenses.
+- No employees: burn **2000 / 2200 / 2800** at tax 0 / 0.25 / 1.
+- Skill-1 person: **tech 1.75**, **marketing 1.47**, **sales 1.33**.
+- Clamp 0.1×–3×: raw ratio 0 → factor 0.1, talent cost 0, burn 220 (flagged); ratio 3 → factor 3, talent cost 12000, burn 6600 (not flagged); **exactly 0.1 and exactly 3 are not flagged**; 0.09999 and 3.0003 are.
+- Fixture wage bulletin: burn **2376**, factor 1.08, clear → **2200**; the campaign path bills 2376 (cash 15000 → 14802) and 2200 after clear.
+- Authority boundary: a `companies` row poisoned to cash 777777 / burn_rate 9999 is never copied onto the client sim — the UI still shows 15000 / 2200 and advances to 14817.
+- #41's fix holds in the built app: with `POST /turns` forced to 500 the screen stays at 15000 / 2200 with a `role="alert"` "turn was not saved" message, no local re-run and no extra commit; a second Advance is blocked with "Retry it before playing another turn"; Retry after the server recovers lands on 14817 / 2200.
+
+## Open items (appended 2026-10-30)
+
+- **PoliticsMeter accessible name — `aria-meter-name` (serious).** `src/components/PoliticsMeter.jsx` renders `role="meter"` with `aria-valuemin/max/now/valuetext` and **no accessible name** (`aria-label` / `aria-labelledby` / `title` are all absent; the parent `<section>`'s `aria-labelledby` does not name the meter). axe-core 4.14.0 with WCAG 2.2 AA tags reports one violation on `.politics-meter__bar` (`data-testid="politics-voter-support-meter"`) on the campaign desk, in both the local and API builds; the company-ops lens is clean. **Pre-existing, introduced by PR #34 (`80169ab`), not a regression from #36/#37/#40/#41.** CI does not catch it: `e2e/world-events.spec.js` runs axe only with `withRules(['label-content-name-mismatch'])` over `.trigger-panel` / `.data-source`. **Owner: Brainiac** (follow-up PR offered). Consequence: the earlier note "A1: resolved. Axe is 0 on 5f4f021" is true only for the pages/rules measured at that time and must not be read as a repo-wide axe-zero claim.
+- Model checks now need Postgres: `check:model` runs every `test/model/*.api.js`, including the restack atomicity file. Both `check:restack` and `check:model` are outside `npm test` and `npm run test:api`, so a green CI run does not prove them — run both against a local DB.
+- Carried: `migrations/001` still has no down section, so a full re-up after a full down fails at 001.
+
+Last updated: 2026-10-30, post-merge regression on `ca92668` (#36/#37/#40/#41; #38 closed as superseded) — PASS, trace `diag-20261030-23d25c95` (`diag-kb v1.1.0`); main tip `ca92668`.
