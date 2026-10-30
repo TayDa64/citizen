@@ -218,3 +218,62 @@ Invariants re-checked independently (sim in-process, live API on a scratch DB, a
 - Carried: `migrations/001` still has no down section, so a full re-up after a full down fails at 001.
 
 Last updated: 2026-10-30, post-merge regression on `ca92668` (#36/#37/#40/#41; #38 closed as superseded) — PASS, trace `diag-20261030-23d25c95` (`diag-kb v1.1.0`); main tip `ca92668`.
+
+
+---
+
+## Merge record — #42 (appended 2026-10-30)
+
+`main` tip: **`a9c6c53e5edab71b913625d0c2cb9a1641870a76`** (`a9c6c53`), "*fix(a11y): name the voter support meter for WCAG 2.2 AA (#42)*", authored by **TayDa64**, single parent `3f9f473` (the STATE.md commit). GitHub-verified as the real branch head of `main`. **Open PRs: none.**
+
+| PR | State | Landing commit on `main` | Head | Files |
+| --- | --- | --- | --- | --- |
+| #42 — PoliticsMeter accessible name (`aria-meter-name`) | **MERGED (squash)** | `a9c6c53` | `425cf22` | 5 |
+
+Squash diff `3f9f473..a9c6c53`: `src/components/PoliticsMeter.jsx` (+2/−1 — adds `aria-labelledby="politics-voter-support-label"` to the `role="meter"` bar and `id="politics-voter-support-label"` to the existing visible `<dt>Voter support</dt>`), new `src/components/PoliticsMeter.test.jsx` (3 tests), new `e2e/a11y.spec.js` (2 tests, incl. a full-page WCAG 2.2 AA scan), `package.json` +1 (`axe-core` devDependency) and `package-lock.json` +1. No simulation, turn, restack, migration or API file touched.
+
+CI on `a9c6c53`: **success** — run `41094841046` (workflow `CI`, `push` event), jobs `build` and `test-api` both `success`. Note the two jobs CI actually runs are `npm ci` + `npm run build` + `npm test` (build job) and `npm run test:api` (test-api job); CI does **not** run Playwright, `check:restack` or `check:model`.
+
+### Post-merge regression on `a9c6c53` — PASS
+
+Trace **`diag-20261030-3d44e700`**, `diag-kb v1.1.0`. Clean local checkout of `a9c6c53`, Node 22.23.4, local Postgres 17.11 over the unix socket, scratch DBs only (no remote DB). Every suite was run **strictly sequentially** — no concurrent `test:api`, because the known throwaway-db race (trace `diag-20261030-60e4dc88`) makes parallel runs unreliable. Probes: `/workspace/grace/probes/citizen-main-a9c6c53/`. Baseline: `/workspace/grace/baselines/citizen-main-a9c6c53.json`.
+
+| Command | Result |
+| --- | --- |
+| `npm ci` | exit 0 |
+| `npm run build` | exit 0 (`assets/index-zUttogV3.js`; chunk-size warning only, pre-existing) |
+| `npm test` → `test:unit` | **87/87** (69 subtests, 3 suites) — exit 0 |
+| `npm test` → `test:ui` | **290 passed \| 1 skipped** (29 files, 291) — exit 0 |
+| `npm run test:api` | **63/63** (17 suites) — exit 0 |
+| `npm run check:restack` | **10/10** (3 suites) — exit 0 |
+| `npm run check:model` | **21/21** (4 suites) — exit 0 |
+| `npx playwright test` (full suite) | **8 passed \| 1 skipped** (9 total, the `CITIZEN_API_E2E`-gated `e2e/api-contract.spec.js`) — exit 0 |
+
+Every count matches the expected figures exactly; **no discrepancy**. A teammate's post-merge invariants pass was reported on this SHA; it is recorded here only as **corroboration** — the numbers below were re-derived independently rather than taken from that report.
+
+**`e2e/a11y.spec.js` ran on `main` itself and passed: 2/2** — `voter support meter exposes an accessible name` and `default page has no WCAG 2.2 AA violations`. This is the first `main` tip on which the full-page WCAG 2.2 AA scan actually executes; it is **not** run by CI (see open item (a)), so it only gates when someone runs Playwright locally.
+
+Axe re-verified independently (full page, campaign lens, tags `wcag2a`/`wcag2aa`/`wcag21a`/`wcag21aa`/`wcag22aa`), the before/after the fix was meant to produce:
+
+- `ca92668` (without the fix): **1 violation** — `aria-meter-name`, impact **serious**, target `.politics-meter__bar`.
+- `a9c6c53` (with the fix): **0 violations**, and the meter's computed accessible name resolves to **"Voter support"** (`getByRole('meter', { name: 'Voter support' })` matches exactly 1). Company-ops lens: 0 violations, 0 meters. Exactly one `politics-voter-support-label` id can exist per lens and no duplicate ids exist on either rendered page. Rendering is **pixel-identical** to the pre-merge PR build (same full-page screenshot MD5 `7c29d2162c2035b18cf2aa7b79f8ed78`, same bundle hash).
+
+Invariants re-checked independently on `a9c6c53` (sim in-process; **0 of 82** scalar values differ from the `ca92668` baseline):
+
+- No employees: burn exactly **2000 / 2200 / 2800** at tax **0 / 0.25 / 1**.
+- Skill-1 person (one employee): **tech 1.75**, **marketing 1.47**, **sales 1.33**. (Consistent with the `DEPARTMENT_WEIGHTS` of 1.25 / 1.05 / 0.95 in the invariants list above: those weights are multiplied by `skillFactor(1) = 1.4`, giving 1.75 / 1.47 / 1.33.)
+- Clamp 0.1×–3×: raw ratio 0.09999 → factor 0.1, **flagged**; raw ratio 3.0003 → factor 3, **flagged**; **exactly 0.1 and exactly 3 are not flagged**.
+- Fixture wage bulletin: burn **2376**, clear → **2200**.
+- Authority boundary: a `companies` payload carrying cash 999999 / burnRate 123456 is **never copied** onto the client sim — the client keeps its own 15000 / 2000 (stored base burn) and only takes hype/talentCost from the API; `dataSource` becomes `api`. Backed by four passing `authority boundary` tests in `src/simulation.test.js` and `src/apiMode.test.jsx`.
+- Slice 1 tax-to-burn base formula unchanged.
+
+### Open item status (appended 2026-10-30, post-#42)
+
+- **RESOLVED on `main` at `a9c6c53` — PoliticsMeter accessible name (`aria-meter-name`, serious).** The original item recorded earlier in this file under "Open items (appended 2026-10-30)" is **kept as written and not deleted**; this line records its disposition. PR #42 (squash `a9c6c53`, head `425cf22`, merged by TayDa64, CI run `41094841046` green) added `aria-labelledby="politics-voter-support-label"` to the meter and `id="politics-voter-support-label"` to the existing visible `<dt>Voter support</dt>`, so the meter now takes its name from visible on-screen text. Verified independently on `a9c6c53`: full-page WCAG 2.2 AA scan is **0 violations** (was 1), the accessible name resolves to **"Voter support"**, and `e2e/a11y.spec.js` passes on `main` (2/2). The original owner (Brainiac) no longer needs a follow-up PR.
+
+Live follow-ups still open after #42:
+
+- **(a) The full-page WCAG scan is still local-only.** `e2e/a11y.spec.js` now gates `main` only when someone runs `npx playwright test` by hand, because **CI does not run Playwright at all** — the `CI` workflow has just two jobs, `build` (`npm ci` + `npm run build` + `npm test`) and `test-api` (`npm run test:api`). So a PR can introduce a WCAG violation and still show green CI. Closing this needs a CI job that runs Playwright (ideally `npm run test:browser`, keeping Playwright's own `webServer` build+preview so API-mode config still mirrors CI). Unowned.
+- **(b) Throwaway-db race in `test/api/throwaway-db.js`.** Trace **`diag-20261030-60e4dc88`**, `diag-kb v1.1.0`. `close()` does `await pool.end()` and then `DROP DATABASE ... WITH (FORCE)`, but pg-pool 3.14.0's `Pool.end()` resolves before the client sockets have actually closed (`_remove()` filters `_clients` synchronously, so `_endCallback` fires early) — measured: the socket is still open when `end()` resolves in 100/100 trials, median 1.7 ms, max 3.2 ms. The FORCE drop then intermittently SIGTERMs a backend still being closed (2 hits in 930 drops), and because the helper registers no pool `'error'` listener, `makeIdleListener`'s `pool.emit('error', err)` has no handler, so the recoverable `terminating connection due to administrator command` becomes an **uncaughtException** that aborts a whole test file. Pre-existing on pristine `ca92668`; sequential runs are safe (3/3 clean, and 63/63 on every sequential invocation here); it only bites at ~3× concurrency (~27 % of runs measured, 4 failing runs / 15). Not caused by concurrent runs colliding — the DB name embeds the creating pid, so no two runs ever share a database. **Unowned.**
+
+Last updated: 2026-10-30, post-merge regression on `a9c6c53` (#42 squash-merged on top of `3f9f473`; #36/#37/#40/#41 recorded earlier) — PASS, trace `diag-20261030-3d44e700` (`diag-kb v1.1.0`); main tip `a9c6c53`.
