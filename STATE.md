@@ -323,9 +323,9 @@ Trace **`diag-20261030-7f606495`**, `diag-kb v1.1.0`.
 | `npm run build` | exit **0** |
 | Playwright | **8 passed \| 1 skipped** |
 
-CI on the head: **success** — run `41114203655` (workflow `CI`, `pull_request` event), jobs `build`, `test-api`, and `e2e-a11y` all `success`.
+Brainiac re-ran the two Postgres-backed suites on `f74dddd` from their own checkout and got `check:restack` **10/10** and `check:model` **21/21**, matching this table. That only became possible after the box got a working Postgres (portable PG 17.11 at `/workspace/pg17`, socket `/var/run/postgresql`). The stock box had clients only and apt could not install the server, so any earlier green `check:restack` / `check:model` from a teammate predates that and should not be read as evidence.
 
-Brainiac re-ran the two Postgres-backed suites on `f74dddd` from their own checkout and got `check:restack` **10/10** and `check:model` **21/21**, matching this run — an independent second run, not a restatement of mine. That corroboration only became possible once the box had a working Postgres server (portable PG 17.11 at `/workspace/pg17`, socket `/var/run/postgresql`): the stock box shipped clients only and apt could not install the server, so any earlier teammate "`check:restack` / `check:model` green" predating that must not be read as evidence.
+CI on the head: **success** — run `41114203655` (workflow `CI`, `pull_request` event), jobs `build`, `test-api`, and `e2e-a11y` all `success`.
 
 Independent drift measurement (separate probe, real `applyTurnCommand` on both sides):
 
@@ -346,12 +346,12 @@ Three, all confirmed real, all confirmed unreachable in the UI, all pre-existing
 
 | `prev.taxRate` | `main` `23a9a5b` | #44 `f74dddd` |
 | --- | --- | --- |
-| `undefined` | hype **0.30**, no throw | **throws** `TurnCommandError` |
-| `NaN` | hype **0.30**, no throw | **throws** `TurnCommandError` |
-| `null` | hype **0.30**, no throw | hype **0.30**, no throw |
-| `0.5` | hype **0.30**, no throw | hype **0.30**, no throw |
+| `undefined` | hype **0.30**, no throw | throws `TurnCommandError: GameState.taxRate must be finite` |
+| `NaN` | hype **0.30**, no throw | throws `TurnCommandError: GameState.taxRate must be finite` |
+| `null` | hype **0.30** | hype **0.30** |
+| `0.5` | hype **0.30** | hype **0.30** |
 
-The throw is narrower than "non-finite" suggests — `null` does not throw on either side. The degraded value is fixture-dependent, so **0.30** means nothing without that fixture stated alongside it. Unreachable for a hydrated API state, since `taxRate` is always finite there.
+The throw is `undefined` / `NaN` only. `null` does not throw on either side, because `nextTax` falls back to `prev.taxRate` and a JSON-shaped null already went through `Number(null)` → 0 on `main`. The degraded value is fixture-dependent, so **0.30** means nothing without that fixture stated alongside it. Unreachable for a hydrated API state, since `taxRate` is always finite there.
 
 **Status: open, green, regression-cleared, awaiting the orchestrator's merge decision.**
 Last updated: 2026-10-30, #43 merged at `23a9a5b`; #44 open and regression-cleared, trace `diag-20261030-7f606495` (`diag-kb v1.1.0`); main tip `23a9a5b`.
