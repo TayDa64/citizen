@@ -1,0 +1,138 @@
+---
+title: "Citizen: what you see vs what the campaign server holds"
+---
+stateDiagram-v2
+  state "Legend" as legend {
+    lg0: steady
+    lg1: saving
+    lg2: failed
+    lg3: Breaks EachMonthBilledOnce
+    lg4: Breaks EachMonthBilledOnce in some cases
+    lg5: Path to the EachMonthBilledOnce bug
+  }
+  class lg0 blue
+  class lg1 teal
+  class lg2 yellow
+  class lg3 breaks
+  class lg4 mayBreak
+  class lg5 bugPath
+  s0: Screen month 0, no event#59; server month 0, no event
+  s1: Saving: Screen month 0, no event#59; server month 0, no event
+  s2: Save failed, Retry shown: Screen month 0, no event#59; server month 0, no event
+  s3: Save failed, Retry shown: Screen month 0, no event#59; server month 0, event on
+  s4: Saving: Screen month 0, event on#59; server month 0, event on
+  s5: Saving: Screen month 0, no event#59; server month 0, event on
+  s6: Save failed, Retry shown: Screen month 0, event on#59; server month 0, event on
+  s7: Save failed, Retry shown: Screen month 0, event on#59; server month 1, event on
+  s8: Screen month 1, event on#59; server month 1, event on
+  s9: Saving: Screen month 0, event on#59; server month 1, event on
+  s10: Saving: Screen month 1, event on#59; server month 1, event on
+  s11: Save failed, Retry shown: Screen month 1, event on#59; server month 1, event on
+  s12: Save failed, Retry shown: Screen month 0, event on#59; server month 2, event on
+  s13: Screen month 2, event on#59; server month 2, event on
+  s14: Saving: Screen month 0, event on#59; server month 2, event on
+  s15: Save failed, Retry shown: Screen month 1, event on#59; server month 2, event on
+  s16: Saving: Screen month 2, event on#59; server month 2, event on
+  s17: Saving: Screen month 1, event on#59; server month 2, event on
+  s18: Save failed, Retry shown: Screen month 2, event on#59; server month 2, event on
+  s19: Save failed, Retry shown: Screen month 0, event on#59; server month 3, event on
+  s20: Screen month 3, event on#59; server month 3, event on
+  s21: Saving: Screen month 0, event on#59; server month 3, event on
+  s22: Save failed, Retry shown: Screen month 1, event on#59; server month 3, event on
+  s23: Save failed, Retry shown: Screen month 2, event on#59; server month 3, event on
+  s24: Saving: Screen month 3, event on#59; server month 3, event on
+  s25: Saving: Screen month 1, event on#59; server month 3, event on
+  s26: Saving: Screen month 2, event on#59; server month 3, event on
+  s27: Save failed, Retry shown: Screen month 3, event on#59; server month 3, event on
+  [*] --> s0
+  s0 --> s1: you advance a month
+  s1 --> s2: the server rejects a step
+  s1 --> s3: a step saves but the reply is lost
+  s1 --> s4: the server saves a step
+  s2 --> s1: you press Retry
+  s3 --> s5: you press Retry
+  s4 --> s6: the server rejects a step
+  s4 --> s7: a step saves but the reply is lost
+  s4 --> s8: the server saves a step
+  s5 --> s3: a step saves but the reply is lost or the server rejects a step
+  s5 --> s4: the server saves a step
+  s6 --> s4: you press Retry
+  s7 --> s9: you press Retry
+  s8 --> s10: you advance a month
+  s9 --> s7: the server rejects a step
+  s9 --> s12: a step saves but the reply is lost
+  s9 --> s13: the server saves a step
+  s10 --> s11: a step saves but the reply is lost or the server rejects a step
+  s11 --> s10: you press Retry
+  s10 --> s15: a step saves but the reply is lost
+  s10 --> s13: the server saves a step
+  s12 --> s14: you press Retry
+  s13 --> s16: you advance a month
+  s14 --> s12: the server rejects a step
+  s14 --> s19: a step saves but the reply is lost
+  s14 --> s20: the server saves a step
+  s15 --> s17: you press Retry
+  s16 --> s18: a step saves but the reply is lost or the server rejects a step
+  s17 --> s15: the server rejects a step
+  s17 --> s22: a step saves but the reply is lost
+  s17 --> s20: the server saves a step
+  s18 --> s16: you press Retry
+  s16 --> s23: a step saves but the reply is lost
+  s16 --> s20: the server saves a step
+  s19 --> s21: you press Retry
+  s20 --> s24: you advance a month
+  s21 --> s19: the server rejects a step
+  s22 --> s25: you press Retry
+  s23 --> s26: you press Retry
+  s24 --> s27: a step saves but the reply is lost or the server rejects a step
+  s25 --> s22: the server rejects a step
+  s26 --> s23: the server rejects a step
+  s27 --> s24: you press Retry
+  classDef breaks fill:#ffecee,stroke:#e72e3b,stroke-width:2.5px,color:#cd2834
+  classDef mayBreak fill:#fff3e6,stroke:#e8730c,stroke-width:2.5px,color:#b85a06
+  class s0 blue
+  class s0 bugPath
+  class s1 teal
+  class s1 bugPath
+  class s2 yellow
+  class s3 yellow
+  class s4 teal
+  class s4 bugPath
+  class s5 teal
+  class s6 yellow
+  class s7 yellow
+  class s7 bugPath
+  class s8 blue
+  class s9 teal
+  class s9 bugPath
+  class s10 teal
+  class s11 yellow
+  class s12 yellow
+  class s12 breaks
+  class s13 blue
+  class s13 mayBreak
+  class s13 bugPath
+  class s14 teal
+  class s14 breaks
+  class s15 yellow
+  class s16 teal
+  class s17 teal
+  class s18 yellow
+  class s19 yellow
+  class s19 breaks
+  class s20 blue
+  class s20 breaks
+  class s21 teal
+  class s21 breaks
+  class s22 yellow
+  class s22 breaks
+  class s23 yellow
+  class s23 breaks
+  class s24 teal
+  class s24 breaks
+  class s25 teal
+  class s25 breaks
+  class s26 teal
+  class s26 breaks
+  class s27 yellow
+  class s27 breaks

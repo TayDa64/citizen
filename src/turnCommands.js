@@ -107,6 +107,15 @@ export function applyCommandsLocally(state, commands) {
  * Returns { state, mode: 'api'|'local', results? }.
  * Callers that advance should pass commandsWithTriggerRestack so campaign
  * state_json matches the UI trigger stack before burn drains cash.
+ *
+ * Server-backed failure: when a campaign is live and a commit throws, the
+ * commands are NOT re-run locally. A local re-run would put a month and a
+ * world event on screen that the campaign never recorded (UI burn 2464 /
+ * turn 1 while the server stayed at 2200 / turn 0). Instead this returns
+ * { failed: true, state, pending } where `state` is the last server-confirmed
+ * state (the prior state merged with every commit that did succeed) and
+ * `pending.commands` is the failed command plus the ones never sent. Use
+ * retryTurnCommands to recover. Offline play (no api / campaign) is unchanged.
  */
 export async function dispatchTurnCommands(state, commands, { api = null, campaignId = null } = {}) {
   const list = Array.isArray(commands) ? commands : [commands];
@@ -117,19 +126,71 @@ export async function dispatchTurnCommands(state, commands, { api = null, campai
 
   let next = state;
   const results = [];
+  let index = 0;
   try {
-    for (const command of list) {
-      const payload = await api.commitTurn(campaignId, command);
-      results.push(payload);
+    for (; index < list.length; index += 1) {
+      const payload = await api.commitTurn(campaignId, list[index]);
       const turnState = payload?.state;
       if (turnState == null || typeof turnState !== 'object') {
         throw new Error('Campaign turn response missing state');
       }
+      results.push(payload);
       next = mergeCampaignTurnState(next, turnState);
     }
     return { state: next, mode: 'api', results };
-  } catch {
-    const local = applyCommandsLocally(state, list);
-    return { state: local.state, mode: 'local', result: local.result, fallback: true };
+  } catch (error) {
+    return {
+      state: next,
+      mode: 'api',
+      results,
+      failed: true,
+      error,
+      pending: { commands: list.slice(index) },
+    };
   }
+}
+
+function rosterLength(state) {
+  return Array.isArray(state?.employees) ? state.employees.length : 0;
+}
+
+/**
+ * Whether the server already applied `command`, judged from a fresh campaign
+ * read against the last state the client saw confirmed. Only commands that
+ * are not idempotent need this: a lost reply on advance_turn or
+ * hire_employee must not be sent twice (that bills a second month or hires a
+ * second person). set_tax and the trigger stack commands are idempotent, so
+ * they are simply sent again.
+ */
+export function commandAlreadyApplied(command, confirmedState, serverState) {
+  if (command?.type === 'advance_turn') {
+    return Number(serverState?.turn) > Number(confirmedState?.turn ?? 0);
+  }
+  if (command?.type === 'hire_employee') {
+    return rosterLength(serverState) > rosterLength(confirmedState);
+  }
+  return false;
+}
+
+/**
+ * Retry after a failed server-backed dispatch: re-read the campaign first,
+ * show that state, skip the failed command when the server already applied
+ * it, then send the rest. Throws when the campaign cannot be read (the caller
+ * keeps the failure on screen). Returns the same shape as dispatchTurnCommands.
+ */
+export async function retryTurnCommands(state, pending, { api, campaignId }) {
+  const list = Array.isArray(pending?.commands) ? pending.commands : [];
+  const payload = await api.getCampaign(campaignId);
+  const serverState = payload?.state;
+  if (serverState == null || typeof serverState !== 'object') {
+    throw new Error('Campaign response missing state');
+  }
+  const refreshed = mergeCampaignTurnState(state, serverState);
+  const [first, ...rest] = list;
+  const remaining = first && commandAlreadyApplied(first, state, serverState) ? rest : list;
+  if (remaining.length === 0) {
+    return { state: refreshed, mode: 'api', results: [], refetched: true };
+  }
+  const dispatched = await dispatchTurnCommands(refreshed, remaining, { api, campaignId });
+  return { ...dispatched, refetched: true };
 }
