@@ -1,0 +1,54 @@
+---
+title: "Citizen: what you see vs what the campaign server holds"
+---
+stateDiagram-v2
+  state "Legend" as legend {
+    lg0: steady
+    lg1: saving
+    lg2: failed
+  }
+  class lg0 blue
+  class lg1 teal
+  class lg2 yellow
+  s0: Screen month 0, no event#59; server month 0, no event
+  s1: Saving: Screen month 0, no event#59; server month 0, no event
+  s2: Save failed, Retry shown: Screen month 0, no event#59; server month 0, no event
+  s3: Save failed, Retry shown: Screen month 0, no event#59; server month 0, event on
+  s4: Saving: Screen month 0, event on#59; server month 0, event on
+  s5: Save failed, Retry shown: Screen month 0, event on#59; server month 0, event on
+  s6: Save failed, Retry shown: Screen month 0, event on#59; server month 1, event on
+  s7: Screen month 1, event on#59; server month 1, event on
+  s8: Saving: Screen month 1, event on#59; server month 1, event on
+  s9: Save failed, Retry shown: Screen month 1, event on#59; server month 1, event on
+  s10: Save failed, Retry shown: Screen month 1, event on#59; server month 2, event on
+  s11: Screen month 2, event on#59; server month 2, event on
+  [*] --> s0
+  s0 --> s1: you advance a month
+  s1 --> s2: the server rejects a step
+  s1 --> s3: a step saves but the reply is lost
+  s1 --> s4: the server saves a step
+  s2 --> s1: you press Retry (it re-reads the server)
+  s3 --> s4: you press Retry (it re-reads the server)
+  s4 --> s5: the server rejects a step or a step saves but the reply is lost
+  s4 --> s6: a step saves but the reply is lost
+  s4 --> s7: the server saves a step
+  s5 --> s4: you press Retry (it re-reads the server)
+  s6 --> s7: you press Retry (it re-reads the server)
+  s7 --> s8: you advance a month
+  s8 --> s9: a step saves but the reply is lost or the server rejects a step
+  s9 --> s8: you press Retry (it re-reads the server)
+  s8 --> s10: a step saves but the reply is lost
+  s8 --> s11: the server saves a step
+  s10 --> s11: you press Retry (it re-reads the server)
+  class s0 blue
+  class s1 teal
+  class s2 yellow
+  class s3 yellow
+  class s4 teal
+  class s5 yellow
+  class s6 yellow
+  class s7 blue
+  class s8 teal
+  class s9 yellow
+  class s10 yellow
+  class s11 blue

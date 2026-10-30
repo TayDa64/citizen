@@ -143,6 +143,7 @@ Funding / exit / Firecrawl; multi-rule causal graph (P1); civic-infra / civic-re
 - Shared shaping in `src/turnLedger.js`: TurnResult → ledger entry (command, appliedEffects, before/after metrics, explanations, turn/seq).
 - Server `turn_commits.result_json` stores `before` / `after` (plus deltas, effects, explanations, view); `GET /api/campaigns/{id}/turns?limit=` returns recent shaped ledger entries.
 - Client: local engine appends ledger entries offline; when a campaign is live, commits append and reload via `listTurns`.
+- Client: when a campaign is live and a commit fails, the UI keeps the last campaign-confirmed state (no local re-run), shows a `role="alert"` with **Retry saving turn**, and Retry re-reads `GET /api/campaigns/{id}` before re-sending (an `advance_turn` the server already applied is not sent twice). Offline play is unchanged.
 - Dashboard **Turn ledger** panel lists recent decisions (beyond chart authority).
 - Offline unit tests lock engine→ledger shaping (`src/turnLedger.test.js`).
 

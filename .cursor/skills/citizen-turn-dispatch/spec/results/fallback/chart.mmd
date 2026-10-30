@@ -1,0 +1,70 @@
+---
+title: "Citizen: what you see vs what the campaign server holds"
+---
+stateDiagram-v2
+  state "Legend" as legend {
+    lg0: steady
+    lg1: saving
+    lg2: Breaks ViewIsServerOrMarked or ViewWasOnServer
+    lg3: Path to the ViewIsServerOrMarked or ViewWasOnServer bug
+  }
+  class lg0 blue
+  class lg1 teal
+  class lg2 breaks
+  class lg3 bugPath
+  s0: Screen month 0, no event#59; server month 0, no event
+  s1: Saving: Screen month 0, no event#59; server month 0, no event
+  s2: Screen month 1, event on#59; server month 0, no event
+  s3: Screen month 1, event on#59; server month 0, event on
+  s4: Saving: Screen month 0, event on#59; server month 0, event on
+  s5: Saving: Screen month 1, event on#59; server month 0, no event
+  s6: Saving: Screen month 1, event on#59; server month 0, event on
+  s7: Screen month 1, event on#59; server month 1, event on
+  s8: Screen month 2, event on#59; server month 0, no event
+  s9: Screen month 2, event on#59; server month 0, event on
+  s10: Saving: Screen month 1, event on#59; server month 1, event on
+  s11: Screen month 2, event on#59; server month 1, event on
+  s12: Screen month 2, event on#59; server month 2, event on
+  [*] --> s0
+  s0 --> s1: you advance a month
+  s1 --> s2: the server rejects a step
+  s1 --> s3: a step saves but the reply is lost
+  s1 --> s4: the server saves a step
+  s2 --> s5: you advance a month
+  s3 --> s6: you advance a month
+  s4 --> s3: the server rejects a step
+  s4 --> s7: a step saves but the reply is lost or the server saves a step
+  s5 --> s8: the server rejects a step
+  s5 --> s9: a step saves but the reply is lost
+  s5 --> s4: the server saves a step
+  s6 --> s9: a step saves but the reply is lost or the server rejects a step
+  s6 --> s4: the server saves a step
+  s7 --> s10: you advance a month
+  s4 --> s9: the server rejects a step
+  s4 --> s11: a step saves but the reply is lost
+  s10 --> s11: a step saves but the reply is lost or the server rejects a step
+  s10 --> s12: a step saves but the reply is lost or the server saves a step
+  classDef breaks fill:#ffecee,stroke:#e72e3b,stroke-width:2.5px,color:#cd2834
+  class s0 blue
+  class s0 bugPath
+  class s1 teal
+  class s1 bugPath
+  class s2 blue
+  class s2 breaks
+  class s2 bugPath
+  class s3 blue
+  class s3 breaks
+  class s4 teal
+  class s5 teal
+  class s5 breaks
+  class s6 teal
+  class s6 breaks
+  class s7 blue
+  class s8 blue
+  class s8 breaks
+  class s9 blue
+  class s9 breaks
+  class s10 teal
+  class s11 blue
+  class s11 breaks
+  class s12 blue
