@@ -86,7 +86,7 @@ Each check was proved able to fail by breaking the code one way at a time (21 mu
 
 ## What this does not cover
 
-- **The UI campaign merge** — `mergeCampaignTurnState` in `src/turnCommands.js` still calls `rebiasHype` on the clamped hype, so the finding-4 drift remains on that path. Not fixed here; Node tests cannot import that file (Vite extensionless `citizenApi` import).
+- **Importing the UI merge from `node --test`** — `src/turnCommands.js` still cannot be loaded by the model runner (Vite extensionless `citizenApi` import). The clamp drift on `mergeCampaignTurnState` is fixed: it rebases through `set_tax`, and `src/turnCommands.test.js` (vitest) covers the ceiling, the floor, a lost `set_tax` reply, and another writer changing tax. A companies-API hype the stack did not produce still keeps its own base.
 - **Cycles in SQL** — the JS chain stops on a cycle (`NestFailClosed`); the recursive CTE is not run on cyclic data. The `parent_id` FK and seed make one unlikely, not impossible.
 - **Duplicate ids into `nestTriggersForRestack`** — it does not dedupe; the callers' SQL returns unique `client_id`s. `NestNoDuplicates` only covers unique input.
 - **Column max** — the server `stackTriggerEffects` throws above the NUMERIC(12,2) max; the client clamps silently (SLICES.md). `ClientMatchesServer` skips stacks the server refuses to store. Intended, documented, not changed.

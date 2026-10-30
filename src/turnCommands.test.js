@@ -14,6 +14,26 @@ import {
 
 const policy = SAMPLE_TRIGGERS.find((trigger) => trigger.type === 'policy_change');
 
+function fakeApi({ failAt = -1, loseAt = -1, initial = null } = {}) {
+  let server = initial
+    ? { ...structuredClone(initial), campaignId: 'camp-1' }
+    : { ...initialState, campaignId: 'camp-1' };
+  let calls = 0;
+  const api = {
+    get server() { return server; },
+    commitTurn: vi.fn(async (_id, command) => {
+      const index = calls;
+      calls += 1;
+      if (index === failAt) throw Object.assign(new Error('boom'), { status: 503 });
+      server = { ...applyTurnCommand(server, command).state, campaignId: 'camp-1' };
+      if (index === loseAt) throw Object.assign(new Error('timeout'), { status: 504 });
+      return { state: server, commit: { seq: calls } };
+    }),
+    getCampaign: vi.fn(async () => ({ id: 'camp-1', state: server })),
+  };
+  return api;
+}
+
 describe('turnCommands', () => {
   test('local command sequence advances turn and drains cash', () => {
     const { state } = applyCommandsLocally(initialState, [
@@ -134,24 +154,6 @@ describe('dispatchTurnCommands with a live campaign', () => {
     baselines: { hype: 0.3, talentCost: 4000 },
   };
 
-  function fakeApi({ failAt = -1, loseAt = -1 } = {}) {
-    let server = { ...initialState, campaignId: 'camp-1' };
-    let calls = 0;
-    const api = {
-      get server() { return server; },
-      commitTurn: vi.fn(async (_id, command) => {
-        const index = calls;
-        calls += 1;
-        if (index === failAt) throw Object.assign(new Error('boom'), { status: 503 });
-        server = { ...applyTurnCommand(server, command).state, campaignId: 'camp-1' };
-        if (index === loseAt) throw Object.assign(new Error('timeout'), { status: 504 });
-        return { state: server, commit: { seq: calls } };
-      }),
-      getCampaign: vi.fn(async () => ({ id: 'camp-1', state: server })),
-    };
-    return api;
-  }
-
   test('a failed commit is not re-run locally; state stays server-confirmed', async () => {
     const api = fakeApi({ failAt: 0 });
     const out = await dispatchTurnCommands(apiState, [{ type: 'advance_turn' }], { api, campaignId: 'camp-1' });
@@ -213,5 +215,141 @@ describe('dispatchTurnCommands with a live campaign', () => {
     expect(out.mode).toBe('local');
     expect(out.state.turn).toBe(1);
     expect(out.state.company.cash).toBeCloseTo(15000 - 2200 / 12);
+  });
+});
+
+function hypeTrigger(id, hype) {
+  return {
+    id,
+    type: 'news_spike',
+    label: id,
+    source: 'mock:test',
+    timestamp: '2026-01-01T00:00:00.000Z',
+    effect: { hype },
+  };
+}
+
+/**
+ * Campaign client whose displayed hype was produced by the same stack the
+ * server holds, which is how a seeded campaign starts and how a tax slider
+ * commit continues. dataSource api forces mergeCampaignTurnState.
+ */
+function apiClientFrom(state) {
+  return { ...structuredClone(state), dataSource: 'api', campaignId: 'camp-1' };
+}
+
+describe('campaign hype merge follows the server at the clamp', () => {
+  test('a tax round trip through the API path restores ceiling hype', async () => {
+    const seeded = applyTurnCommand(createGameState({ seed: 'hype-ceiling' }), {
+      type: 'apply_trigger',
+      trigger: hypeTrigger('boom', 0.69),
+    }).state;
+    expect(seeded.company.hype).toBe(0.99);
+
+    const api = fakeApi({ initial: seeded });
+    const raised = await dispatchTurnCommands(
+      apiClientFrom(seeded),
+      commandsWithTriggerRestack(apiClientFrom(seeded), [
+        { type: 'set_tax', taxRate: 0 },
+        { type: 'advance_turn' },
+      ]),
+      { api, campaignId: 'camp-1' },
+    );
+    expect(raised.state.company.hype).toBe(1);
+    expect(api.server.company.hype).toBe(1);
+
+    const returned = await dispatchTurnCommands(
+      raised.state,
+      commandsWithTriggerRestack(raised.state, [
+        { type: 'set_tax', taxRate: 0.25 },
+        { type: 'advance_turn' },
+      ]),
+      { api, campaignId: 'camp-1' },
+    );
+    expect(api.server.company.hype).toBe(0.99);
+    expect(returned.state.company.hype).toBe(0.99);
+    expect(returned.state.company.burnRate).toBe(2200);
+  });
+
+  test('a tax round trip through the API path does not invent hype at the floor', async () => {
+    const seeded = applyTurnCommand(createGameState({ seed: 'hype-floor' }), {
+      type: 'apply_trigger',
+      trigger: hypeTrigger('slump', -0.4051),
+    }).state;
+    expect(seeded.company.hype).toBe(0);
+
+    const api = fakeApi({ initial: seeded });
+    const pressed = await dispatchTurnCommands(
+      apiClientFrom(seeded),
+      commandsWithTriggerRestack(apiClientFrom(seeded), [
+        { type: 'set_tax', taxRate: 0.5 },
+        { type: 'advance_turn' },
+      ]),
+      { api, campaignId: 'camp-1' },
+    );
+    expect(pressed.state.company.hype).toBe(0);
+    expect(api.server.company.hype).toBe(0);
+
+    const returned = await dispatchTurnCommands(
+      pressed.state,
+      commandsWithTriggerRestack(pressed.state, [
+        { type: 'set_tax', taxRate: 0.25 },
+        { type: 'advance_turn' },
+      ]),
+      { api, campaignId: 'camp-1' },
+    );
+    expect(api.server.company.hype).toBe(0);
+    expect(returned.state.company.hype).toBe(0);
+    expect(returned.state.company.burnRate).toBe(2200);
+  });
+
+  test('retry after a lost set_tax reply keeps the server ceiling hype', async () => {
+    let seeded = applyTurnCommand(createGameState({ seed: 'hype-retry' }), {
+      type: 'apply_trigger',
+      trigger: hypeTrigger('boom', 0.69),
+    }).state;
+    seeded = applyTurnCommand(seeded, { type: 'set_tax', taxRate: 0 }).state;
+    expect(seeded.company.hype).toBe(1);
+
+    const api = fakeApi({ initial: seeded, loseAt: 0 });
+    const failed = await dispatchTurnCommands(
+      apiClientFrom(seeded),
+      [{ type: 'set_tax', taxRate: 0.25 }],
+      { api, campaignId: 'camp-1' },
+    );
+    expect(failed.failed).toBe(true);
+    expect(failed.state.company.hype).toBe(1);
+    expect(api.server.company.hype).toBe(0.99);
+
+    const retried = await retryTurnCommands(failed.state, failed.pending, {
+      api,
+      campaignId: 'camp-1',
+    });
+    expect(retried.failed).toBeUndefined();
+    expect(api.server.company.hype).toBe(0.99);
+    expect(retried.state.company.hype).toBe(0.99);
+  });
+
+  test('an advance after another writer set the tax keeps the server ceiling hype', async () => {
+    let seeded = applyTurnCommand(createGameState({ seed: 'hype-other-tab' }), {
+      type: 'apply_trigger',
+      trigger: hypeTrigger('boom', 0.69),
+    }).state;
+    seeded = applyTurnCommand(seeded, { type: 'set_tax', taxRate: 0 }).state;
+    expect(seeded.company.hype).toBe(1);
+
+    const api = fakeApi({ initial: seeded });
+    await api.commitTurn('camp-1', { type: 'set_tax', taxRate: 0.25 });
+    expect(api.server.company.hype).toBe(0.99);
+    expect(api.server.taxRate).toBe(0.25);
+
+    const advanced = await dispatchTurnCommands(
+      apiClientFrom(seeded),
+      commandsWithTriggerRestack(apiClientFrom(seeded), [{ type: 'advance_turn' }]),
+      { api, campaignId: 'camp-1' },
+    );
+    expect(api.server.company.hype).toBe(0.99);
+    expect(advanced.state.company.hype).toBe(0.99);
+    expect(advanced.state.taxRate).toBe(0.25);
   });
 });

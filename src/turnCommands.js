@@ -3,8 +3,11 @@
  * Preserves the companies-API authority boundary: never copy companies.cash /
  * companies.burnRate. When a campaign commit succeeds, cash/burn/tax/turn come
  * from TurnResult; API-owned trigger stack / talent-cost stay from the prior
- * state. Civic budget headroom travels with the campaign turn; hype is
- * rebiased (API stacked hype ± civic hypeBias) so tax→city→hype survives merge.
+ * state. Civic budget headroom travels with the campaign turn. Display hype
+ * stays the companies-API reading, rebased for the returned tax by the same
+ * set_tax rule the engine uses. Subtracting the old bias from a hype that
+ * already sat on the 0 or 1 clamp disagrees with that rule (0.95 vs 0.99,
+ * 0.05 vs 0).
  * After hire_employee, campaign GameState owns the employee roster and
  * talentMultiplier / talentMix (taken from TurnResult when non-empty).
  *
@@ -15,7 +18,7 @@
  */
 
 import { toTriggerPayload } from './citizenApi.js';
-import { computeCivicFromTax, rebiasHype } from './civicFeedback.js';
+import { computeCivicFromTax } from './civicFeedback.js';
 import { applyTurnCommand } from './turnEngine.js';
 
 export function toCampaignTrigger(trigger) {
@@ -61,8 +64,14 @@ export function mergeCampaignTurnState(prev, turnState) {
   const talentMix = campaignOwnsRoster
     ? (turnState.talentMix ?? prev.talentMix)
     : prev.talentMix;
-  const prevCivic = prev.civic ?? computeCivicFromTax(prev.taxRate);
-  const nextCivic = turnState.civic ?? computeCivicFromTax(turnState.taxRate ?? prev.taxRate);
+  const nextTax = Number.isFinite(Number(turnState.taxRate))
+    ? Number(turnState.taxRate)
+    : prev.taxRate;
+  const nextCivic = turnState.civic ?? computeCivicFromTax(nextTax ?? prev.taxRate);
+  // Rebase through set_tax. A reading that is exactly the clamped stack keeps
+  // the pre-bias stack; any other companies-API reading keeps its own base
+  // and only swaps civic bias.
+  const hype = applyTurnCommand(prev, { type: 'set_tax', taxRate: nextTax }).state.company.hype;
   return {
     ...prev,
     ...turnState,
@@ -83,8 +92,7 @@ export function mergeCampaignTurnState(prev, turnState) {
     civic: nextCivic,
     company: {
       ...turnState.company,
-      // Keep API trigger-stacked hype, then fold campaign civic bias from tax.
-      hype: rebiasHype(prev.company.hype, prevCivic, nextCivic),
+      hype,
       talentCost: prev.company.talentCost,
       talentMultiplier,
       talentMix,
