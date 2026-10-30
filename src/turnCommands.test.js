@@ -1,12 +1,15 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import { SAMPLE_TRIGGERS } from './triggers.js';
 import { createGameState, applyTurnCommand } from './turnEngine.js';
 import { initialState } from './simulation.js';
 import {
   applyCommandsLocally,
   buildTriggerRestackCommands,
+  commandAlreadyApplied,
   commandsWithTriggerRestack,
+  dispatchTurnCommands,
   mergeCampaignTurnState,
+  retryTurnCommands,
 } from './turnCommands.js';
 
 const policy = SAMPLE_TRIGGERS.find((trigger) => trigger.type === 'policy_change');
@@ -120,5 +123,95 @@ describe('turnCommands', () => {
     expect(merged.company.hype).toBe(0.55);
     expect(merged.company.talentCost).toBe(4480);
     expect(merged.dataSource).toBe('api');
+  });
+});
+
+describe('dispatchTurnCommands with a live campaign', () => {
+  const apiState = {
+    ...initialState,
+    dataSource: 'api',
+    campaignId: 'camp-1',
+    baselines: { hype: 0.3, talentCost: 4000 },
+  };
+
+  function fakeApi({ failAt = -1, loseAt = -1 } = {}) {
+    let server = { ...initialState, campaignId: 'camp-1' };
+    let calls = 0;
+    const api = {
+      get server() { return server; },
+      commitTurn: vi.fn(async (_id, command) => {
+        const index = calls;
+        calls += 1;
+        if (index === failAt) throw Object.assign(new Error('boom'), { status: 503 });
+        server = { ...applyTurnCommand(server, command).state, campaignId: 'camp-1' };
+        if (index === loseAt) throw Object.assign(new Error('timeout'), { status: 504 });
+        return { state: server, commit: { seq: calls } };
+      }),
+      getCampaign: vi.fn(async () => ({ id: 'camp-1', state: server })),
+    };
+    return api;
+  }
+
+  test('a failed commit is not re-run locally; state stays server-confirmed', async () => {
+    const api = fakeApi({ failAt: 0 });
+    const out = await dispatchTurnCommands(apiState, [{ type: 'advance_turn' }], { api, campaignId: 'camp-1' });
+    expect(out.mode).toBe('api');
+    expect(out.failed).toBe(true);
+    expect(out.state).toBe(apiState);
+    expect(out.state.turn).toBe(0);
+    expect(out.state.company.cash).toBe(15000);
+    expect(out.pending.commands).toEqual([{ type: 'advance_turn' }]);
+    expect(out).not.toHaveProperty('fallback');
+  });
+
+  test('commits before the failure stay; the failed one and the rest are pending', async () => {
+    const api = fakeApi({ failAt: 1 });
+    const out = await dispatchTurnCommands(
+      apiState,
+      [{ type: 'set_tax', taxRate: 0.25 }, { type: 'advance_turn' }],
+      { api, campaignId: 'camp-1' },
+    );
+    expect(out.failed).toBe(true);
+    expect(out.results).toHaveLength(1);
+    expect(out.state.taxRate).toBe(0.25);
+    expect(out.state.turn).toBe(0);
+    expect(out.pending.commands).toEqual([{ type: 'advance_turn' }]);
+  });
+
+  test('retry re-reads the campaign and resends a rejected advance', async () => {
+    const api = fakeApi({ failAt: 0 });
+    const failed = await dispatchTurnCommands(apiState, [{ type: 'advance_turn' }], { api, campaignId: 'camp-1' });
+    const out = await retryTurnCommands(failed.state, failed.pending, { api, campaignId: 'camp-1' });
+    expect(api.getCampaign).toHaveBeenCalledTimes(1);
+    expect(out.failed).toBeUndefined();
+    expect(out.state.turn).toBe(1);
+    expect(api.server.turn).toBe(1);
+  });
+
+  test('retry skips an advance the server already applied (lost reply)', async () => {
+    const api = fakeApi({ loseAt: 0 });
+    const failed = await dispatchTurnCommands(apiState, [{ type: 'advance_turn' }], { api, campaignId: 'camp-1' });
+    expect(failed.failed).toBe(true);
+    expect(failed.state.turn).toBe(0);
+    expect(api.server.turn).toBe(1);
+    const out = await retryTurnCommands(failed.state, failed.pending, { api, campaignId: 'camp-1' });
+    expect(api.commitTurn).toHaveBeenCalledTimes(1);
+    expect(out.state.turn).toBe(1);
+    expect(out.state.company.cash).toBe(api.server.company.cash);
+  });
+
+  test('commandAlreadyApplied only skips non-idempotent commands', () => {
+    expect(commandAlreadyApplied({ type: 'advance_turn' }, { turn: 0 }, { turn: 1 })).toBe(true);
+    expect(commandAlreadyApplied({ type: 'advance_turn' }, { turn: 1 }, { turn: 1 })).toBe(false);
+    expect(commandAlreadyApplied({ type: 'hire_employee' }, { employees: [] }, { employees: [{}] })).toBe(true);
+    expect(commandAlreadyApplied({ type: 'set_tax', taxRate: 0.2 }, { turn: 0 }, { turn: 1 })).toBe(false);
+    expect(commandAlreadyApplied({ type: 'clear_triggers' }, {}, {})).toBe(false);
+  });
+
+  test('without a campaign, commands still run on the local engine', async () => {
+    const out = await dispatchTurnCommands(initialState, [{ type: 'advance_turn' }]);
+    expect(out.mode).toBe('local');
+    expect(out.state.turn).toBe(1);
+    expect(out.state.company.cash).toBeCloseTo(15000 - 2200 / 12);
   });
 });

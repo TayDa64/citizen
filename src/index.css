@@ -995,3 +995,37 @@ button:focus-visible {
     animation: none !important;
   }
 }
+
+/* Failed server-backed turn: reuses .data-source--alert colors; the Retry
+   button matches .company-ops-forms buttons. */
+.turn-save-alert {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.turn-save-alert__message {
+  margin: 0;
+  flex: 1 1 18rem;
+}
+
+.turn-save-alert__retry {
+  font: inherit;
+  cursor: pointer;
+  padding: 0.5rem 0.85rem;
+  min-height: 24px;
+  background: #334155;
+  color: #f8fafc;
+  border: 1px solid #94a3b8;
+  border-radius: 6px;
+}
+
+.turn-save-alert__retry:hover {
+  background: #475569;
+}
+
+.turn-save-alert__retry:disabled {
+  cursor: progress;
+  opacity: 0.85;
+}

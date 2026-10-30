@@ -75,7 +75,7 @@ The same three rules hold against a variant where the rebuild is one commit that
 
 - The nest filter and tier sort that decide which triggers go into `Full` (`src/jurisdictionNest.js`, `nestTriggersForRestack`). The model takes `Full` as given.
 - Trigger effects — burn arithmetic, the 0.1×–3× clamp, the type-weighted multiplier. Covered by `src/talentMultiplier.js` readers, `src/turnEngine.test.js`, and `test/api/talent-burn.api.js`.
-- The `dispatchTurnCommands` fallback in `src/turnCommands.js`, which swallows a failed commit and re-runs the commands locally. A third bug, observed in that catch but not modeled and not executed by `check:restack`: after a torn restack the UI shows the event and the advanced month while the server campaign has neither. Worth its own model. Node API tests cannot import `src/turnCommands.js` (it pulls the Vite extensionless `citizenApi` module).
+- The `dispatchTurnCommands` fallback in `src/turnCommands.js`, which swallows a failed commit and re-runs the commands locally. A third bug, observed in that catch but not modeled and not executed by `check:restack`: after a torn restack the UI shows the event and the advanced month while the server campaign has neither. Worth its own model. Node API tests cannot import `src/turnCommands.js` (it pulls the Vite extensionless `citizenApi` module). Now modeled and fixed under `.cursor/skills/citizen-turn-dispatch`.
 - Concurrency beyond one restack and one advance. Two simultaneous ingests for one campaign are not modeled.
 - Repair of a month that was already billed. The Postgres check shows the cash drain stays at 2200/12 after the event is put back. It does not propose a compensating entry.
 

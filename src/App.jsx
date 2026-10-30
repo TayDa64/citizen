@@ -5,6 +5,11 @@ import CompanyOpsForms from './components/CompanyOpsForms';
 import Dashboard from './components/Dashboard';
 import IslandSwitcher from './components/IslandSwitcher';
 import RoleSelect from './components/RoleSelect';
+import TurnSaveAlert, {
+  TURN_BLOCKED_MESSAGE,
+  TURN_RETRY_FAILED_MESSAGE,
+  TURN_SAVE_FAILED_MESSAGE,
+} from './components/TurnSaveAlert';
 import {
   CONNECTED_NOTE,
   LOADING_NOTE,
@@ -42,6 +47,7 @@ import {
   buildTriggerRestackCommands,
   commandsWithTriggerRestack,
   dispatchTurnCommands,
+  retryTurnCommands,
   toCampaignTrigger,
 } from './turnCommands';
 import {
@@ -114,6 +120,20 @@ function App({ initialPlayerRole } = {}) {
   const [pipelineEvents, setPipelineEvents] = useState([]);
   const [ingestRefreshKey, setIngestRefreshKey] = useState(0);
   const campaignIdRef = useRef(null);
+  // Failed server-backed turn: { commands, message }. While set, the screen
+  // keeps the last campaign-confirmed state and new turn commands wait.
+  const [turnFailure, setTurnFailure] = useState(null);
+  const turnFailureRef = useRef(null);
+  const [turnRetrying, setTurnRetrying] = useState(false);
+
+  const setPendingTurn = (failure) => {
+    // attempt re-mounts the alert so a repeated message is announced again.
+    const next = failure
+      ? { ...failure, attempt: (turnFailureRef.current?.attempt ?? 0) + 1 }
+      : null;
+    turnFailureRef.current = next;
+    setTurnFailure(next);
+  };
 
   const applyPlayerRole = (role) => {
     const nextRole = writeStoredPlayerRole(role);
@@ -138,6 +158,7 @@ function App({ initialPlayerRole } = {}) {
     setPipelineEvents([]);
     setSourceNote(note);
     setActionError('');
+    setPendingTurn(null);
   };
 
   const appendLocalResults = (results) => {
@@ -259,20 +280,55 @@ function App({ initialPlayerRole } = {}) {
         results,
       });
     }
+    // A server-backed turn already failed: do not stack another turn on top
+    // of an unsaved one. The player retries first.
+    if (turnFailureRef.current) {
+      setPendingTurn({ ...turnFailureRef.current, message: TURN_BLOCKED_MESSAGE });
+      return Promise.resolve({ state: prev, mode: 'api', blocked: true, results: [] });
+    }
     const queued = restackTriggers ? commandsWithTriggerRestack(prev, list) : list;
     return dispatchTurnCommands(prev, queued, {
       api: createCitizenApi({ baseUrl: apiBase }),
       campaignId: campaignIdRef.current,
-    }).then((dispatched) => {
-      setState(dispatched.state);
-      stateRef.current = dispatched.state;
-      if (dispatched.mode === 'api' && Array.isArray(dispatched.results)) {
-        appendApiCommits(dispatched.results);
-      } else if (dispatched.result) {
-        appendLocalResults([dispatched.result]);
+    }).then(applyDispatched(TURN_SAVE_FAILED_MESSAGE));
+  };
+
+  // Show what the campaign confirmed. On failure that is the state before the
+  // failed commit (never a local re-run), plus the Retry alert.
+  const applyDispatched = (failureMessage) => (dispatched) => {
+    setState(dispatched.state);
+    stateRef.current = dispatched.state;
+    if (dispatched.mode === 'api' && Array.isArray(dispatched.results)) {
+      appendApiCommits(dispatched.results);
+    } else if (dispatched.result) {
+      appendLocalResults([dispatched.result]);
+    }
+    if (dispatched.failed) {
+      setPendingTurn({ commands: dispatched.pending.commands, message: failureMessage });
+    } else if (dispatched.mode === 'api') {
+      setPendingTurn(null);
+    }
+    return dispatched;
+  };
+
+  const onRetryTurn = async () => {
+    const failure = turnFailureRef.current;
+    if (!failure || !apiBase || !campaignIdRef.current || turnRetrying) return;
+    setTurnRetrying(true);
+    try {
+      const dispatched = await retryTurnCommands(stateRef.current, failure, {
+        api: createCitizenApi({ baseUrl: apiBase }),
+        campaignId: campaignIdRef.current,
+      });
+      applyDispatched(TURN_RETRY_FAILED_MESSAGE)(dispatched);
+      if (!dispatched.failed) {
+        await refreshLedgerFromApi(apiBase, campaignIdRef.current);
       }
-      return dispatched;
-    });
+    } catch {
+      setPendingTurn({ ...failure, message: TURN_RETRY_FAILED_MESSAGE });
+    } finally {
+      setTurnRetrying(false);
+    }
   };
 
   const syncCampaignTriggerCommand = (command) => {
@@ -675,6 +731,12 @@ function App({ initialPlayerRole } = {}) {
             {actionError}
           </p>
         ) : null}
+        <TurnSaveAlert
+          message={turnFailure?.message ?? ''}
+          announceKey={turnFailure?.attempt ?? 0}
+          retrying={turnRetrying}
+          onRetry={onRetryTurn}
+        />
         {isCompanyOps ? (
           <CompanyOpsForms
             taxRate={state.taxRate}
