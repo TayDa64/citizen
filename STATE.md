@@ -355,3 +355,52 @@ The throw is narrower than "non-finite" suggests — `null` does not throw on ei
 
 **Status: open, green, regression-cleared, awaiting the orchestrator's merge decision.**
 Last updated: 2026-10-30, #43 merged at `23a9a5b`; #44 open and regression-cleared, trace `diag-20261030-7f606495` (`diag-kb v1.1.0`); main tip `23a9a5b`.
+
+## Merge record — #44 (appended 2026-10-30)
+
+**Superseded:** the section "Open PR — #44 (awaiting merge decision)" above is **kept as written and not edited**. This section records its disposition. PR #44 `fix(ui): rebase clamped campaign hype with the set_tax rule` is **MERGED**.
+
+| PR | Method | Landing | Head | Base | Files | Merged by |
+| --- | --- | --- | --- | --- | --- | --- |
+| #44 — rebase clamped campaign hype with the `set_tax` rule | squash | `e23404e` | `f74dddd` | `23a9a5b` | 3 (+172/−26) | `TayDa64` |
+
+`main` before the merge was `585dffc` (#45), so the squash landed on top of it, not on #44's stated base `23a9a5b`. GitHub reported `mergeable: MERGEABLE` and `mergeStateStatus: CLEAN` right before the merge, and the squash applied without conflict.
+
+CI on the `push` of `e23404e` to `main`: run `41130460284`, jobs `build`, `test-api` and `e2e-a11y` all `success`.
+
+### Post-merge regression on `e23404e` — PASS
+
+Trace **`diag-20261030-0fa8269f`**, `diag-kb v1.1.0`. Suites run strictly one at a time; no concurrent `test:api` (throwaway-db race `diag-20261030-60e4dc88`).
+
+| Suite | Result |
+| --- | --- |
+| `npm run build` | exit 0 (`dist/assets/index-CoQBZ9Gz.js`; chunk-size warning only, pre-existing) |
+| `npm run test:unit` | **87/87** (69 subtests, 3 suites) |
+| `npm run test:ui` | **294 passed / 1 skipped** (295), 29 files |
+| `npm run test:api` | **63/63** (17 suites) |
+| `npm run check:restack` | **10/10** (3 suites) |
+| `npm run check:model` | **21/21** (4 suites) |
+| `npm run test:browser` | **8 passed / 1 skipped** (9) |
+
+The one skip is `e2e/api-contract.spec.js`, gated behind `CITIZEN_API_E2E`. All seven counts match the `f74dddd` pre-merge run exactly; no discrepancy.
+
+Invariants: **86/86 scalar values identical** to the `citizen-main-a9c6c53.json` baseline, zero mismatches — including no-employee burn **2000 / 2200 / 2800**, skill-1 **tech 1.75 / marketing 1.47 / sales 1.33**, the clamp boundaries (`0.09999` and `3.0003` flagged; exactly `0.1` and exactly `3` not flagged), the wage bulletin **2376** / clear **2200**, and the authority boundary. The pre-merge `f74dddd` run compared the same six invariant families against the same baseline and recorded its result as 24/24. This run flattens the same probe output to 86 individual scalars and finds 0 mismatches. The two figures come from different ways of counting one comparison, so they should not be read as two separate checks or compared to each other directly.
+
+The fix is live on `main`, measured on the merged tree with a separate probe against the real `applyTurnCommand` engine: at the ceiling server **0.99** and client **0.99** (drift 0), at the floor server **0** and client **0** (drift 0). On `23a9a5b` the same probe gave client **0.95** at the ceiling and **0.05** at the floor.
+
+Full-page WCAG 2.2 AA scan on the merged tree, both lenses, independent of the CI gate: **0 violations**, one named meter ("Voter support"), one label id, no duplicate ids, no page errors.
+
+Baseline: `/workspace/grace/baselines/citizen-main-e23404e.json`.
+
+### Open item status (appended 2026-10-30, post-#44)
+
+- **Carried, not closed — follow-up (i).** `pathwayPreview` / `TurnResult.pathwayPreview.targetAfter` still reports **0.95** where the commit lands **0.99**. No UI consumes the field. **Unowned.**
+- **Carried, not closed — follow-up (ii).** A hype-only restack leaves merged hype stale; `onToggleTrigger` and `onIngestFixture` both refresh the snapshot first, so final drift is **0** on real paths. **Unowned.**
+- **Carried, now unguarded on `main` — follow-up (iii).** The merge is unguarded against a non-finite `prev.taxRate`: `undefined` or `NaN` throws `TurnCommandError: GameState.taxRate must be finite`, where `23a9a5b` degraded without throwing. `null` does not throw on either side, because `Number(null)` is `0`. No fixture reaches a non-finite tax, so this is latent rather than live. **Owner Brainiac.**
+- **Carried unchanged — throwaway-db race** `diag-20261030-60e4dc88`. **Unowned.**
+- **Carried unchanged —** `migrations/001` has no down section, so a full re-up after a full down fails at 001.
+- **Still open, still unanswered —** whether to add the brainstorm's "Design findings" section to this file. Awaiting the orchestrator.
+
+None of the three #44 follow-ups is filed as an issue, so all three are **known-open and unnumbered**.
+
+Last updated: 2026-10-30, #44 merged at `e23404e` (squash of `f74dddd`), post-merge regression trace `diag-20261030-0fa8269f` (`diag-kb v1.1.0`); main tip `e23404e`.
