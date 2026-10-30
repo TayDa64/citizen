@@ -355,11 +355,26 @@ export async function clearTriggers(pool) {
   });
 }
 
-export async function listTriggers(pool) {
-  const result = await pool.query(
-    `${TRIGGER_SELECT} ORDER BY t.scraped_at DESC, t.client_id DESC, so.name ASC`,
-    [TRIGGER_TYPES]
-  );
+// GET /api/triggers is the world-event stack the UI shows and pushes onto a
+// campaign (App.jsx buildTriggerRestackCommands). It lists the same set the
+// companies read model stacks: home + ancestors (default mv) once
+// jurisdiction_id exists. Peers (sunnyvale) and NULL jurisdiction_id are
+// left out, so the campaign never bills an event /api/companies ignores.
+// Before migration 006 there is no nest and every trigger is listed.
+export async function listTriggers(pool, { homeId = COMPANIES_READ_MODEL_HOME } = {}) {
+  const nestReady = await triggerJurisdictionColumnReady(pool);
+  const result = nestReady
+    ? await pool.query(
+        `${JURISDICTION_CHAIN_CTE}
+${TRIGGER_SELECT.replace('$1::text[]', '$2::text[]')}
+  AND t.jurisdiction_id IN (SELECT id FROM chain)
+ORDER BY t.scraped_at DESC, t.client_id DESC, so.name ASC`,
+        [homeId, TRIGGER_TYPES]
+      )
+    : await pool.query(
+        `${TRIGGER_SELECT} ORDER BY t.scraped_at DESC, t.client_id DESC, so.name ASC`,
+        [TRIGGER_TYPES]
+      );
   return rowsToTriggerRecords(result.rows);
 }
 

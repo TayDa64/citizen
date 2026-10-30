@@ -80,8 +80,8 @@ TLC explores 20 states and 54 steps; all four hold. They are not vacuous: splitt
 
 ## What this does not cover
 
-- The nest filter and tier sort that decide which triggers go into a selection (`src/jurisdictionNest.js`, `nestTriggersForRestack`). The model takes each document's selection as given.
-- Trigger effects — burn arithmetic, the 0.1×–3× clamp, the type-weighted multiplier. Covered by `src/talentMultiplier.js` readers, `src/turnEngine.test.js` and `test/api/talent-burn.api.js`.
+- The nest filter and tier sort that decide which triggers go into a selection (`src/jurisdictionNest.js`, `nestTriggersForRestack`). The model takes each document's selection as given. Checked by `citizen-trigger-math`; the restack reads the chain from the `jurisdictions` table inside the same locked transaction.
+- Trigger effects — burn arithmetic, the 0.1×–3× clamp, the type-weighted multiplier. Covered by `src/talentMultiplier.js` readers, `src/turnEngine.test.js` and `test/api/talent-burn.api.js`; the arithmetic promises are checked by `citizen-trigger-math`.
 - The `dispatchTurnCommands` fallback in `src/turnCommands.js`, which swallows a failed commit and re-runs the commands locally. The client's own restack-before-advance is still one HTTP commit per command, so it can still be torn on the client side; the server lock only keeps a server restack from landing inside one of its commits.
 - Compensation is not in the model; it is checked against Postgres only.
 

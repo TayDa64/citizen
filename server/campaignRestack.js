@@ -12,6 +12,7 @@ import { nestTriggersForRestack } from '../src/jurisdictionNest.js';
 import { TRIGGER_TYPES } from '../src/triggerContract.js';
 import { applyTurnCommand } from '../src/turnEngine.js';
 import { commitTurnOnClient, withCampaignTransaction } from './campaigns.js';
+import { listJurisdictionRows } from './jurisdictions.js';
 import { rowsToTriggerRecords } from './triggers.js';
 
 /**
@@ -107,13 +108,18 @@ export async function listTriggersForRestack(pool) {
 
 /**
  * Nest-filter + tier-sort the live trigger stack for one campaign home.
+ * The chain comes from the jurisdictions table (the same rows the SQL CTE in
+ * recomputeCompanies walks), not the in-code JURISDICTION_SEED copy, so a
+ * home added after migration 006 restacks its own chain instead of nothing.
  */
 export async function applicableTriggersForCampaign(pool, campaignId) {
+  // Sequential on purpose: `pool` may be the locked transaction client.
   const homeId = await loadCampaignHomeJurisdiction(pool, campaignId);
   const listed = await listTriggersForRestack(pool);
+  const jurisdictions = await listJurisdictionRows(pool);
   return {
     homeId,
-    triggers: nestTriggersForRestack(listed, homeId),
+    triggers: nestTriggersForRestack(listed, homeId, jurisdictions),
   };
 }
 

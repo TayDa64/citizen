@@ -788,7 +788,8 @@ describe('local mode parity with the OpenAPI 0.7.0 simulation', () => {
       let factor = 1;
       for (const trigger of ordered) {
         if (typeof trigger.effect?.hype === 'number') hype += trigger.effect.hype;
-        if (typeof trigger.effect?.talentCost === 'number') factor *= 1 + trigger.effect.talentCost;
+        // Each term floors at 0: a cut of -100% or more is $0 (two such cuts never multiply back up).
+        if (typeof trigger.effect?.talentCost === 'number') factor *= Math.max(0, 1 + trigger.effect.talentCost);
       }
       const talent = 4000 * factor;
       return {

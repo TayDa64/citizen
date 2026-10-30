@@ -142,11 +142,27 @@ export function applyEffects(state) {
   return next;
 }
 
+/**
+ * Pre-civic hype for set_tax. company.hype is clamp(stacked + bias), so
+ * subtracting the bias back out is wrong once that clamp bit (hype 0 at a
+ * high tax came back as 0.05 at the neutral tax). When company.hype is
+ * exactly what the stack plus the current bias gives, use the stack itself.
+ * Otherwise (hype set some other way) keep the old subtract-the-bias rule.
+ */
+function stackedHypeForTax(state) {
+  if (state?.baselines == null || state?.company == null) return null;
+  const stacked = combinedEffects(state.baselines, state.activeTriggers ?? []).hype;
+  const bias = Number(state.civic?.hypeBias);
+  const prevBias = Number.isFinite(bias) ? bias : 0;
+  const expected = roundTo(clampHype(stacked + prevBias), 4);
+  return expected === Number(state.company.hype) ? stacked : null;
+}
+
 export function setTaxRate(state, taxRate) {
   const next = structuredClone(state);
   next.taxRate = Math.max(0, Math.min(1, taxRate));
   // Tax → budget headroom → hype bias (same committed turn path as set_tax).
-  return applyCivicFeedback(next);
+  return applyCivicFeedback(next, stackedHypeForTax(state));
 }
 
 const HIRE_DEPARTMENTS = Object.freeze(['tech', 'marketing', 'sales']);
@@ -211,7 +227,9 @@ function combinedEffects(baselines, activeTriggers) {
   let factor = 1;
   for (const trigger of ordered) {
     if (typeof trigger.effect?.hype === 'number') hype += trigger.effect.hype;
-    if (typeof trigger.effect?.talentCost === 'number') factor *= 1 + trigger.effect.talentCost;
+    // A cut of -100% or more takes talent cost to $0. Floor each term at 0
+    // so two cuts past -100% cannot multiply back to a positive cost.
+    if (typeof trigger.effect?.talentCost === 'number') factor *= Math.max(0, 1 + trigger.effect.talentCost);
   }
   const talent = talentBaseline * factor;
   const talentCost = roundTo(Math.max(0, Number.isFinite(talent) ? talent : 0), 2);
