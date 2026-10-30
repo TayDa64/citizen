@@ -41,6 +41,22 @@ describe('turn ledger shaping', () => {
     expect(summarizeLedgerCommand(entry)).toBe('Advance → turn 1');
   });
 
+  test('server compensate_torn_month rows shape and summarize like any entry', () => {
+    const [entry] = ledgerEntriesFromApiCommits([
+      {
+        seq: 4,
+        turnBefore: 1,
+        turnAfter: 1,
+        command: {
+          type: 'compensate_torn_month', sourceSeq: 3, month: 1, billedBurn: 2200, fullBurn: 2376,
+        },
+        result: { appliedEffects: [{ kind: 'burn.compensation', summary: 'x' }], explanations: ['y'] },
+      },
+    ]);
+    expect(entry.command.type).toBe('compensate_torn_month');
+    expect(summarizeLedgerCommand(entry)).toBe('Correct month 1 burn');
+  });
+
   test('offline replay builds a durable ledger beyond chart buffer authority', () => {
     const commands = [
       { type: 'set_tax', taxRate: 1 },

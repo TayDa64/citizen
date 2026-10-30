@@ -253,9 +253,10 @@ async function recordErrorRun(pool, request, startedAt, error, scheduledMeetingI
  * Persist active pipeline triggers through the existing createTrigger path
  * (same-id replace, company baseline restack — no compounding).
  * Always inserts an ingest_runs row; validation failure is status=error, not success.
- * CIT-69: when campaignId is set and changed=true, nest-filter then commitTurn
- * restack before marking the run successful. Failed restack keeps triggers and
- * records status=error (does not delete real_world_triggers).
+ * CIT-69: when campaignId is set and changed=true, nest-filter then restack the
+ * campaign in one transaction before marking the run successful. A failed
+ * restack rolls back whole, so the campaign keeps its previous stack; the run
+ * keeps triggers and records status=error (does not delete real_world_triggers).
  * CIT-81: optional scheduledMeetingId links the audit row (due-row / Phase C).
  */
 export async function ingestAndPersist(pool, request, { scheduledMeetingId = null } = {}) {
@@ -342,6 +343,7 @@ export async function ingestAndPersist(pool, request, { scheduledMeetingId = nul
                 campaignId: restack.campaignId,
                 homeId: restack.homeId,
                 appliedTriggerIds: restack.appliedTriggerIds,
+                compensatedSeqs: restack.compensatedSeqs,
               },
             }
           : {}),

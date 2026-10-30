@@ -112,3 +112,42 @@ describe('turn engine determinism', () => {
     expect(insolvent.company.cash).toBe(0);
   });
 });
+
+describe('compensate_torn_month (ledger-only)', () => {
+  const compensation = {
+    type: 'compensate_torn_month',
+    sourceSeq: 3,
+    month: 1,
+    billedBurn: 2200,
+    fullBurn: 2376,
+  };
+
+  test('charges (fullBurn - billedBurn) / 12 without moving the month or chart history', () => {
+    const billed = applyTurnCommand(createGameState({ seed: 'comp-1' }), { type: 'advance_turn' }).state;
+    expect(billed.company.burnRate).toBe(2200);
+    const result = applyTurnCommand(billed, compensation);
+    expect(result.state.company.cash).toBeCloseTo(15000 - 2376 / 12, 9);
+    expect(result.state.turn).toBe(billed.turn);
+    expect(result.state.history).toEqual(billed.history);
+    expect(result.state.company.burnRate).toBe(billed.company.burnRate);
+    expect(result.appliedEffects.map((effect) => effect.kind)).toEqual(['burn.compensation']);
+    expect(result.explanations[0]).toMatch(/Corrected month 1/);
+  });
+
+  test('replays deterministically from the ledger', () => {
+    const commands = [{ type: 'advance_turn' }, compensation, { type: 'advance_turn' }];
+    const a = replayCommands(createGameState({ seed: 'comp-2' }), commands);
+    const b = replayCommands(createGameState({ seed: 'comp-2' }), commands);
+    expect(stableMetrics(a.state)).toEqual(stableMetrics(b.state));
+    expect(a.state.company.cash).toBeCloseTo(15000 - 2376 / 12 - 2200 / 12, 9);
+  });
+
+  test('rejects a malformed entry', () => {
+    expect(() => applyTurnCommand(createGameState(), { ...compensation, sourceSeq: 0 })).toThrow(
+      /compensate_torn_month is invalid/,
+    );
+    expect(() => applyTurnCommand(createGameState(), { ...compensation, fullBurn: Number.NaN })).toThrow(
+      /compensate_torn_month is invalid/,
+    );
+  });
+});

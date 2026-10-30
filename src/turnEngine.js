@@ -73,6 +73,18 @@ export const TURN_COMMAND_TYPES = Object.freeze([
   'hire_employee',
 ]);
 
+/**
+ * Commands the server writes into the turn ledger itself. The engine applies
+ * and replays them like any other command; POST /api/campaigns/{id}/turns
+ * rejects them (server/campaigns.js), so a client cannot credit or debit cash.
+ *
+ * `compensate_torn_month` settles one month that was billed while a server
+ * restack had left the campaign on a torn world-event stack: cash moves by
+ * (fullBurn - billedBurn) / 12. It never edits the month's own commit or the
+ * chart history; it is a new entry, like a bank adjustment.
+ */
+export const LEDGER_ONLY_COMMAND_TYPES = Object.freeze(['compensate_torn_month']);
+
 const HIRE_DEPARTMENTS = Object.freeze(['tech', 'marketing', 'sales']);
 
 export class TurnCommandError extends Error {
@@ -220,7 +232,7 @@ export function parseTurnCommand(raw) {
     ]);
   }
   const type = raw.type;
-  if (!TURN_COMMAND_TYPES.includes(type)) {
+  if (!TURN_COMMAND_TYPES.includes(type) && !LEDGER_ONLY_COMMAND_TYPES.includes(type)) {
     throw new TurnCommandError('Unknown TurnCommand type', [
       issue('type', 'invalid_value', `type must be one of: ${TURN_COMMAND_TYPES.join(', ')}`),
     ]);
@@ -296,11 +308,40 @@ export function parseTurnCommand(raw) {
       }
       return command;
     }
+    case 'compensate_torn_month': {
+      const issues = [];
+      for (const key of ['sourceSeq', 'month']) {
+        const value = raw[key];
+        if (!Number.isInteger(value) || value < (key === 'sourceSeq' ? 1 : 0)) {
+          issues.push(issue(key, 'invalid_type', `${key} must be a non-negative integer`));
+        }
+      }
+      for (const key of ['billedBurn', 'fullBurn']) {
+        if (typeof raw[key] !== 'number' || !Number.isFinite(raw[key]) || raw[key] < 0) {
+          issues.push(issue(key, 'invalid_type', `${key} must be a finite number >= 0`));
+        }
+      }
+      if (issues.length > 0) {
+        throw new TurnCommandError('compensate_torn_month is invalid', issues);
+      }
+      return {
+        type,
+        sourceSeq: raw.sourceSeq,
+        month: raw.month,
+        billedBurn: raw.billedBurn,
+        fullBurn: raw.fullBurn,
+      };
+    }
     default: {
       const neverType = type;
       throw new TurnCommandError(`Unhandled TurnCommand type: ${String(neverType)}`);
     }
   }
+}
+
+/** Cash a compensate_torn_month entry moves: positive charges, negative credits. */
+export function tornMonthCharge(command) {
+  return (Number(command.fullBurn) - Number(command.billedBurn)) / 12;
 }
 
 function metricSnapshot(state) {
@@ -377,6 +418,11 @@ function explanationsFor(command, before, after, appliedEffects) {
         `Hired ${command.department} (skill ${command.skill}). Talent ×${Number(after.talentMultiplier).toFixed(4)}; burn preview ${formatMoney(after.burnRate)}/mo.`,
       );
       break;
+    case 'compensate_torn_month':
+      lines.push(
+        `Corrected month ${command.month}: billed at ${formatMoney(command.billedBurn)}/mo on a half-rebuilt world-event stack; the full stack burns ${formatMoney(command.fullBurn)}/mo. Cash ${formatMoney(before.cash)} → ${formatMoney(after.cash)}.`,
+      );
+      break;
     default: {
       const neverType = command.type;
       throw new TurnCommandError(`Unhandled TurnCommand type: ${String(neverType)}`);
@@ -417,6 +463,11 @@ function applyCommandMutation(state, command) {
         skill: command.skill,
         id: command.id,
       });
+    case 'compensate_torn_month': {
+      const next = structuredClone(state);
+      next.company.cash = Math.max(0, next.company.cash - tornMonthCharge(command));
+      return next;
+    }
     default: {
       const neverType = command.type;
       throw new TurnCommandError(`Unhandled TurnCommand type: ${String(neverType)}`);
@@ -481,6 +532,12 @@ function appliedEffectsFor(command, before, after, beforeState, afterState) {
         summary: `hype ${before.hype} → ${after.hype}; talentCost ${before.talentCost} → ${after.talentCost}`,
       });
     }
+  }
+  if (command.type === 'compensate_torn_month') {
+    effects.push({
+      kind: 'burn.compensation',
+      summary: `month ${command.month} (ledger seq ${command.sourceSeq}) re-billed at ${formatMoney(command.fullBurn)} instead of ${formatMoney(command.billedBurn)}: cash ${formatMoney(before.cash)} → ${formatMoney(after.cash)}`,
+    });
   }
   if (command.type === 'hire_employee') {
     effects.push({

@@ -239,6 +239,8 @@ export function summarizeLedgerCommand(entry) {
       return 'Clear world events';
     case 'hire_employee':
       return `Hire ${entry.command.department ?? 'staff'}`;
+    case 'compensate_torn_month':
+      return `Correct month ${entry.command.month ?? '?'} burn`;
     default: {
       const neverType = type;
       return `Command: ${String(neverType)}`;
