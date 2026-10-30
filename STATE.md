@@ -325,6 +325,8 @@ Trace **`diag-20261030-7f606495`**, `diag-kb v1.1.0`.
 
 CI on the head: **success** — run `41114203655` (workflow `CI`, `pull_request` event), jobs `build`, `test-api`, and `e2e-a11y` all `success`.
 
+Brainiac re-ran the two Postgres-backed suites on `f74dddd` from their own checkout and got `check:restack` **10/10** and `check:model` **21/21**, matching this run — an independent second run, not a restatement of mine. That corroboration only became possible once the box had a working Postgres server (portable PG 17.11 at `/workspace/pg17`, socket `/var/run/postgresql`): the stock box shipped clients only and apt could not install the server, so any earlier teammate "`check:restack` / `check:model` green" predating that must not be read as evidence.
+
 Independent drift measurement (separate probe, real `applyTurnCommand` on both sides):
 
 - On `23a9a5b` the ceiling is server **0.99** vs client **0.95**, and the floor is server **0** vs client **0.05**.
@@ -336,12 +338,20 @@ Invariants: **24/24 exact** against the `a9c6c53` baseline. Full-page WCAG 2.2 A
 
 ### Follow-ups worth filing
 
-Both confirmed real, both confirmed unreachable in the UI, both pre-existing on `main`:
+Three, all confirmed real, all confirmed unreachable in the UI, all pre-existing on `main`. Brainiac is filing them as a single issue; as of this record **none is filed, so there are no issue numbers** — treat all three as known-open and unnumbered. The guard (iii) is Brainiac's to fix; (i) and (ii) are unowned.
 
 - **(i)** `pathwayPreview` / `TurnResult.pathwayPreview.targetAfter` still subtracts from clamped hype and reports **0.95** where the commit lands **0.99**. No UI consumes the field, and the Dashboard previews the current tax, which round-trips.
 - **(ii)** A restack that only changes hype leaves the merged value stale. `onToggleTrigger` and `onIngestFixture` both call `refreshApi()` before restacking, so final drift is **0** on every real path.
+- **(iii)** The merge is unguarded against a non-finite `prev.taxRate`: if it is `undefined` or `NaN`, the new rebase throws `TurnCommandError: GameState.taxRate must be finite` on #44, where `main` degrades without throwing. Measured on real checkouts of both sides, fixture `company.hype` 0.55, `civic.hypeBias` 0.2, `prev.taxRate` 0.25 and a turn result at tax 0.5:
 
-Non-blocking: if `prev.taxRate` is `undefined` or `NaN`, the new rebase throws `TurnCommandError` where `main` silently degraded to hype **0.45**. Unreachable for a hydrated API state.
+| `prev.taxRate` | `main` `23a9a5b` | #44 `f74dddd` |
+| --- | --- | --- |
+| `undefined` | hype **0.30**, no throw | **throws** `TurnCommandError` |
+| `NaN` | hype **0.30**, no throw | **throws** `TurnCommandError` |
+| `null` | hype **0.30**, no throw | hype **0.30**, no throw |
+| `0.5` | hype **0.30**, no throw | hype **0.30**, no throw |
+
+The throw is narrower than "non-finite" suggests — `null` does not throw on either side. The degraded value is fixture-dependent, so **0.30** means nothing without that fixture stated alongside it. Unreachable for a hydrated API state, since `taxRate` is always finite there.
 
 **Status: open, green, regression-cleared, awaiting the orchestrator's merge decision.**
 Last updated: 2026-10-30, #43 merged at `23a9a5b`; #44 open and regression-cleared, trace `diag-20261030-7f606495` (`diag-kb v1.1.0`); main tip `23a9a5b`.
