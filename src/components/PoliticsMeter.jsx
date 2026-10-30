@@ -35,6 +35,7 @@ export default function PoliticsMeter({ state }) {
       <div
         className={`politics-meter__bar${belowFloor ? ' politics-meter__bar--danger' : ''}`}
         role="meter"
+        aria-labelledby="politics-voter-support-label"
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={supportPct}
@@ -55,7 +56,7 @@ export default function PoliticsMeter({ state }) {
       </div>
       <dl className="politics-meter__stats">
         <div>
-          <dt>Voter support</dt>
+          <dt id="politics-voter-support-label">Voter support</dt>
           <dd>
             <span data-testid="politics-voter-support-value">
               {formatVoterSupport(support)}
