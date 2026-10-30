@@ -38,6 +38,7 @@
     "test:ui": "vitest run",
     "test": "npm run test:unit && npm run test:ui",
     "test:api": "node --test test/api/*.api.js",
+    "check:restack": "node --test test/model/campaign-restack-atomicity.api.js",
     "test:browser": "playwright test"
   }
 }

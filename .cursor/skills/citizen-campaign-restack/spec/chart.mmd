@@ -1,0 +1,45 @@
+---
+title: "Citizen: campaign restack after an ingest"
+---
+stateDiagram-v2
+  state "Legend" as legend {
+    lg0: Breaks AtomicRestack or NoMonthOnTornStack
+    lg1: Breaks NoMonthOnTornStack in some cases
+    lg2: Path to the AtomicRestack or NoMonthOnTornStack bug
+  }
+  class lg0 breaks
+  class lg1 mayBreak
+  class lg2 bugPath
+  s0: Playing, 1 world event
+  s1: Rebuilding, no world events
+  s2: Rebuilding, 1 world event
+  s3: Restack failed, no world events
+  s4: Rebuilding, 2 world events
+  s5: Restack failed, 1 world event
+  s6: Restack failed, 2 world events
+  s7: Restacked, 2 world events
+  [*] --> s0
+  s0 --> s1: an ingest starts rebuilding [after a change]
+  s1 --> s2: one event is re-added [while rebuilding]
+  s1 --> s1: you advance a month
+  s1 --> s3: a step of the rebuild fails
+  s2 --> s4: one event is re-added [while rebuilding]
+  s2 --> s5: a step of the rebuild fails
+  s3 --> s1: an ingest starts rebuilding [after a change]
+  s4 --> s6: a step of the rebuild fails
+  s4 --> s7: the rebuild finishes
+  s5 --> s1: an ingest starts rebuilding [after a change]
+  s6 --> s1: an ingest starts rebuilding [after a change]
+  s7 --> s1: an ingest starts rebuilding [after a change]
+  classDef breaks fill:#ffecee,stroke:#e72e3b,stroke-width:2.5px,color:#cd2834
+  classDef mayBreak fill:#fff3e6,stroke:#e8730c,stroke-width:2.5px,color:#b85a06
+  class s0 bugPath
+  class s1 mayBreak
+  class s1 bugPath
+  class s2 mayBreak
+  class s3 breaks
+  class s3 bugPath
+  class s4 mayBreak
+  class s5 breaks
+  class s6 mayBreak
+  class s7 mayBreak
