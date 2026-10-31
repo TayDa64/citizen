@@ -488,3 +488,15 @@ The "Merge record — #47" section above is **kept as written and not edited**; 
 **Ownership, held by me as the flake's triage owner:** flake `diag-20261030-60e4dc88`, its ledger entries, and this record.
 
 This is the same split the #44 section used, and the same split stated when the trace was handed over: patch authorship stays Brainiac's, flake triage and the STATE.md record are mine.
+
+## Correction — the #47 authorship section's probe citation (appended 2026-10-30)
+
+The "Authorship — #47" section above is **kept as written and not edited**, the same way every other correction in this file works; this line supersedes one figure in it. It credits Brainiac with "the zero-latency and helper-shaped probes behind the **9/9** and 0/30 figures". The **9/9 is the retracted over-claim** and does not describe the patch.
+
+"Exactly 9 and 9" was withdrawn on my correction: the unguarded and guarded columns are **separate rounds**, so equal counts in one sample is a coincidence, not a property of the patch. Re-run three times per side in separate processes, the unguarded shape gave **13 / 20 / 23** uncaught against guarded **15 / 10 / 9** swallowed, with **0 uncaught** on the guarded side in every run. That spread is the number to quote; there is no longer any 9 in the unguarded column.
+
+The **0/30 is accurate but is a different kind of fact**. On the helper-shaped probe (fresh admin client per drop, 30 pairs) the race did not fire at all, unguarded or guarded — 0 uncaught and 0 events — because connection setup outlasts the `end()`-to-close window. That is the null result showing a sequential loop can never demonstrate the fix, which is what the "Merge record — #47" section already says. Pairing it with a real failure count as though both were evidence the patch is needed inverts its meaning: one is the evidence, the other is the control.
+
+What survives repetition, and is the durable statement: **unguarded is never 0 in the zero-latency shape, guarded is never anything but 0 uncaught, and no other error code ever reaches the handler.** The counts are not deterministic and must not be quoted as a matched pair.
+
+Provenance stays distinct, since two people measured this independently: the 13/20/23-against-15/10/9 spread is Brainiac's, published in the #47 body. My own build was a separate 60-round probe — 11/60 uncaught unguarded against 0/60 uncaught and 10/60 swallowed guarded, recorded in `diag-20261030-60e4dc88`. Both agree on the invariant above; neither yields a fixed count.
