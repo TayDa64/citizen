@@ -480,3 +480,11 @@ The files under `grace/baselines/` with commit-ish names are **narrative records
 So the durable statement is: the invariant probe emitted **86 scalars** on `a9c6c53`, on `e23404e`, and on `09123ae`, with **0 mismatches** between them; the `09123ae` probe output is byte-identical to the `e23404e` one. Re-run future comparisons against the raw `invariants.json` files, not against the curated baselines.
 
 Two operational notes for anyone re-running the probe: `invariants.mjs` lives at `grace/probes/citizen-pr44/invariants.mjs` (not in the repo), and its `SIM` env var takes the **module** — `SIM=<repo>/src/simulation.js REPO=<repo root>` — because the script does `import(process.env.SIM)`; setting `SIM` to the repo root fails outright.
+
+## Authorship — #47 (appended 2026-10-30)
+
+The "Merge record — #47" section above is **kept as written and not edited**; this line records an omission in it. The patch that section describes is **Brainiac's**: the `pool.on('error', …)` guard for `57P01` in `test/api/throwaway-db.js` was designed and authored by Brainiac, and Brainiac also traced the mechanism and supplied the zero-latency and helper-shaped probes behind the 9/9 and 0/30 figures. My contribution to #47 was independent verification only — the concurrent `test:api` failure on unguarded `main`, the instrumented sequential counter, the re-measured zero-latency probe that corrected an over-claim in the PR body, and the post-merge regression below. The merged table credits the merge action (`Merged by TayDa64`), which is a different fact from authorship and should not be read as one.
+
+**Ownership, held by me as the flake's triage owner:** flake `diag-20261030-60e4dc88`, its ledger entries, and this record.
+
+This is the same split the #44 section used, and the same split stated when the trace was handed over: patch authorship stays Brainiac's, flake triage and the STATE.md record are mine.
