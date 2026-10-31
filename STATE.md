@@ -355,3 +355,136 @@ The throw is narrower than "non-finite" suggests — `null` does not throw on ei
 
 **Status: open, green, regression-cleared, awaiting the orchestrator's merge decision.**
 Last updated: 2026-10-30, #43 merged at `23a9a5b`; #44 open and regression-cleared, trace `diag-20261030-7f606495` (`diag-kb v1.1.0`); main tip `23a9a5b`.
+
+## Merge record — #44 (appended 2026-10-30)
+
+**Superseded:** the section "Open PR — #44 (awaiting merge decision)" above is **kept as written and not edited**. This section records its disposition. PR #44 `fix(ui): rebase clamped campaign hype with the set_tax rule` is **MERGED**.
+
+| PR | Method | Landing | Head | Base | Files | Merged by |
+| --- | --- | --- | --- | --- | --- | --- |
+| #44 — rebase clamped campaign hype with the `set_tax` rule | squash | `e23404e` | `f74dddd` | `23a9a5b` | 3 (+172/−26) | `TayDa64` |
+
+`main` before the merge was `585dffc` (#45), so the squash landed on top of it, not on #44's stated base `23a9a5b`. GitHub reported `mergeable: MERGEABLE` and `mergeStateStatus: CLEAN` right before the merge, and the squash applied without conflict.
+
+CI on the `push` of `e23404e` to `main`: run `41130460284`, jobs `build`, `test-api` and `e2e-a11y` all `success`.
+
+### Post-merge regression on `e23404e` — PASS
+
+Trace **`diag-20261030-0fa8269f`**, `diag-kb v1.1.0`. Suites run strictly one at a time; no concurrent `test:api` (throwaway-db race `diag-20261030-60e4dc88`).
+
+| Suite | Result |
+| --- | --- |
+| `npm run build` | exit 0 (`dist/assets/index-CoQBZ9Gz.js`; chunk-size warning only, pre-existing) |
+| `npm run test:unit` | **87/87** (69 subtests, 3 suites) |
+| `npm run test:ui` | **294 passed / 1 skipped** (295), 29 files |
+| `npm run test:api` | **63/63** (17 suites) |
+| `npm run check:restack` | **10/10** (3 suites) |
+| `npm run check:model` | **21/21** (4 suites) |
+| `npm run test:browser` | **8 passed / 1 skipped** (9) |
+
+The one skip is `e2e/api-contract.spec.js`, gated behind `CITIZEN_API_E2E`. All seven counts match the `f74dddd` pre-merge run exactly; no discrepancy.
+
+Invariants: **86/86 scalar values identical** to the `citizen-main-a9c6c53.json` baseline, zero mismatches — including no-employee burn **2000 / 2200 / 2800**, skill-1 **tech 1.75 / marketing 1.47 / sales 1.33**, the clamp boundaries (`0.09999` and `3.0003` flagged; exactly `0.1` and exactly `3` not flagged), the wage bulletin **2376** / clear **2200**, and the authority boundary. The pre-merge `f74dddd` run compared the same six invariant families against the same baseline and recorded its result as 24/24. This run flattens the same probe output to 86 individual scalars and finds 0 mismatches. The two figures come from different ways of counting one comparison, so they should not be read as two separate checks or compared to each other directly.
+
+The fix is live on `main`, measured on the merged tree with a separate probe against the real `applyTurnCommand` engine: at the ceiling server **0.99** and client **0.99** (drift 0), at the floor server **0** and client **0** (drift 0). On `23a9a5b` the same probe gave client **0.95** at the ceiling and **0.05** at the floor.
+
+Full-page WCAG 2.2 AA scan on the merged tree, both lenses, independent of the CI gate: **0 violations**, one named meter ("Voter support"), one label id, no duplicate ids, no page errors.
+
+Baseline: `/workspace/grace/baselines/citizen-main-e23404e.json`.
+
+### Open item status (appended 2026-10-30, post-#44)
+
+- **Carried, not closed — follow-up (i).** `pathwayPreview` / `TurnResult.pathwayPreview.targetAfter` still reports **0.95** where the commit lands **0.99**. No UI consumes the field. **Unowned.**
+- **Carried, not closed — follow-up (ii).** A hype-only restack leaves merged hype stale; `onToggleTrigger` and `onIngestFixture` both refresh the snapshot first, so final drift is **0** on real paths. **Unowned.**
+- **Carried, now unguarded on `main` — follow-up (iii).** The merge is unguarded against a non-finite `prev.taxRate`: `undefined` or `NaN` throws `TurnCommandError: GameState.taxRate must be finite`, where `23a9a5b` degraded without throwing. `null` does not throw on either side, because `Number(null)` is `0`. No fixture reaches a non-finite tax, so this is latent rather than live. **Owner Brainiac.**
+- **Carried unchanged — throwaway-db race** `diag-20261030-60e4dc88`. **Unowned.**
+- **Carried unchanged —** `migrations/001` has no down section, so a full re-up after a full down fails at 001.
+- **Still open, still unanswered —** whether to add the brainstorm's "Design findings" section to this file. Awaiting the orchestrator.
+
+None of the three #44 follow-ups is filed as an issue, so all three are **known-open and unnumbered**.
+
+Last updated: 2026-10-30, #44 merged at `e23404e` (squash of `f74dddd`), post-merge regression trace `diag-20261030-0fa8269f` (`diag-kb v1.1.0`); main tip `e23404e`.
+
+## Merge record — #47 (appended 2026-10-30)
+
+**Superseded:** the disposition line "Carried unchanged — throwaway-db race `diag-20261030-60e4dc88`. **Unowned.**" in the section above is **kept as written and not edited**. This section records its disposition. PR #47 `test: swallow the admin termination that aborts a throwaway-db test file` is **MERGED**.
+
+| PR | Method | Landing | Head | Base | Files | Merged by |
+| --- | --- | --- | --- | --- | --- | --- |
+| #47 — swallow the admin termination that aborts a throwaway-db test file | squash | `09123ae` | `d3e0b51` | `e23404e` | 1 (+11/−0) | `TayDa64` |
+
+Merged 2026-10-31T05:08:13Z (2026-10-30 22:08 PDT). The squash tree is byte-identical to the reviewed head — `d3e0b51^{tree}` and `09123ae^{tree}` are both `b5b4b1003e568a0fd26c8f32097abcd4e20f3957` — so nothing drifted in the merge. The diff is `test/api/throwaway-db.js` only, `+11/−0`; no production code and no test assertion changed.
+
+### What the patch does
+
+`close()` does `await pool.end()` and then `DROP DATABASE ... WITH (FORCE)`. pg-pool's `Pool.end()` resolves before the client sockets have closed, so the FORCE drop can terminate a backend the pool still owns. The pool registered no `'error'` listener, so `pg-pool`'s `pool.emit('error', err)` had no handler and a recoverable termination (`57P01`, "terminating connection due to administrator command") became an `uncaughtException` that aborted the whole test file. The patch adds one listener that returns on `57P01` and rethrows anything else.
+
+### Flake `diag-20261030-60e4dc88` — CLOSED, fixed on `main` at `09123ae`
+
+This is the flake that failed `test-api` on the docs-only PR #46 (run `41130850224`, `campaign-restack-race.api.js`, `failureType: uncaughtException`) and could have blocked any PR. It is closed against `09123ae`.
+
+The guard is load-bearing, and the evidence for that is **not** a sequential pass. Under concurrent `test:api` on unguarded `e23404e`, 1 of 6 runs failed with the exact CI signature; on the patched tree, 6 of 6 were clean. An instrumented counter over 12 sequential runs recorded **0** swallowed `57P01`, because the race does not fire under the project's sequential convention at all. A zero-latency probe (persistent admin client, three live backends, `end()` then immediate FORCE drop) reproduced it in both directions: **11 of 60** rounds uncaught unguarded versus **0 of 60** uncaught and **10 of 60** swallowed guarded, with no other error code ever reaching the handler. Sequential green runs show the patch costs nothing; they are not the evidence that it is needed.
+
+Safety: only `57P01` is swallowed, `ECONNRESET` still throws, pg-pool evicts the dead client (`totalCount` 1 → 0), and a mid-test `57P01` still rejects the in-flight query with the same code. The throwaway pool is the only pool the tests create — `server/index.js` takes an injected pool, and `migrate.js`, `allowlistedFetch.js`, `dueRowSweep.js` and `ingestOnce.js` only create pools under `isDirectRun()`.
+
+**Residual risk, carried:** the patch stops the runner from dying, it does not remove the race. Serializing the teardown against `pool.end()` remains the deeper fix, and it is still unbuilt.
+
+### Post-merge regression on `09123ae` — PASS
+
+Trace **`diag-20261030-5e9ac1d4`**, `diag-kb v1.1.0`. Suites run strictly one at a time; no concurrent `test:api`.
+
+| Suite | Result |
+| --- | --- |
+| `npm run build` | exit 0 (`✓ built in 3.92s`; chunk-size warning only, pre-existing) |
+| `npm run test:unit` | **87/87** (69 subtests, 3 suites) |
+| `npm run test:ui` | **294 passed / 1 skipped** (295), 29 files |
+| `npm run test:api` | **63/63** (17 suites) |
+| `npm run check:restack` | **10/10** (3 suites) |
+| `npm run check:model` | **21/21** (4 suites) |
+| `npm run test:browser` | **8 passed / 1 skipped** (9) |
+
+All seven counts match the `e23404e` post-merge run exactly. The one skip is again `e2e/api-contract.spec.js`, gated behind `CITIZEN_API_E2E`. `e2e/a11y.spec.js` "default page has no WCAG 2.2 AA violations" passed.
+
+Invariants: **86/86 scalar values identical** to both the `citizen-main-a9c6c53.json` and `citizen-main-e23404e.json` baselines, zero mismatches — no-employee burn **2000 / 2200 / 2800**, skill-1 **tech 1.75 / marketing 1.47 / sales 1.33**, the clamp boundaries, the wage bulletin **2376** / clear **2200**, and the authority boundary all hold.
+
+CI on the `push` of `09123ae` to `main`: run `41171370026`, jobs `build`, `test-api` and `e2e-a11y` all `success`.
+
+Baseline: `/workspace/grace/baselines/citizen-main-09123ae.json`.
+
+### Open item status (appended 2026-10-30, post-#47)
+
+- **Now filed — the three #44 follow-ups.** They are issue **#48**, "Follow-ups from #44: non-finite taxRate guard, stale pathwayPreview at the clamp, hype-only restack staleness", open, unassigned, no labels, filed at the orchestrator's direction. This supersedes the earlier note that all three are "known-open and unnumbered" — they are known-open and numbered. Numbering in #48 matches (i)/(ii)/(iii) here.
+- **Follow-up (iii) — the guard as originally proposed does not work.** Guarding only `nextTax` cannot fire in the common case: when the turn carries a finite tax, `nextTax` is that finite value, the guard passes, and `applyTurnCommand(prev, …)` still throws because it normalizes `prev`. Measured on a real checkout, `undefined` / `NaN` / `"x"` still throw at turn tax 0.5. The corrected condition checks both operands — `Number.isFinite(Number(prev.taxRate)) && Number.isFinite(Number(nextTax))` — and reproduces every cell of #48's table. The patch also needs `rebiasHype` imported into `turnCommands.js`, which #44's version no longer does; #48 carries both.
+- **Follow-ups (i), (ii) and (iii)** remain otherwise as recorded above, now tracked in #48.
+- **Closed — throwaway-db race** `diag-20261030-60e4dc88`, fixed on `main` at `09123ae` by #47. The deeper teardown-serialization fix stays open.
+- **New, unowned — orphaned test databases on the local box.** 79 databases matching `citizen_slice2_test_*` exist in the box's PostgreSQL 17.11. `close()` drops the database it creates, so each orphan means a run ended before reaching the drop. Provenance is **not** established: these could come from the `57P01` abort, from killed runs, or from timeouts, and the count therefore cannot be used to measure how often `close()` completes. Worth a cleanup pass; not a code defect on its own.
+- **Carried unchanged —** `migrations/001` has no down section, so a full re-up after a full down fails at 001.
+- **Still open, still unanswered —** whether to add the brainstorm's "Design findings" section to this file. Awaiting the orchestrator.
+
+Last updated: 2026-10-30, #47 merged at `09123ae` (squash of `d3e0b51`), post-merge regression trace `diag-20261030-5e9ac1d4` (`diag-kb v1.1.0`); main tip `09123ae`.
+
+## Correction — which file the 86-scalar invariant comparison used (appended 2026-10-30)
+
+Both sections above cite the invariants result as "86/86 scalar values identical" and name `citizen-main-a9c6c53.json` / `citizen-main-e23404e.json` as the comparison. That naming is imprecise and would send a re-runner to the wrong file. The result itself is unchanged and verified.
+
+The 86-scalar comparison was run against the **raw probe outputs**:
+
+| File | Leaves | What it is |
+| --- | --- | --- |
+| `grace/probes/citizen-main-a9c6c53/invariants.json` | 86 | raw probe output — the actual comparison target |
+| `grace/probes/citizen-main-e23404e/invariants.json` | 86 | raw probe output — the actual comparison target |
+| `grace/baselines/citizen-main-09123ae.json` | 86 | raw probe output for `09123ae`, the file written by the #47 run |
+
+The files under `grace/baselines/` with commit-ish names are **narrative records**, not probe output: `citizen-main-a9c6c53.json` has 92 leaves and `citizen-main-e23404e.json` has 84, because they carry trace metadata, a merge block and findings alongside a subset of the probe's scalars. Diffing a probe against one of them is not a meaningful comparison and will report every key as differing; that is an artifact of comparing two different document shapes, not a regression.
+
+So the durable statement is: the invariant probe emitted **86 scalars** on `a9c6c53`, on `e23404e`, and on `09123ae`, with **0 mismatches** between them; the `09123ae` probe output is byte-identical to the `e23404e` one. Re-run future comparisons against the raw `invariants.json` files, not against the curated baselines.
+
+Two operational notes for anyone re-running the probe: `invariants.mjs` lives at `grace/probes/citizen-pr44/invariants.mjs` (not in the repo), and its `SIM` env var takes the **module** — `SIM=<repo>/src/simulation.js REPO=<repo root>` — because the script does `import(process.env.SIM)`; setting `SIM` to the repo root fails outright.
+
+## Authorship — #47 (appended 2026-10-30)
+
+The "Merge record — #47" section above is **kept as written and not edited**; this line records an omission in it. The patch that section describes is **Brainiac's**: the `pool.on('error', …)` guard for `57P01` in `test/api/throwaway-db.js` was designed and authored by Brainiac, and Brainiac also traced the mechanism and supplied both probes: the zero-latency one, which shows the race (**13 / 20 / 23** uncaught unguarded against **15 / 10 / 9** swallowed across three runs in separate processes, **0 uncaught** guarded in every one), and the helper-shaped one, which is the null result (**0/30** uncaught unguarded, 0 events guarded — the race does not fire sequentially at all, which is why no sequential loop can demonstrate the fix). The counts are not deterministic and are not matched pairs; the unguarded and guarded columns are separate rounds, so what holds every run is the rate and the absence of anything else, not a specific count. My contribution to #47 was independent verification only — the concurrent `test:api` failure on unguarded `main`, the instrumented sequential counter, the re-measured zero-latency probe that corrected an over-claim in the PR body, and the post-merge regression below. The merged table credits the merge action (`Merged by TayDa64`), which is a different fact from authorship and should not be read as one.
+
+**Ownership, held by me as the flake's triage owner:** flake `diag-20261030-60e4dc88`, its ledger entries, and this record.
+
+This is the same split the #44 section used, and the same split stated when the trace was handed over: patch authorship stays Brainiac's, flake triage and the STATE.md record are mine.
