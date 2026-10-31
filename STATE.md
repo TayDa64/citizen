@@ -404,3 +404,61 @@ Baseline: `/workspace/grace/baselines/citizen-main-e23404e.json`.
 None of the three #44 follow-ups is filed as an issue, so all three are **known-open and unnumbered**.
 
 Last updated: 2026-10-30, #44 merged at `e23404e` (squash of `f74dddd`), post-merge regression trace `diag-20261030-0fa8269f` (`diag-kb v1.1.0`); main tip `e23404e`.
+
+## Merge record — #47 (appended 2026-10-30)
+
+**Superseded:** the disposition line "Carried unchanged — throwaway-db race `diag-20261030-60e4dc88`. **Unowned.**" in the section above is **kept as written and not edited**. This section records its disposition. PR #47 `test: swallow the admin termination that aborts a throwaway-db test file` is **MERGED**.
+
+| PR | Method | Landing | Head | Base | Files | Merged by |
+| --- | --- | --- | --- | --- | --- | --- |
+| #47 — swallow the admin termination that aborts a throwaway-db test file | squash | `09123ae` | `d3e0b51` | `e23404e` | 1 (+11/−0) | `TayDa64` |
+
+Merged 2026-10-31T05:08:13Z (2026-10-30 22:08 PDT). The squash tree is byte-identical to the reviewed head — `d3e0b51^{tree}` and `09123ae^{tree}` are both `b5b4b1003e568a0fd26c8f32097abcd4e20f3957` — so nothing drifted in the merge. The diff is `test/api/throwaway-db.js` only, `+11/−0`; no production code and no test assertion changed.
+
+### What the patch does
+
+`close()` does `await pool.end()` and then `DROP DATABASE ... WITH (FORCE)`. pg-pool's `Pool.end()` resolves before the client sockets have closed, so the FORCE drop can terminate a backend the pool still owns. The pool registered no `'error'` listener, so `pg-pool`'s `pool.emit('error', err)` had no handler and a recoverable termination (`57P01`, "terminating connection due to administrator command") became an `uncaughtException` that aborted the whole test file. The patch adds one listener that returns on `57P01` and rethrows anything else.
+
+### Flake `diag-20261030-60e4dc88` — CLOSED, fixed on `main` at `09123ae`
+
+This is the flake that failed `test-api` on the docs-only PR #46 (run `41130850224`, `campaign-restack-race.api.js`, `failureType: uncaughtException`) and could have blocked any PR. It is closed against `09123ae`.
+
+The guard is load-bearing, and the evidence for that is **not** a sequential pass. Under concurrent `test:api` on unguarded `e23404e`, 1 of 6 runs failed with the exact CI signature; on the patched tree, 6 of 6 were clean. An instrumented counter over 12 sequential runs recorded **0** swallowed `57P01`, because the race does not fire under the project's sequential convention at all. A zero-latency probe (persistent admin client, three live backends, `end()` then immediate FORCE drop) reproduced it in both directions: **11 of 60** rounds uncaught unguarded versus **0 of 60** uncaught and **10 of 60** swallowed guarded, with no other error code ever reaching the handler. Sequential green runs show the patch costs nothing; they are not the evidence that it is needed.
+
+Safety: only `57P01` is swallowed, `ECONNRESET` still throws, pg-pool evicts the dead client (`totalCount` 1 → 0), and a mid-test `57P01` still rejects the in-flight query with the same code. The throwaway pool is the only pool the tests create — `server/index.js` takes an injected pool, and `migrate.js`, `allowlistedFetch.js`, `dueRowSweep.js` and `ingestOnce.js` only create pools under `isDirectRun()`.
+
+**Residual risk, carried:** the patch stops the runner from dying, it does not remove the race. Serializing the teardown against `pool.end()` remains the deeper fix, and it is still unbuilt.
+
+### Post-merge regression on `09123ae` — PASS
+
+Trace **`diag-20261030-5e9ac1d4`**, `diag-kb v1.1.0`. Suites run strictly one at a time; no concurrent `test:api`.
+
+| Suite | Result |
+| --- | --- |
+| `npm run build` | exit 0 (`✓ built in 3.92s`; chunk-size warning only, pre-existing) |
+| `npm run test:unit` | **87/87** (69 subtests, 3 suites) |
+| `npm run test:ui` | **294 passed / 1 skipped** (295), 29 files |
+| `npm run test:api` | **63/63** (17 suites) |
+| `npm run check:restack` | **10/10** (3 suites) |
+| `npm run check:model` | **21/21** (4 suites) |
+| `npm run test:browser` | **8 passed / 1 skipped** (9) |
+
+All seven counts match the `e23404e` post-merge run exactly. The one skip is again `e2e/api-contract.spec.js`, gated behind `CITIZEN_API_E2E`. `e2e/a11y.spec.js` "default page has no WCAG 2.2 AA violations" passed.
+
+Invariants: **86/86 scalar values identical** to both the `citizen-main-a9c6c53.json` and `citizen-main-e23404e.json` baselines, zero mismatches — no-employee burn **2000 / 2200 / 2800**, skill-1 **tech 1.75 / marketing 1.47 / sales 1.33**, the clamp boundaries, the wage bulletin **2376** / clear **2200**, and the authority boundary all hold.
+
+CI on the `push` of `09123ae` to `main`: run `41171370026`, jobs `build`, `test-api` and `e2e-a11y` all `success`.
+
+Baseline: `/workspace/grace/baselines/citizen-main-09123ae.json`.
+
+### Open item status (appended 2026-10-30, post-#47)
+
+- **Now filed — the three #44 follow-ups.** They are issue **#48**, "Follow-ups from #44: non-finite taxRate guard, stale pathwayPreview at the clamp, hype-only restack staleness", open, unassigned, no labels, filed at the orchestrator's direction. This supersedes the earlier note that all three are "known-open and unnumbered" — they are known-open and numbered. Numbering in #48 matches (i)/(ii)/(iii) here.
+- **Follow-up (iii) — the guard as originally proposed does not work.** Guarding only `nextTax` cannot fire in the common case: when the turn carries a finite tax, `nextTax` is that finite value, the guard passes, and `applyTurnCommand(prev, …)` still throws because it normalizes `prev`. Measured on a real checkout, `undefined` / `NaN` / `"x"` still throw at turn tax 0.5. The corrected condition checks both operands — `Number.isFinite(Number(prev.taxRate)) && Number.isFinite(Number(nextTax))` — and reproduces every cell of #48's table. The patch also needs `rebiasHype` imported into `turnCommands.js`, which #44's version no longer does; #48 carries both.
+- **Follow-ups (i), (ii) and (iii)** remain otherwise as recorded above, now tracked in #48.
+- **Closed — throwaway-db race** `diag-20261030-60e4dc88`, fixed on `main` at `09123ae` by #47. The deeper teardown-serialization fix stays open.
+- **New, unowned — orphaned test databases on the local box.** 79 databases matching `citizen_slice2_test_*` exist in the box's PostgreSQL 17.11. `close()` drops the database it creates, so each orphan means a run ended before reaching the drop. Provenance is **not** established: these could come from the `57P01` abort, from killed runs, or from timeouts, and the count therefore cannot be used to measure how often `close()` completes. Worth a cleanup pass; not a code defect on its own.
+- **Carried unchanged —** `migrations/001` has no down section, so a full re-up after a full down fails at 001.
+- **Still open, still unanswered —** whether to add the brainstorm's "Design findings" section to this file. Awaiting the orchestrator.
+
+Last updated: 2026-10-30, #47 merged at `09123ae` (squash of `d3e0b51`), post-merge regression trace `diag-20261030-5e9ac1d4` (`diag-kb v1.1.0`); main tip `09123ae`.
