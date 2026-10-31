@@ -462,3 +462,21 @@ Baseline: `/workspace/grace/baselines/citizen-main-09123ae.json`.
 - **Still open, still unanswered —** whether to add the brainstorm's "Design findings" section to this file. Awaiting the orchestrator.
 
 Last updated: 2026-10-30, #47 merged at `09123ae` (squash of `d3e0b51`), post-merge regression trace `diag-20261030-5e9ac1d4` (`diag-kb v1.1.0`); main tip `09123ae`.
+
+## Correction — which file the 86-scalar invariant comparison used (appended 2026-10-30)
+
+Both sections above cite the invariants result as "86/86 scalar values identical" and name `citizen-main-a9c6c53.json` / `citizen-main-e23404e.json` as the comparison. That naming is imprecise and would send a re-runner to the wrong file. The result itself is unchanged and verified.
+
+The 86-scalar comparison was run against the **raw probe outputs**:
+
+| File | Leaves | What it is |
+| --- | --- | --- |
+| `grace/probes/citizen-main-a9c6c53/invariants.json` | 86 | raw probe output — the actual comparison target |
+| `grace/probes/citizen-main-e23404e/invariants.json` | 86 | raw probe output — the actual comparison target |
+| `grace/baselines/citizen-main-09123ae.json` | 86 | raw probe output for `09123ae`, the file written by the #47 run |
+
+The files under `grace/baselines/` with commit-ish names are **narrative records**, not probe output: `citizen-main-a9c6c53.json` has 92 leaves and `citizen-main-e23404e.json` has 84, because they carry trace metadata, a merge block and findings alongside a subset of the probe's scalars. Diffing a probe against one of them is not a meaningful comparison and will report every key as differing; that is an artifact of comparing two different document shapes, not a regression.
+
+So the durable statement is: the invariant probe emitted **86 scalars** on `a9c6c53`, on `e23404e`, and on `09123ae`, with **0 mismatches** between them; the `09123ae` probe output is byte-identical to the `e23404e` one. Re-run future comparisons against the raw `invariants.json` files, not against the curated baselines.
+
+Two operational notes for anyone re-running the probe: `invariants.mjs` lives at `grace/probes/citizen-pr44/invariants.mjs` (not in the repo), and its `SIM` env var takes the **module** — `SIM=<repo>/src/simulation.js REPO=<repo root>` — because the script does `import(process.env.SIM)`; setting `SIM` to the repo root fails outright.
