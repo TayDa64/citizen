@@ -28,6 +28,17 @@ export async function createThrowawayDatabase() {
     database: name,
     max: 4
   });
+  // close() ends the pool and then drops the database WITH (FORCE). pg-pool's
+  // Pool.end() resolves before the client sockets have actually closed, so the
+  // FORCE drop can still terminate a backend that belongs to this pool. A pool
+  // with no 'error' listener re-emits that as an uncaughtException and kills
+  // the whole test file (27% of runs at 3x concurrency, seen in CI on run
+  // 41130850224). Swallow only the expected admin termination 57P01; anything
+  // else still reaches the process so real bugs are not hidden.
+  pool.on('error', (err) => {
+    if (err?.code === '57P01') return;
+    throw err;
+  });
 
   const located = await pool.query(
     'SELECT inet_server_addr()::text AS addr, current_database() AS db'
