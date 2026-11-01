@@ -204,7 +204,7 @@ function WorldEventEffect({ state }) {
   );
 }
 
-export default function Dashboard({ state, ledger = [], showLedger = true, showPolitics = true }) {
+export function CompanyMetrics({ state }) {
   const factorClampNote = talentCostFactorClampNote(talentCostFactorClampOf(state));
   const { cash, burnRate } = state.history;
   const categories = cash.map((_, i) => simulatedMonthLabel(i));
@@ -236,7 +236,7 @@ export default function Dashboard({ state, ledger = [], showLedger = true, showP
   }, []);
 
   return (
-    <div className="dashboard" style={{ padding: '1rem', background: '#12121f', color: '#e0e0e0' }}>
+    <div className="dashboard company-metrics" style={{ padding: '0.25rem', background: '#12121f', color: '#e0e0e0' }}>
       <h3 style={{ margin: '0 0 0.5rem' }}>Company Metrics</h3>
       <p className="dashboard__authority" data-testid="campaign-authority-note">
         Cash and burn below are <strong>campaign authority</strong> (GameState / turn commits). Never copy GET /api/companies cash or burnRate.
@@ -304,12 +304,6 @@ export default function Dashboard({ state, ledger = [], showLedger = true, showP
           <dd>Tax: {(state.taxRate * 100).toFixed(0)}%</dd>
         </div>
       </dl>
-      <TalentBurnSummary state={state} />
-      <EmployeeRoster employees={state.employees} />
-      <CivicFeedbackReadout state={state} />
-      {showPolitics ? <PoliticsMeter state={state} /> : null}
-      <WorldEventEffect state={state} />
-      {showLedger ? <TurnLedger entries={ledger} /> : null}
       <figure className="metrics-chart" aria-busy={ChartAccessibility === undefined}>
         <figcaption id="metrics-chart-description" className="chart-caption">
           {description}
@@ -365,6 +359,26 @@ export default function Dashboard({ state, ledger = [], showLedger = true, showP
           </Chart>
         )}
       </figure>
+    </div>
+  );
+}
+
+export default function Dashboard({
+  state,
+  ledger = [],
+  showLedger = true,
+  showPolitics = true,
+  showMetrics = true,
+}) {
+  return (
+    <div className="dashboard" style={{ padding: '1rem', background: '#12121f', color: '#e0e0e0' }}>
+      {showMetrics ? <CompanyMetrics state={state} /> : null}
+      <TalentBurnSummary state={state} />
+      <EmployeeRoster employees={state.employees} />
+      <CivicFeedbackReadout state={state} />
+      {showPolitics ? <PoliticsMeter state={state} /> : null}
+      <WorldEventEffect state={state} />
+      {showLedger ? <TurnLedger entries={ledger} /> : null}
     </div>
   );
 }

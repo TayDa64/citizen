@@ -1,11 +1,7 @@
 import { formatBudgetHeadroom, formatHypeBias } from '../civicFeedback';
 import {
-  formatTalentCostFactor,
-} from '../talentMultiplier';
-import {
   formatCurrency,
   formatHypePercent,
-  talentCostFactorClampNote,
 } from '../triggers';
 
 function RunwayField({ id, label, value, chip, kind, note }) {
@@ -24,14 +20,10 @@ function RunwayField({ id, label, value, chip, kind, note }) {
 }
 
 export default function CampaignRunwayView({ model }) {
-  const clampNote = model.talentCostFactorClamp
-    ? talentCostFactorClampNote(model.talentCostFactorClamp)
-    : '';
-
   return (
     <div className="runway-scrim" data-testid="campaign-runway-view">
       <p className="runway-authority" data-testid="runway-authority">
-        Cash and burn are campaign authority (GameState / turn commits). Do not read company cash or burn from GET /api/companies.
+        Hype, talent cost, and the civic projection are campaign authority (GameState / turn commits). Do not read company cash or burn from GET /api/companies.
       </p>
       <dl className="runway-fields">
         <RunwayField
@@ -40,34 +32,6 @@ export default function CampaignRunwayView({ model }) {
           kind="observed"
           chip={model.provenance.turn}
           value={<span data-testid="runway-turn">{model.turn}</span>}
-        />
-        <RunwayField
-          id="tax"
-          label="Tax"
-          kind="observed"
-          chip={model.provenance.tax}
-          value={<span data-testid="runway-tax">{`${Math.round(model.taxRate * 100)}%`}</span>}
-        />
-        <RunwayField
-          id="cash"
-          label="Campaign cash"
-          kind="observed"
-          chip={model.provenance.cash}
-          value={<span data-testid="runway-cash">{formatCurrency(model.cash)}</span>}
-        />
-        <RunwayField
-          id="burn"
-          label="Campaign burn / month"
-          kind="preview"
-          chip={model.provenance.burnPreview}
-          value={<span data-testid="runway-burn">{formatCurrency(model.burnPreview)}</span>}
-        />
-        <RunwayField
-          id="base-burn"
-          label="Base burn"
-          kind="model"
-          chip={model.provenance.baseBurn}
-          value={<span data-testid="runway-base-burn">{formatCurrency(model.baseBurn)}</span>}
         />
         <RunwayField
           id="hype"
@@ -93,16 +57,6 @@ export default function CampaignRunwayView({ model }) {
               dollars
             </span>
           )}
-        />
-        <RunwayField
-          id="talent-factor"
-          label="Talent cost factor"
-          kind="observed"
-          chip={model.provenance.talentCostFactor}
-          value={<span data-testid="runway-talent-factor">{formatTalentCostFactor(model.talentCostFactor)}</span>}
-          note={clampNote ? (
-            <span data-testid="runway-talent-factor-clamp">{clampNote}</span>
-          ) : null}
         />
         <RunwayField
           id="headroom"
