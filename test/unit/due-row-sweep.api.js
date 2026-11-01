@@ -108,6 +108,20 @@ test('shouldPersistTriggers: publication wage + library minutes; not Final+null/
   );
   assert.equal(finalNull.status, 'minutes_wait');
   assert.equal(shouldPersistTriggers(nullFile, finalNull), false);
+
+  // CIT-123: partial artifact never reaches ingested (OR→AND), so persist gate stays closed.
+  const urlOnly = reduceMeetingRow(
+    seedRow3458MinutesWait(1),
+    mvLibraryMinutes3458.frozenNowFile,
+    {
+      type: 'minutes_check',
+      outcome: 'ok',
+      minutesUrl: 'https://example.local/partial.pdf',
+      minutesPublishedAt: null,
+    },
+  );
+  assert.equal(urlOnly.status, 'minutes_wait');
+  assert.equal(shouldPersistTriggers(seedRow3458MinutesWait(1), urlOnly), false);
 });
 
 test('resolveIngestFixtureId maps wage publication and library minutes packs', () => {
@@ -177,4 +191,18 @@ test('calendar-ingest workflow locks :12 + dispatch; no T-3 06:00-only', () => {
   assert.doesNotMatch(body, /cron:\s*'0 6 /);
   assert.doesNotMatch(body, /npm run ingest:once/);
   assert.doesNotMatch(body, /adapter:\s*'firecrawl'|adapter:\s*"firecrawl"/i);
+});
+
+test('CIT-123: processDueMeeting latches ingested only after ingestAndPersist', () => {
+  const src = fs.readFileSync('server/dueRowSweep.js', 'utf8');
+  const persistBlock = src.slice(
+    src.indexOf('if (shouldPersistTriggers(row, after))'),
+    src.indexOf('// Fail closed: reducer said ingested'),
+  );
+  const ingestAt = persistBlock.indexOf('await ingestAndPersist');
+  const latchAt = persistBlock.indexOf('await updateScheduledMeeting');
+  assert.ok(ingestAt >= 0, 'persist branch calls ingestAndPersist');
+  assert.ok(latchAt > ingestAt, 'updateScheduledMeeting follows successful ingest');
+  assert.match(persistBlock, /latchDeferred:\s*true/);
+  assert.match(src, /hasUrl && hasTs|minutesArtifactReady/);
 });

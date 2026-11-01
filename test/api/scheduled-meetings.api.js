@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { describe, test } from 'node:test';
 import { applyMigration, UP_MIGRATIONS } from '../../server/migrate.js';
 import {
@@ -314,6 +315,69 @@ describe('CIT-81 scheduled_meetings + due-row sweep', { concurrency: 1, timeout:
       assert.equal(replay.meeting.status, 'unchanged');
       assert.equal(replay.triggerChanged, false);
       assert.equal(replay.ingestRunChanged, false);
+    } finally {
+      await db.close();
+    }
+  });
+
+  test('CIT-123: mig 009 due-open index; partial artifact never latches ingested; ingest fail keeps wait', async () => {
+    const db = await migratedDatabase();
+    try {
+      const indexes = await db.pool.query(
+        `SELECT indexname FROM pg_indexes
+         WHERE schemaname = 'public' AND indexname = 'idx_scheduled_meetings_due_open'`,
+      );
+      assert.equal(indexes.rowCount, 1);
+
+      const dueSql = fs.readFileSync(new URL('../../server/scheduledMeetings.js', import.meta.url), 'utf8');
+      assert.match(dueSql, /AND status = ANY\(\$2::text\[\]\)/);
+      assert.doesNotMatch(dueSql, /AND status <> ALL/);
+
+      const library = await upsertScheduledMeeting(db.pool, seedRow3458MinutesWait(4));
+      const partial = await processDueMeeting(
+        db.pool,
+        library,
+        mvLibraryMinutes3458.frozenNowFile,
+        {
+          signal: {
+            type: 'minutes_check',
+            outcome: 'ok',
+            minutesUrl: 'https://example.local/partial-only.pdf',
+            minutesPublishedAt: null,
+          },
+        },
+      );
+      assert.equal(partial.meeting.status, 'minutes_wait');
+      assert.equal(partial.triggers.length, 0);
+      assert.notEqual(partial.meeting.status, 'ingested');
+
+      const waiting = await upsertScheduledMeeting(db.pool, {
+        ...seedRow3458MinutesWait(4),
+        externalEventId: '3458-fail',
+      });
+      await db.pool.query('DROP TABLE real_world_triggers CASCADE');
+      await assert.rejects(
+        () => processDueMeeting(
+          db.pool,
+          waiting,
+          mvLibraryMinutes3458.frozenNowFile,
+          { signal: mvLibraryMinutes3458.signalFile },
+        ),
+      );
+      const afterFail = await getScheduledMeetingByNaturalKey(
+        db.pool,
+        waiting.sourceId,
+        '3458-fail',
+      );
+      assert.equal(afterFail.status, 'minutes_wait');
+      assert.ok(afterFail.lastError);
+      assert.notEqual(afterFail.status, 'ingested');
+
+      const runs = await listIngestRuns(db.pool, { limit: 10 });
+      const errRun = runs.find(
+        (run) => run.scheduledMeetingId === waiting.id && run.status === 'error',
+      );
+      assert.ok(errRun);
     } finally {
       await db.close();
     }

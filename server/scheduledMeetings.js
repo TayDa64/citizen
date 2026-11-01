@@ -7,6 +7,7 @@ import {
   DEFAULT_SOURCE_ID,
   DEFAULT_TIMEZONE,
   MINUTES_HORIZON_DAYS,
+  OPEN_MEETING_STATUSES,
   createMeetingRow,
   createPublicationRow,
   mvCouncilCalendar2026h2,
@@ -210,7 +211,10 @@ export async function updateScheduledMeeting(pool, meeting) {
 const TERMINAL = new Set(['cancelled', 'ingested', 'unchanged']);
 
 /**
- * Due rows: next_check_at <= now, non-terminal. FOR UPDATE SKIP LOCKED when client supports it.
+ * Due rows: next_check_at <= now, open (non-terminal) statuses.
+ * Positive ANY + partial index idx_scheduled_meetings_due_open (mig 009)
+ * — index-friendly vs a negative terminal exclusion predicate.
+ * FOR UPDATE SKIP LOCKED when client supports it.
  */
 export async function listDueScheduledMeetings(client, nowIso, { forUpdate = true } = {}) {
   const lock = forUpdate ? 'FOR UPDATE SKIP LOCKED' : '';
@@ -218,10 +222,10 @@ export async function listDueScheduledMeetings(client, nowIso, { forUpdate = tru
     `SELECT ${SELECT_COLUMNS}
      FROM scheduled_meetings
      WHERE next_check_at <= $1::timestamptz
-       AND status <> ALL($2::text[])
+       AND status = ANY($2::text[])
      ORDER BY next_check_at ASC, source_id ASC, external_event_id ASC
      ${lock}`,
-    [nowIso, [...TERMINAL]],
+    [nowIso, [...OPEN_MEETING_STATUSES]],
   );
   return result.rows.map(mapScheduledMeetingRow);
 }

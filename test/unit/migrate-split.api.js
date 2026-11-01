@@ -63,8 +63,10 @@ test('migration 003 is additive and reversible in source', () => {
     'migrations/006_jurisdiction_nest.sql',
     'migrations/007_scheduled_meetings.sql',
     'migrations/008_ingest_retrieval_indexes.sql',
+    'migrations/009_due_open_index.sql',
   ]);
   assert.deepEqual(DOWN_MIGRATIONS, [
+    'migrations/009_due_open_index.sql',
     'migrations/008_ingest_retrieval_indexes.sql',
     'migrations/007_scheduled_meetings.sql',
     'migrations/006_jurisdiction_nest.sql',
@@ -146,6 +148,16 @@ test('migration 008 ingest retrieval indexes is additive and reversible in sourc
   assert.match(parts.down, /DROP INDEX IF EXISTS idx_ingest_runs_scheduled_meeting/);
   assert.match(parts.down, /DROP INDEX IF EXISTS idx_real_world_triggers_jurisdiction/);
   assert.match(parts.down, /DROP INDEX IF EXISTS idx_scheduled_meetings_jurisdiction_starts/);
+});
+
+test('migration 009 due-open partial index is additive and reversible in source', () => {
+  const sql = fs.readFileSync('migrations/009_due_open_index.sql', 'utf8');
+  const parts = splitMigration(sql);
+  assert.match(parts.up, /idx_scheduled_meetings_due_open/);
+  assert.match(parts.up, /WHERE status NOT IN \('cancelled', 'ingested', 'unchanged'\)/);
+  assert.doesNotMatch(parts.up, /DROP TABLE/i);
+  assert.doesNotMatch(parts.up, /Firecrawl|HNSW|pgvector/i);
+  assert.match(parts.down, /DROP INDEX IF EXISTS idx_scheduled_meetings_due_open/);
 });
 
 test('node:test filenames stay outside the vitest default include', () => {

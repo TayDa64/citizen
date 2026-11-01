@@ -17,6 +17,11 @@ export const TERMINAL_STATUSES = Object.freeze(
   new Set(['cancelled', 'ingested', 'unchanged']),
 );
 
+/** Non-terminal statuses eligible for due-row sweep (index-friendly ANY predicate). */
+export const OPEN_MEETING_STATUSES = Object.freeze(
+  MEETING_STATUSES.filter((status) => !TERMINAL_STATUSES.has(status)),
+);
+
 export const MEETING_KINDS = Object.freeze(['meeting', 'publication']);
 
 /** Business-day offsets after the meeting for Phase C backoff (then weekly). */

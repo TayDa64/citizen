@@ -301,12 +301,13 @@ function reduceMorningCheck(row, now, signal) {
   });
 }
 
+/** CIT-123: require url AND timestamp — aligned with due-row persist AND. */
 function minutesArtifactPresent(signal) {
   if (signal.mediaOnly === true) return false;
   const hasUrl = typeof signal.minutesUrl === 'string' && signal.minutesUrl.trim() !== '';
   const hasTs = typeof signal.minutesPublishedAt === 'string'
     && !Number.isNaN(Date.parse(signal.minutesPublishedAt));
-  return hasUrl || hasTs;
+  return hasUrl && hasTs;
 }
 
 function closeUnchanged(row, now) {
