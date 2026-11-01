@@ -58,9 +58,13 @@ import NavigationShell, { OfficeStatus } from './shell/NavigationShell';
 import { campaignRunwayModel } from './shell/simulationAdapter';
 import WindowManager from './shell/WindowManager';
 import {
+  CAMPAIGN_CALENDAR_ID,
   CAMPAIGN_CAUSAL_ID,
+  CAMPAIGN_INGEST_ID,
   CAMPAIGN_LEDGER_ID,
+  CAMPAIGN_NEST_ID,
   CAMPAIGN_POLITICS_ID,
+  CAMPAIGN_TRIGGERS_ID,
   CAMPAIGN_RUNWAY_ID,
   COMPANY_METRICS_ID,
   COMPANY_OPS_ID,
@@ -760,6 +764,10 @@ function App({ initialPlayerRole } = {}) {
                 onIngestFixture={onIngestFixture}
                 politicsWindow={workspace.windows.find((item) => item.id === CAMPAIGN_POLITICS_ID) ?? null}
                 ledgerWindow={workspace.windows.find((item) => item.id === CAMPAIGN_LEDGER_ID) ?? null}
+                nestWindow={workspace.windows.find((item) => item.id === CAMPAIGN_NEST_ID) ?? null}
+                calendarWindow={workspace.windows.find((item) => item.id === CAMPAIGN_CALENDAR_ID) ?? null}
+                ingestWindow={workspace.windows.find((item) => item.id === CAMPAIGN_INGEST_ID) ?? null}
+                triggersWindow={workspace.windows.find((item) => item.id === CAMPAIGN_TRIGGERS_ID) ?? null}
                 onWorkspaceAction={dispatchWorkspace}
               />
             ) : (

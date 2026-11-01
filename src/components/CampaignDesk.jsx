@@ -7,9 +7,9 @@ import TriggerPanel from './TriggerPanel';
 import TurnLedger from './TurnLedger';
 
 /**
- * Campaign desk for the campaign lens — nest, council calendar, world events,
- * and ingest audit. Politics, the causal hub, and the turn ledger mount as
- * windows. No fake forms / invent calendar.
+ * Campaign desk for the campaign lens. Politics, the causal hub, the turn
+ * ledger, the jurisdiction nest, the council calendar, world events, and the
+ * ingest audit mount as windows. No fake forms / invent calendar.
  */
 export default function CampaignDesk({
   state,
@@ -24,6 +24,10 @@ export default function CampaignDesk({
   onIngestFixture,
   politicsWindow = null,
   ledgerWindow = null,
+  nestWindow = null,
+  calendarWindow = null,
+  ingestWindow = null,
+  triggersWindow = null,
   onWorkspaceAction,
 }) {
   return (
@@ -46,27 +50,43 @@ export default function CampaignDesk({
           <PoliticsMeter state={state} />
         </WindowFrame>
       ) : null}
-      <NestExplorer apiBase={apiBase} homeId="mv" refreshKey={ingestRefreshKey} />
-      <CouncilCalendarPanel
-        apiBase={apiBase}
-        jurisdictionId="mv"
-        refreshKey={ingestRefreshKey}
-      />
-      <TriggerPanel
-        state={state}
-        announcement={announcement}
-        busy={busy}
-        pipelineEvents={pipelineEvents}
-        onToggleTrigger={onToggleTrigger}
-        onClearTriggers={onClearTriggers}
-        onIngestFixture={onIngestFixture}
-      />
+      {nestWindow?.open ? (
+        <WindowFrame windowRecord={nestWindow} onAction={onWorkspaceAction}>
+          <NestExplorer apiBase={apiBase} homeId="mv" refreshKey={ingestRefreshKey} />
+        </WindowFrame>
+      ) : null}
+      {calendarWindow?.open ? (
+        <WindowFrame windowRecord={calendarWindow} onAction={onWorkspaceAction}>
+          <CouncilCalendarPanel
+            apiBase={apiBase}
+            jurisdictionId="mv"
+            refreshKey={ingestRefreshKey}
+          />
+        </WindowFrame>
+      ) : null}
+      {triggersWindow?.open ? (
+        <WindowFrame windowRecord={triggersWindow} onAction={onWorkspaceAction}>
+          <TriggerPanel
+            state={state}
+            announcement={announcement}
+            busy={busy}
+            pipelineEvents={pipelineEvents}
+            onToggleTrigger={onToggleTrigger}
+            onClearTriggers={onClearTriggers}
+            onIngestFixture={onIngestFixture}
+          />
+        </WindowFrame>
+      ) : null}
       {ledgerWindow?.open ? (
         <WindowFrame windowRecord={ledgerWindow} onAction={onWorkspaceAction}>
           <TurnLedger entries={ledger} />
         </WindowFrame>
       ) : null}
-      <IngestRunsPanel apiBase={apiBase} refreshKey={ingestRefreshKey} />
+      {ingestWindow?.open ? (
+        <WindowFrame windowRecord={ingestWindow} onAction={onWorkspaceAction}>
+          <IngestRunsPanel apiBase={apiBase} refreshKey={ingestRefreshKey} />
+        </WindowFrame>
+      ) : null}
     </section>
   );
 }

@@ -3,9 +3,13 @@ import { describe, expect, test } from 'vitest';
 import App from '../App';
 import { PLAYER_ROLE_CAMPAIGN, PLAYER_ROLE_COMPANY_OPS } from '../playerRole';
 import {
+  CAMPAIGN_CALENDAR_ID,
   CAMPAIGN_CAUSAL_ID,
+  CAMPAIGN_INGEST_ID,
   CAMPAIGN_LEDGER_ID,
+  CAMPAIGN_NEST_ID,
   CAMPAIGN_POLITICS_ID,
+  CAMPAIGN_TRIGGERS_ID,
   CAMPAIGN_RUNWAY_ID,
   COMPANY_METRICS_ID,
   COMPANY_OPS_ID,
@@ -42,6 +46,10 @@ describe('company-metrics window model', () => {
       CAMPAIGN_POLITICS_ID,
       CAMPAIGN_CAUSAL_ID,
       CAMPAIGN_LEDGER_ID,
+      CAMPAIGN_NEST_ID,
+      CAMPAIGN_CALENDAR_ID,
+      CAMPAIGN_INGEST_ID,
+      CAMPAIGN_TRIGGERS_ID,
     ]);
     expect(metrics.open).toBe(true);
     expect(metrics.minimized).toBe(false);
@@ -86,7 +94,7 @@ describe('company-metrics window model', () => {
       ],
     });
 
-    expect(legacy.windows).toHaveLength(6);
+    expect(legacy.windows).toHaveLength(10);
     expect(legacy.windows[0].placement.x).toBe(300);
     expect(legacy.windows[0].userArranged).toBe(true);
     expect(windowById(legacy, COMPANY_METRICS_ID).placement).toEqual(METRICS_DEFAULT_PLACEMENT);

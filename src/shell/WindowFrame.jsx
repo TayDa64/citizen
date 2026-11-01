@@ -1,8 +1,12 @@
 import { useId } from 'react';
 import {
+  CAMPAIGN_CALENDAR_ID,
   CAMPAIGN_CAUSAL_ID,
+  CAMPAIGN_INGEST_ID,
   CAMPAIGN_LEDGER_ID,
+  CAMPAIGN_NEST_ID,
   CAMPAIGN_POLITICS_ID,
+  CAMPAIGN_TRIGGERS_ID,
   CAMPAIGN_RUNWAY_ID,
   COMPANY_METRICS_ID,
   COMPANY_OPS_ID,
@@ -23,6 +27,14 @@ function titleFor(id) {
       return 'Causal hub';
     case CAMPAIGN_LEDGER_ID:
       return 'Turn ledger';
+    case CAMPAIGN_NEST_ID:
+      return 'Jurisdiction nest';
+    case CAMPAIGN_CALENDAR_ID:
+      return 'Council calendar';
+    case CAMPAIGN_INGEST_ID:
+      return 'Ingest runs';
+    case CAMPAIGN_TRIGGERS_ID:
+      return 'Event board';
     default:
       return 'Window';
   }

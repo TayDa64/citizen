@@ -2,9 +2,13 @@ import IslandSwitcher from '../components/IslandSwitcher';
 import TurnSaveAlert from '../components/TurnSaveAlert';
 import { roleLabel } from '../playerRole';
 import {
+  CAMPAIGN_CALENDAR_ID,
   CAMPAIGN_CAUSAL_ID,
+  CAMPAIGN_INGEST_ID,
   CAMPAIGN_LEDGER_ID,
+  CAMPAIGN_NEST_ID,
   CAMPAIGN_POLITICS_ID,
+  CAMPAIGN_TRIGGERS_ID,
   CAMPAIGN_RUNWAY_ID,
   COMPANY_METRICS_ID,
   COMPANY_OPS_ID,
@@ -62,6 +66,34 @@ export default function NavigationShell({ role, onChangeRole, turn, onWorkspaceA
         onClick={() => onWorkspaceAction({ type: 'create', id: CAMPAIGN_LEDGER_ID })}
       >
         Turn ledger
+      </button>
+      <button
+        type="button"
+        className="nav-rail__button"
+        onClick={() => onWorkspaceAction({ type: 'create', id: CAMPAIGN_NEST_ID })}
+      >
+        Jurisdiction nest
+      </button>
+      <button
+        type="button"
+        className="nav-rail__button"
+        onClick={() => onWorkspaceAction({ type: 'create', id: CAMPAIGN_CALENDAR_ID })}
+      >
+        Council calendar
+      </button>
+      <button
+        type="button"
+        className="nav-rail__button"
+        onClick={() => onWorkspaceAction({ type: 'create', id: CAMPAIGN_INGEST_ID })}
+      >
+        Ingest runs
+      </button>
+      <button
+        type="button"
+        className="nav-rail__button"
+        onClick={() => onWorkspaceAction({ type: 'create', id: CAMPAIGN_TRIGGERS_ID })}
+      >
+        World events
       </button>
       <button
         type="button"
