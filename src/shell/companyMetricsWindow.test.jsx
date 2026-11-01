@@ -11,6 +11,7 @@ import {
   CAMPAIGN_POLITICS_ID,
   CAMPAIGN_TRIGGERS_ID,
   CAMPAIGN_RUNWAY_ID,
+  WORKFLOW_DIAGRAM_ID,
   COMPANY_METRICS_ID,
   COMPANY_OPS_ID,
   METRICS_DEFAULT_PLACEMENT,
@@ -50,6 +51,7 @@ describe('company-metrics window model', () => {
       CAMPAIGN_CALENDAR_ID,
       CAMPAIGN_INGEST_ID,
       CAMPAIGN_TRIGGERS_ID,
+      WORKFLOW_DIAGRAM_ID,
     ]);
     expect(metrics.open).toBe(true);
     expect(metrics.minimized).toBe(false);
@@ -94,7 +96,7 @@ describe('company-metrics window model', () => {
       ],
     });
 
-    expect(legacy.windows).toHaveLength(10);
+    expect(legacy.windows).toHaveLength(11);
     expect(legacy.windows[0].placement.x).toBe(300);
     expect(legacy.windows[0].userArranged).toBe(true);
     expect(windowById(legacy, COMPANY_METRICS_ID).placement).toEqual(METRICS_DEFAULT_PLACEMENT);

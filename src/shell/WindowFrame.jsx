@@ -8,6 +8,7 @@ import {
   CAMPAIGN_POLITICS_ID,
   CAMPAIGN_TRIGGERS_ID,
   CAMPAIGN_RUNWAY_ID,
+  WORKFLOW_DIAGRAM_ID,
   COMPANY_METRICS_ID,
   COMPANY_OPS_ID,
   TITLE_BAR_HEIGHT,
@@ -35,6 +36,8 @@ function titleFor(id) {
       return 'Ingest runs';
     case CAMPAIGN_TRIGGERS_ID:
       return 'Event board';
+    case WORKFLOW_DIAGRAM_ID:
+      return 'Workflow diagram';
     default:
       return 'Window';
   }

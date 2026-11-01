@@ -25,7 +25,7 @@ describe('company-ops window model', () => {
     const runway = windowById(workspace, CAMPAIGN_RUNWAY_ID);
 
     expect(COMPANY_OPS_ID).toBe('company-ops');
-    expect(workspace.windows).toHaveLength(10);
+    expect(workspace.windows).toHaveLength(11);
     expect(workspace.windows[0].id).toBe(CAMPAIGN_RUNWAY_ID);
     expect(ops.open).toBe(true);
     expect(ops.minimized).toBe(false);
@@ -57,7 +57,7 @@ describe('company-ops window model', () => {
       ],
     });
 
-    expect(legacy.windows).toHaveLength(10);
+    expect(legacy.windows).toHaveLength(11);
     expect(legacy.windows[0].id).toBe(CAMPAIGN_RUNWAY_ID);
     expect(legacy.windows[0].placement.x).toBe(300);
     expect(legacy.windows[0].userArranged).toBe(true);

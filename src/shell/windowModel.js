@@ -12,6 +12,7 @@ export const CAMPAIGN_NEST_ID = 'campaign-nest';
 export const CAMPAIGN_CALENDAR_ID = 'campaign-calendar';
 export const CAMPAIGN_INGEST_ID = 'campaign-ingest';
 export const CAMPAIGN_TRIGGERS_ID = 'campaign-triggers';
+export const WORKFLOW_DIAGRAM_ID = 'workflow-diagram';
 export const CAMPAIGN_POLITICS_ID = 'campaign-politics';
 export const COMPANY_OPS_ID = 'company-ops';
 export const COMPANY_METRICS_ID = 'company-metrics';
@@ -120,6 +121,19 @@ export const TRIGGERS_DEFAULT_PLACEMENT = Object.freeze({
   height: 420,
 });
 
+/**
+ * Wide enough for the civic-band smoke at 1280×900, beside the rail.
+ * Bottom stays above the ledger and the event windows. Painted above the
+ * top-band windows so the tax slider and Advance Month stay clickable.
+ */
+export const DIAGRAM_DEFAULT_PLACEMENT = Object.freeze({
+  mode: PLACEMENT_MODE_DESKTOP,
+  x: RAIL_CLEARANCE,
+  y: 24,
+  width: 1000,
+  height: 700,
+});
+
 function copyPlacement(placement) {
   return {
     mode: PLACEMENT_MODE_DESKTOP,
@@ -161,6 +175,7 @@ function defaultPersistable() {
       defaultWindow(CAMPAIGN_CALENDAR_ID, 3, CALENDAR_DEFAULT_PLACEMENT),
       defaultWindow(CAMPAIGN_INGEST_ID, 2, INGEST_DEFAULT_PLACEMENT),
       defaultWindow(CAMPAIGN_TRIGGERS_ID, 1, TRIGGERS_DEFAULT_PLACEMENT),
+      defaultWindow(WORKFLOW_DIAGRAM_ID, 11, DIAGRAM_DEFAULT_PLACEMENT),
     ],
   };
 }
@@ -244,6 +259,10 @@ function ensureKnownWindows(windows) {
   if (!next.some((item) => item.id === CAMPAIGN_TRIGGERS_ID)) {
     const z = next.reduce((max, item) => Math.max(max, item.z), 0) + 1;
     next = [...next, defaultWindow(CAMPAIGN_TRIGGERS_ID, z, TRIGGERS_DEFAULT_PLACEMENT)];
+  }
+  if (!next.some((item) => item.id === WORKFLOW_DIAGRAM_ID)) {
+    const z = next.reduce((max, item) => Math.max(max, item.z), 0) + 1;
+    next = [...next, defaultWindow(WORKFLOW_DIAGRAM_ID, z, DIAGRAM_DEFAULT_PLACEMENT)];
   }
   return next;
 }

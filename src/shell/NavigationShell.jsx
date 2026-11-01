@@ -10,6 +10,7 @@ import {
   CAMPAIGN_POLITICS_ID,
   CAMPAIGN_TRIGGERS_ID,
   CAMPAIGN_RUNWAY_ID,
+  WORKFLOW_DIAGRAM_ID,
   COMPANY_METRICS_ID,
   COMPANY_OPS_ID,
 } from './windowModel';
@@ -94,6 +95,13 @@ export default function NavigationShell({ role, onChangeRole, turn, onWorkspaceA
         onClick={() => onWorkspaceAction({ type: 'create', id: CAMPAIGN_TRIGGERS_ID })}
       >
         World events
+      </button>
+      <button
+        type="button"
+        className="nav-rail__button"
+        onClick={() => onWorkspaceAction({ type: 'create', id: WORKFLOW_DIAGRAM_ID })}
+      >
+        Workflow diagram
       </button>
       <button
         type="button"
