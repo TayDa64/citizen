@@ -1,5 +1,4 @@
 import React, { useEffect, useReducer, useRef, useState } from 'react';
-import WorkflowDiagram from './WorkflowDiagram';
 import CampaignDesk from './components/CampaignDesk';
 import Dashboard from './components/Dashboard';
 import RoleSelect from './components/RoleSelect';
@@ -66,6 +65,7 @@ import {
   CAMPAIGN_POLITICS_ID,
   CAMPAIGN_TRIGGERS_ID,
   CAMPAIGN_RUNWAY_ID,
+  WORKFLOW_DIAGRAM_ID,
   COMPANY_METRICS_ID,
   COMPANY_OPS_ID,
   reduceWorkspace,
@@ -741,7 +741,6 @@ function App({ initialPlayerRole } = {}) {
             </p>
           </header>
           <main>
-            <WorkflowDiagram state={state} setState={handleSetState} onTick={onTick} onHire={onHire} />
             <OfficeStatus
               sourceNote={sourceNote}
               sourceBusy={sourceBusy}
@@ -797,6 +796,12 @@ function App({ initialPlayerRole } = {}) {
               models={{ [CAMPAIGN_RUNWAY_ID]: runwayModel }}
               viewProps={{
                 [COMPANY_METRICS_ID]: { state },
+                [WORKFLOW_DIAGRAM_ID]: {
+                  state,
+                  setState: handleSetState,
+                  onTick,
+                  onHire,
+                },
                 ...(isCampaign ? { [CAMPAIGN_CAUSAL_ID]: { state } } : {}),
                 ...(isCompanyOps ? {
                   [COMPANY_OPS_ID]: {
