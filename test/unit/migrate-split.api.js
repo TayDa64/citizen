@@ -64,8 +64,10 @@ test('migration 003 is additive and reversible in source', () => {
     'migrations/007_scheduled_meetings.sql',
     'migrations/008_ingest_retrieval_indexes.sql',
     'migrations/009_due_open_index.sql',
+    'migrations/010_restack_campaign_projection.sql',
   ]);
   assert.deepEqual(DOWN_MIGRATIONS, [
+    'migrations/010_restack_campaign_projection.sql',
     'migrations/009_due_open_index.sql',
     'migrations/008_ingest_retrieval_indexes.sql',
     'migrations/007_scheduled_meetings.sql',
@@ -158,6 +160,18 @@ test('migration 009 due-open partial index is additive and reversible in source'
   assert.doesNotMatch(parts.up, /DROP TABLE/i);
   assert.doesNotMatch(parts.up, /Firecrawl|HNSW|pgvector/i);
   assert.match(parts.down, /DROP INDEX IF EXISTS idx_scheduled_meetings_due_open/);
+});
+
+test('migration 010 restack campaign projection is additive and reversible in source', () => {
+  const sql = fs.readFileSync('migrations/010_restack_campaign_projection.sql', 'utf8');
+  const parts = splitMigration(sql);
+  assert.match(parts.up, /restack_campaign_id/);
+  assert.match(parts.up, /idx_ingest_runs_restack_campaign/);
+  assert.match(parts.up, /restackFailed/);
+  assert.doesNotMatch(parts.up, /DROP TABLE/i);
+  assert.doesNotMatch(parts.up, /Firecrawl|HNSW|pgvector/i);
+  assert.match(parts.down, /DROP INDEX IF EXISTS idx_ingest_runs_restack_campaign/);
+  assert.match(parts.down, /DROP COLUMN IF EXISTS restack_campaign_id/);
 });
 
 test('node:test filenames stay outside the vitest default include', () => {
