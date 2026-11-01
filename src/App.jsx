@@ -1,11 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useReducer, useRef, useState } from 'react';
 import WorkflowDiagram from './WorkflowDiagram';
 import CampaignDesk from './components/CampaignDesk';
 import CompanyOpsForms from './components/CompanyOpsForms';
 import Dashboard from './components/Dashboard';
-import IslandSwitcher from './components/IslandSwitcher';
 import RoleSelect from './components/RoleSelect';
-import TurnSaveAlert, {
+import {
   TURN_BLOCKED_MESSAGE,
   TURN_RETRY_FAILED_MESSAGE,
   TURN_SAVE_FAILED_MESSAGE,
@@ -30,7 +29,6 @@ import {
   PLAYER_ROLE_COMPANY_OPS,
   parsePlayerRole,
   readStoredPlayerRole,
-  roleLabel,
   writeStoredPlayerRole,
 } from './playerRole';
 import {
@@ -56,6 +54,12 @@ import {
   shapeLedgerEntry,
 } from './turnLedger';
 import { ingestFixtureIntoState } from './pipelineIngest';
+import OfficeEnvironment from './shell/OfficeEnvironment';
+import NavigationShell, { OfficeStatus } from './shell/NavigationShell';
+import { campaignRunwayModel } from './shell/simulationAdapter';
+import WindowManager from './shell/WindowManager';
+import { CAMPAIGN_RUNWAY_ID, reduceWorkspace } from './shell/windowModel';
+import { readWorkspace, writeWorkspace } from './shell/workspaceStore';
 
 function removalBlockedMessage(error, label) {
   const hostAlert = hostHeaderAlert(error);
@@ -125,6 +129,11 @@ function App({ initialPlayerRole } = {}) {
   const [turnFailure, setTurnFailure] = useState(null);
   const turnFailureRef = useRef(null);
   const [turnRetrying, setTurnRetrying] = useState(false);
+  const [workspace, dispatchWorkspace] = useReducer(reduceWorkspace, null, () => readWorkspace());
+
+  useEffect(() => {
+    writeWorkspace(workspace);
+  }, [workspace]);
 
   const setPendingTurn = (failure) => {
     // attempt re-mounts the alert so a repeated message is announced again.
@@ -700,84 +709,84 @@ function App({ initialPlayerRole } = {}) {
   const isCompanyOps = playerRole === PLAYER_ROLE_COMPANY_OPS;
   const isCampaign = playerRole === PLAYER_ROLE_CAMPAIGN;
 
+  const runwayModel = campaignRunwayModel(state);
+
   return (
-    <div className="App" style={{ background: '#0f0f1a', minHeight: '100vh', color: 'white' }}>
-      <header style={{ padding: '1rem', background: '#1a1a2e', textAlign: 'center' }}>
-        <h1>Citizen</h1>
-        <p>
-          {isCompanyOps
-            ? 'Company ops desk — tax, hire, talent & burn (campaign authority). Same sim as campaign.'
-            : 'Campaign causal runner — world events, ledger, pathways. Same sim as company ops.'}
-        </p>
-        <IslandSwitcher role={playerRole} onChange={applyPlayerRole} />
-        <p className="role-active" data-testid="active-role-label">
-          Active lens: {roleLabel(playerRole)}
-        </p>
-      </header>
-      <main>
-        <WorkflowDiagram state={state} setState={handleSetState} onTick={onTick} onHire={onHire} />
-        <p
-          className="data-source"
-          role="status"
-          aria-live="polite"
-          aria-atomic="true"
-          aria-busy={sourceBusy ? 'true' : 'false'}
-          aria-label={sourceNote}
-        >
-          {sourceNote}
-        </p>
-        {actionError ? (
-          <p className="data-source data-source--alert" role="alert">
-            {actionError}
-          </p>
-        ) : null}
-        <TurnSaveAlert
-          message={turnFailure?.message ?? ''}
-          announceKey={turnFailure?.attempt ?? 0}
-          retrying={turnRetrying}
-          onRetry={onRetryTurn}
-        />
-        {isCompanyOps ? (
-          <CompanyOpsForms
-            taxRate={state.taxRate}
-            onSetTax={onOpsSetTax}
-            onHire={onHire}
+    <div className="App">
+      <OfficeEnvironment>
+        <div className="spatial-shell">
+          <NavigationShell
+            role={playerRole}
+            onChangeRole={applyPlayerRole}
+            turn={state.turn}
+            onWorkspaceAction={dispatchWorkspace}
           />
-        ) : null}
-        {isCampaign ? (
-          <CampaignDesk
-            state={state}
-            ledger={ledger}
-            announcement={announcement}
-            busy={sourceBusy}
-            pipelineEvents={pipelineEvents}
-            apiBase={apiBase}
-            ingestRefreshKey={ingestRefreshKey}
-            onToggleTrigger={onToggleTrigger}
-            onClearTriggers={onClearTriggers}
-            onIngestFixture={onIngestFixture}
+          <header style={{ padding: '1rem', background: '#1a1a2e', textAlign: 'center' }}>
+            <h1>Citizen</h1>
+            <p>
+              {isCompanyOps
+                ? 'Company ops desk — tax, hire, talent & burn (campaign authority). Same sim as campaign.'
+                : 'Campaign causal runner — world events, ledger, pathways. Same sim as company ops.'}
+            </p>
+          </header>
+          <main>
+            <WorkflowDiagram state={state} setState={handleSetState} onTick={onTick} onHire={onHire} />
+            <OfficeStatus
+              sourceNote={sourceNote}
+              sourceBusy={sourceBusy}
+              actionError={actionError}
+              turnFailure={turnFailure}
+              turnRetrying={turnRetrying}
+              onRetryTurn={onRetryTurn}
+            />
+            {isCompanyOps ? (
+              <CompanyOpsForms
+                taxRate={state.taxRate}
+                onSetTax={onOpsSetTax}
+                onHire={onHire}
+              />
+            ) : null}
+            {isCampaign ? (
+              <CampaignDesk
+                state={state}
+                ledger={ledger}
+                announcement={announcement}
+                busy={sourceBusy}
+                pipelineEvents={pipelineEvents}
+                apiBase={apiBase}
+                ingestRefreshKey={ingestRefreshKey}
+                onToggleTrigger={onToggleTrigger}
+                onClearTriggers={onClearTriggers}
+                onIngestFixture={onIngestFixture}
+              />
+            ) : (
+              <p className="island-hint" data-testid="ops-campaign-hint">
+                World events, causal hub, jurisdiction nest, council calendar, ingest runs, and the
+                turn ledger live on the{' '}
+                <button
+                  type="button"
+                  className="island-hint__link"
+                  onClick={() => applyPlayerRole(PLAYER_ROLE_CAMPAIGN)}
+                >
+                  Campaign
+                </button>{' '}
+                island — enter campaign when you want the causal runner.
+              </p>
+            )}
+            <Dashboard
+              state={state}
+              ledger={ledger}
+              showLedger={false}
+              showPolitics={false}
+            />
+          </main>
+          <WindowManager
+            workspace={workspace}
+            onAction={dispatchWorkspace}
+            models={{ [CAMPAIGN_RUNWAY_ID]: runwayModel }}
           />
-        ) : (
-          <p className="island-hint" data-testid="ops-campaign-hint">
-            World events, causal hub, jurisdiction nest, council calendar, ingest runs, and the
-            turn ledger live on the{' '}
-            <button
-              type="button"
-              className="island-hint__link"
-              onClick={() => applyPlayerRole(PLAYER_ROLE_CAMPAIGN)}
-            >
-              Campaign
-            </button>{' '}
-            island — enter campaign when you want the causal runner.
-          </p>
-        )}
-        <Dashboard
-          state={state}
-          ledger={ledger}
-          showLedger={false}
-          showPolitics={false}
-        />
-      </main>
+        </div>
+      </OfficeEnvironment>
     </div>
   );
 }
