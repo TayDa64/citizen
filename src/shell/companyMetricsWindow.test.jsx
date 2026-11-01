@@ -4,6 +4,7 @@ import App from '../App';
 import { PLAYER_ROLE_CAMPAIGN, PLAYER_ROLE_COMPANY_OPS } from '../playerRole';
 import {
   CAMPAIGN_CAUSAL_ID,
+  CAMPAIGN_LEDGER_ID,
   CAMPAIGN_POLITICS_ID,
   CAMPAIGN_RUNWAY_ID,
   COMPANY_METRICS_ID,
@@ -40,6 +41,7 @@ describe('company-metrics window model', () => {
       COMPANY_METRICS_ID,
       CAMPAIGN_POLITICS_ID,
       CAMPAIGN_CAUSAL_ID,
+      CAMPAIGN_LEDGER_ID,
     ]);
     expect(metrics.open).toBe(true);
     expect(metrics.minimized).toBe(false);
@@ -84,7 +86,7 @@ describe('company-metrics window model', () => {
       ],
     });
 
-    expect(legacy.windows).toHaveLength(5);
+    expect(legacy.windows).toHaveLength(6);
     expect(legacy.windows[0].placement.x).toBe(300);
     expect(legacy.windows[0].userArranged).toBe(true);
     expect(windowById(legacy, COMPANY_METRICS_ID).placement).toEqual(METRICS_DEFAULT_PLACEMENT);

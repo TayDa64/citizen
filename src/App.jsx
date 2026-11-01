@@ -59,6 +59,7 @@ import { campaignRunwayModel } from './shell/simulationAdapter';
 import WindowManager from './shell/WindowManager';
 import {
   CAMPAIGN_CAUSAL_ID,
+  CAMPAIGN_LEDGER_ID,
   CAMPAIGN_POLITICS_ID,
   CAMPAIGN_RUNWAY_ID,
   COMPANY_METRICS_ID,
@@ -758,6 +759,7 @@ function App({ initialPlayerRole } = {}) {
                 onClearTriggers={onClearTriggers}
                 onIngestFixture={onIngestFixture}
                 politicsWindow={workspace.windows.find((item) => item.id === CAMPAIGN_POLITICS_ID) ?? null}
+                ledgerWindow={workspace.windows.find((item) => item.id === CAMPAIGN_LEDGER_ID) ?? null}
                 onWorkspaceAction={dispatchWorkspace}
               />
             ) : (

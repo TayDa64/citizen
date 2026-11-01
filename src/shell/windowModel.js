@@ -7,6 +7,7 @@ export const WORKSPACE_VERSION = 1;
 export const PLACEMENT_MODE_DESKTOP = 'desktop';
 export const CAMPAIGN_RUNWAY_ID = 'campaign-runway';
 export const CAMPAIGN_CAUSAL_ID = 'campaign-causal';
+export const CAMPAIGN_LEDGER_ID = 'campaign-ledger';
 export const CAMPAIGN_POLITICS_ID = 'campaign-politics';
 export const COMPANY_OPS_ID = 'company-ops';
 export const COMPANY_METRICS_ID = 'company-metrics';
@@ -65,6 +66,15 @@ export const CAUSAL_DEFAULT_PLACEMENT = Object.freeze({
   height: POLITICS_DEFAULT_PLACEMENT.height,
 });
 
+/** Under politics, still above Advance Month, and clear of the causal hub. */
+export const LEDGER_DEFAULT_PLACEMENT = Object.freeze({
+  mode: PLACEMENT_MODE_DESKTOP,
+  x: RAIL_CLEARANCE,
+  y: POLITICS_DEFAULT_PLACEMENT.y + POLITICS_DEFAULT_PLACEMENT.height + 16,
+  width: 420,
+  height: 200,
+});
+
 function copyPlacement(placement) {
   return {
     mode: PLACEMENT_MODE_DESKTOP,
@@ -96,11 +106,12 @@ function defaultPersistable() {
     version: WORKSPACE_VERSION,
     placementMode: PLACEMENT_MODE_DESKTOP,
     windows: [
-      defaultWindow(CAMPAIGN_RUNWAY_ID, 5),
-      defaultWindow(COMPANY_OPS_ID, 4, OPS_DEFAULT_PLACEMENT),
-      defaultWindow(COMPANY_METRICS_ID, 3, METRICS_DEFAULT_PLACEMENT),
-      defaultWindow(CAMPAIGN_POLITICS_ID, 2, POLITICS_DEFAULT_PLACEMENT),
-      defaultWindow(CAMPAIGN_CAUSAL_ID, 1, CAUSAL_DEFAULT_PLACEMENT),
+      defaultWindow(CAMPAIGN_RUNWAY_ID, 6),
+      defaultWindow(COMPANY_OPS_ID, 5, OPS_DEFAULT_PLACEMENT),
+      defaultWindow(COMPANY_METRICS_ID, 4, METRICS_DEFAULT_PLACEMENT),
+      defaultWindow(CAMPAIGN_POLITICS_ID, 3, POLITICS_DEFAULT_PLACEMENT),
+      defaultWindow(CAMPAIGN_CAUSAL_ID, 2, CAUSAL_DEFAULT_PLACEMENT),
+      defaultWindow(CAMPAIGN_LEDGER_ID, 1, LEDGER_DEFAULT_PLACEMENT),
     ],
   };
 }
@@ -164,6 +175,10 @@ function ensureKnownWindows(windows) {
   if (!next.some((item) => item.id === CAMPAIGN_CAUSAL_ID)) {
     const z = next.reduce((max, item) => Math.max(max, item.z), 0) + 1;
     next = [...next, defaultWindow(CAMPAIGN_CAUSAL_ID, z, CAUSAL_DEFAULT_PLACEMENT)];
+  }
+  if (!next.some((item) => item.id === CAMPAIGN_LEDGER_ID)) {
+    const z = next.reduce((max, item) => Math.max(max, item.z), 0) + 1;
+    next = [...next, defaultWindow(CAMPAIGN_LEDGER_ID, z, LEDGER_DEFAULT_PLACEMENT)];
   }
   return next;
 }
