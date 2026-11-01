@@ -48,10 +48,8 @@ export default function CouncilCalendarPanel({
   return (
     <section
       className="council-calendar"
-      aria-labelledby="council-calendar-heading"
       data-testid="council-calendar"
     >
-      <h3 id="council-calendar-heading">Council calendar</h3>
       <p className="council-calendar__blurb">
         Mountain View scheduled meetings from <code>GET /api/scheduled-meetings</code> — phases A/B/C
         and due rows only when the clock has persisted them. No invented events.

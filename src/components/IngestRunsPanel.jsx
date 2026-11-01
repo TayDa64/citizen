@@ -42,10 +42,8 @@ export default function IngestRunsPanel({ apiBase, refreshKey = 0 }) {
   return (
     <section
       className="ingest-runs-panel"
-      aria-labelledby="ingest-runs-heading"
       data-testid="ingest-runs-panel"
     >
-      <h3 id="ingest-runs-heading">Ingest runs</h3>
       <p className="ingest-runs-panel__blurb">
         Audit of <code>GET /api/ingest/runs</code> (fixture / http_stub → TRIGGER_CONTRACT). Minutes
         gameplay shows up here when a run carries <code>scheduledMeetingId</code>; the council

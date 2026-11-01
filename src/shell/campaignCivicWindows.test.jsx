@@ -198,6 +198,10 @@ describe('campaign civic window mount', () => {
     expect(screen.getByRole('button', { name: 'Ingest runs' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'World events' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'World events' })).toBeInTheDocument();
+    for (const name of ['Jurisdiction nest', 'Council calendar', 'Ingest runs']) {
+      expect(screen.getAllByRole('heading', { name, exact: true })).toHaveLength(1);
+      expect(screen.getAllByRole('region', { name, exact: true })).toHaveLength(1);
+    }
   });
 
   test('company ops does not mount the civic windows and keeps the campaign hint', () => {

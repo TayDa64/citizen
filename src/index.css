@@ -306,11 +306,6 @@ button:focus-visible {
   color: #f8fafc;
 }
 
-.turn-ledger h3 {
-  margin: 0 0 0.35rem;
-  font-size: 1rem;
-}
-
 .turn-ledger__blurb {
   margin: 0 0 0.6rem;
   font-size: 0.875rem;
@@ -831,11 +826,6 @@ button:focus-visible {
   color: #e2e8f0;
 }
 
-.ingest-runs-panel h3 {
-  margin: 0 0 0.35rem;
-  color: #f8fafc;
-}
-
 .ingest-runs-panel__blurb {
   margin: 0 0 0.65rem;
   color: #cbd5e1;
@@ -891,12 +881,6 @@ button:focus-visible {
   border: 1px solid #334155;
   border-radius: 12px;
   color: #e2e8f0;
-}
-
-.nest-explorer h3,
-.council-calendar h3 {
-  margin: 0 0 0.35rem;
-  color: #f8fafc;
 }
 
 .nest-explorer__blurb,

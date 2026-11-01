@@ -17,8 +17,7 @@ export default function TurnLedger({ entries = [] }) {
   const recent = list.slice(-24).reverse();
 
   return (
-    <section className="turn-ledger" aria-labelledby="turn-ledger-heading" data-testid="turn-ledger">
-      <h3 id="turn-ledger-heading">Turn ledger</h3>
+    <section className="turn-ledger" data-testid="turn-ledger">
       <p className="turn-ledger__blurb">
         Append-only decisions and outcomes for this campaign (beyond the 24-month chart window).
       </p>
