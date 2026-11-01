@@ -4,6 +4,7 @@ import {
   runPipelineIngest,
   validateIngestRequest,
 } from '../../server/eventIngest.js';
+import { mapFetchToHttpStubObservations } from '../../src/adapters/allowlistedHttps.js';
 import { TriggerValidationError } from '../../src/triggerContract.js';
 
 test('validateIngestRequest defaults to fixture civic-wage-bulletin', () => {
@@ -65,24 +66,61 @@ test('runPipelineIngest library minutes pack → hype + talentCost contract keys
   assert.equal(Object.keys(result.triggers[0].effect).sort().join(','), 'hype,talentCost');
 });
 
-test('runPipelineIngest http_stub accepts preloaded observations without network', () => {
+test('runPipelineIngest http_stub accepts known fixture observation without network', () => {
   const result = runPipelineIngest({
     adapter: 'http_stub',
     observations: [
       {
-        id: 'obs-stub-1',
-        sourceUrl: 'https://example.local/stub',
-        observedAt: '2026-06-01T00:00:00.000Z',
-        evidence: 'Stub evidence for pipeline plug-in point.',
+        id: 'obs-mv-library-minutes-3458',
+        sourceUrl:
+          'https://legistar1.granicus.com/mountainview/meetings/2026/9/3458_M_Board_of_Library_Trustees_26-09-21_Advisory_Board_Minutes.pdf',
+        observedAt: '2026-10-20T16:35:16.597Z',
+        evidence:
+          'Board of Library Trustees minutes record a community talent stipend and '
+          + 'local attention around the advisory board session; interpret as modest '
+          + 'talent-cost pressure plus a small hype bump (contract keys only).',
         hints: {
-          type: 'news_spike',
-          label: 'Stub spike',
-          effect: { hype: 0.05 },
+          type: 'policy_change',
+          label: 'Library board minutes',
+          effect: { talentCost: 0.05, hype: 0.04 },
         },
       },
     ],
   });
   assert.equal(result.triggers.length, 1);
-  assert.equal(result.triggers[0].effect.hype, 0.05);
+  assert.equal(result.triggers[0].effect.hype, 0.04);
+  assert.equal(result.triggers[0].effect.talentCost, 0.05);
   assert.equal(result.events[0].lifecycle, 'active');
+});
+
+test('http_stub rejects unknown observation ids and garbage minutes (fail closed)', () => {
+  const unknown = validateIngestRequest({
+    adapter: 'http_stub',
+    observations: [
+      {
+        id: 'obs-attacker',
+        sourceUrl: 'https://evil.example/x',
+        observedAt: '2026-06-01T00:00:00.000Z',
+        evidence: 'totally unrelated HTML',
+        hints: {
+          type: 'news_spike',
+          label: 'Attack',
+          effect: { hype: 0.05 },
+        },
+      },
+    ],
+  });
+  assert.equal(unknown.ok, false);
+  assert.ok(unknown.issues.some((row) => row.path.includes('id')));
+
+  const garbage = mapFetchToHttpStubObservations({
+    ok: true,
+    status: 200,
+    externalEventId: '3458',
+    bodyText: '<html>unrelated garbage with no library markers</html>',
+    minutesUrl:
+      'https://legistar1.granicus.com/mountainview/meetings/2026/9/3458_M_Board_of_Library_Trustees_26-09-21_Advisory_Board_Minutes.pdf',
+    minutesPublishedAt: '2026-10-20T16:35:16.597Z',
+  });
+  assert.deepEqual(garbage, []);
 });

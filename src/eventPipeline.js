@@ -12,7 +12,7 @@
  * expire remove the trigger from the active stack and restack from baselines.
  */
 
-import { assertValidTrigger } from './triggers.js';
+import { TriggerValidationError, validateTriggerPayload } from './triggerContract.js';
 
 export const PIPELINE_VERSION = 1;
 
@@ -157,7 +157,12 @@ export function toContractTrigger(event) {
     timestamp: event.observation.observedAt,
     effect: { ...event.effect },
   };
-  return assertValidTrigger(trigger);
+  // CIT-120: same strict contract gate as server persist (fail closed).
+  const validated = validateTriggerPayload(trigger);
+  if (!validated.ok) {
+    throw new TriggerValidationError('Invalid trigger payload', validated.issues);
+  }
+  return validated.value;
 }
 
 export function activateEvent(event) {

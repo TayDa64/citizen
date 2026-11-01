@@ -84,7 +84,7 @@ describe('CIT-69 campaign restack after ingest', { concurrency: 1, timeout: 120_
       // Companies cash is not the campaign write path.
       assert.equal(Number(companies[0].cash), 15000);
 
-      const runs = await listIngestRuns(db.pool, { limit: 1 });
+      const runs = await listIngestRuns(db.pool, { limit: 1, includeResult: true });
       assert.equal(runs[0].status, 'success');
       assert.equal(runs[0].changed, true);
       assert.equal(runs[0].result?.restack?.campaignId, campaign.id);
@@ -167,7 +167,7 @@ describe('CIT-69 campaign restack after ingest', { concurrency: 1, timeout: 120_
       const afterCommits = await listTurnCommits(db.pool, campaign.id, { limit: 50 });
       assert.equal(afterCommits.length, beforeCommits.length);
 
-      const runs = await listIngestRuns(db.pool, { limit: 1 });
+      const runs = await listIngestRuns(db.pool, { limit: 1, includeResult: true });
       assert.equal(runs[0].status, 'success');
       assert.equal(runs[0].changed, false);
     } finally {
@@ -196,7 +196,7 @@ describe('CIT-69 campaign restack after ingest', { concurrency: 1, timeout: 120_
       assert.equal(triggers.rowCount, 1);
       assert.equal(triggers.rows[0].jurisdiction_id, 'mv');
 
-      const runs = await listIngestRuns(db.pool, { limit: 5 });
+      const runs = await listIngestRuns(db.pool, { limit: 5, includeResult: true });
       assert.equal(runs[0].status, 'error');
       assert.equal(runs[0].changed, false);
       assert.equal(runs[0].result?.restackFailed, true);

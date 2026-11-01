@@ -48,9 +48,11 @@ export const UP_MIGRATIONS = Object.freeze([
   'migrations/005_ingest_runs.sql',
   'migrations/006_jurisdiction_nest.sql',
   'migrations/007_scheduled_meetings.sql',
+  'migrations/008_ingest_retrieval_indexes.sql',
 ]);
 
 export const DOWN_MIGRATIONS = Object.freeze([
+  'migrations/008_ingest_retrieval_indexes.sql',
   'migrations/007_scheduled_meetings.sql',
   'migrations/006_jurisdiction_nest.sql',
   'migrations/005_ingest_runs.sql',

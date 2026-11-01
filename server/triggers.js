@@ -174,6 +174,13 @@ ORDER BY t.client_id, so.name`,
         [TRIGGER_TYPES]
       );
   const active = triggerModels(effectRows.rows);
+  if (companies.rows.length === 0) return;
+
+  const ids = [];
+  const hypes = [];
+  const talentCosts = [];
+  const hypeBaselines = [];
+  const talentBaselines = [];
   for (const company of companies.rows) {
     const baselines = {
       hype: baselineNumber(company.hype_baseline, company.hype, HYPE_BOUNDS.fallback, 4),
@@ -185,19 +192,32 @@ ORDER BY t.client_id, so.name`,
       )
     };
     const stacked = stackTriggerEffects(baselines, active);
-    await client.query(
-      `UPDATE companies
-       SET hype = $2,
-           talent_cost = $3,
-           hype_baseline = $4,
-           talent_cost_baseline = $5
-       WHERE id = $1`,
-      [company.id, stacked.hype, stacked.talentCost, baselines.hype, baselines.talentCost]
-    );
+    ids.push(company.id);
+    hypes.push(stacked.hype);
+    talentCosts.push(stacked.talentCost);
+    hypeBaselines.push(baselines.hype);
+    talentBaselines.push(baselines.talentCost);
   }
+  // CIT-120: one bulk UPDATE instead of per-company round-trips.
+  await client.query(
+    `UPDATE companies AS c
+     SET hype = v.hype,
+         talent_cost = v.talent_cost,
+         hype_baseline = v.hype_baseline,
+         talent_cost_baseline = v.talent_cost_baseline
+     FROM unnest(
+       $1::uuid[],
+       $2::numeric[],
+       $3::numeric[],
+       $4::numeric[],
+       $5::numeric[]
+     ) AS v(id, hype, talent_cost, hype_baseline, talent_cost_baseline)
+     WHERE c.id = v.id`,
+    [ids, hypes, talentCosts, hypeBaselines, talentBaselines]
+  );
 }
 
-export async function createTrigger(pool, payload) {
+export async function createTrigger(pool, payload, { skipRecompute = false } = {}) {
   const validated = validateTriggerPayload(payload);
   if (!validated.ok) {
     throw new TriggerValidationError('Invalid trigger payload', validated.issues);
@@ -281,7 +301,9 @@ export async function createTrigger(pool, payload) {
        WHERE id = $1`,
       [triggerId, impactNames]
     );
-    await recomputeCompanies(client);
+    if (!skipRecompute) {
+      await recomputeCompanies(client);
+    }
     await client.query('COMMIT');
     const stored = await client.query(
       `${TRIGGER_SELECT} AND t.client_id = $2 ORDER BY so.name ASC`,
