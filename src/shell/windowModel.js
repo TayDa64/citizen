@@ -8,6 +8,10 @@ export const PLACEMENT_MODE_DESKTOP = 'desktop';
 export const CAMPAIGN_RUNWAY_ID = 'campaign-runway';
 export const CAMPAIGN_CAUSAL_ID = 'campaign-causal';
 export const CAMPAIGN_LEDGER_ID = 'campaign-ledger';
+export const CAMPAIGN_NEST_ID = 'campaign-nest';
+export const CAMPAIGN_CALENDAR_ID = 'campaign-calendar';
+export const CAMPAIGN_INGEST_ID = 'campaign-ingest';
+export const CAMPAIGN_TRIGGERS_ID = 'campaign-triggers';
 export const CAMPAIGN_POLITICS_ID = 'campaign-politics';
 export const COMPANY_OPS_ID = 'company-ops';
 export const COMPANY_METRICS_ID = 'company-metrics';
@@ -75,6 +79,47 @@ export const LEDGER_DEFAULT_PLACEMENT = Object.freeze({
   height: 200,
 });
 
+/**
+ * Civic column sits to the right of Advance Month (the button ends at x 748)
+ * and the tax node (it ends at x 454) at 1280×900. Rail growth moves those
+ * controls down; x stays clear of both.
+ */
+const CIVIC_COLUMN_X = 760;
+const CIVIC_COLUMN_WIDTH = 500;
+const CIVIC_STACK_GAP = 16;
+
+export const NEST_DEFAULT_PLACEMENT = Object.freeze({
+  mode: PLACEMENT_MODE_DESKTOP,
+  x: CIVIC_COLUMN_X,
+  y: LEDGER_DEFAULT_PLACEMENT.y,
+  width: CIVIC_COLUMN_WIDTH,
+  height: 220,
+});
+
+export const CALENDAR_DEFAULT_PLACEMENT = Object.freeze({
+  mode: PLACEMENT_MODE_DESKTOP,
+  x: CIVIC_COLUMN_X,
+  y: NEST_DEFAULT_PLACEMENT.y + NEST_DEFAULT_PLACEMENT.height + CIVIC_STACK_GAP,
+  width: CIVIC_COLUMN_WIDTH,
+  height: 220,
+});
+
+export const INGEST_DEFAULT_PLACEMENT = Object.freeze({
+  mode: PLACEMENT_MODE_DESKTOP,
+  x: CIVIC_COLUMN_X,
+  y: CALENDAR_DEFAULT_PLACEMENT.y + CALENDAR_DEFAULT_PLACEMENT.height + CIVIC_STACK_GAP,
+  width: CIVIC_COLUMN_WIDTH,
+  height: 240,
+});
+
+export const TRIGGERS_DEFAULT_PLACEMENT = Object.freeze({
+  mode: PLACEMENT_MODE_DESKTOP,
+  x: CIVIC_COLUMN_X,
+  y: INGEST_DEFAULT_PLACEMENT.y + INGEST_DEFAULT_PLACEMENT.height + CIVIC_STACK_GAP,
+  width: CIVIC_COLUMN_WIDTH,
+  height: 420,
+});
+
 function copyPlacement(placement) {
   return {
     mode: PLACEMENT_MODE_DESKTOP,
@@ -106,12 +151,16 @@ function defaultPersistable() {
     version: WORKSPACE_VERSION,
     placementMode: PLACEMENT_MODE_DESKTOP,
     windows: [
-      defaultWindow(CAMPAIGN_RUNWAY_ID, 6),
-      defaultWindow(COMPANY_OPS_ID, 5, OPS_DEFAULT_PLACEMENT),
-      defaultWindow(COMPANY_METRICS_ID, 4, METRICS_DEFAULT_PLACEMENT),
-      defaultWindow(CAMPAIGN_POLITICS_ID, 3, POLITICS_DEFAULT_PLACEMENT),
-      defaultWindow(CAMPAIGN_CAUSAL_ID, 2, CAUSAL_DEFAULT_PLACEMENT),
-      defaultWindow(CAMPAIGN_LEDGER_ID, 1, LEDGER_DEFAULT_PLACEMENT),
+      defaultWindow(CAMPAIGN_RUNWAY_ID, 10),
+      defaultWindow(COMPANY_OPS_ID, 9, OPS_DEFAULT_PLACEMENT),
+      defaultWindow(COMPANY_METRICS_ID, 8, METRICS_DEFAULT_PLACEMENT),
+      defaultWindow(CAMPAIGN_POLITICS_ID, 7, POLITICS_DEFAULT_PLACEMENT),
+      defaultWindow(CAMPAIGN_CAUSAL_ID, 6, CAUSAL_DEFAULT_PLACEMENT),
+      defaultWindow(CAMPAIGN_LEDGER_ID, 5, LEDGER_DEFAULT_PLACEMENT),
+      defaultWindow(CAMPAIGN_NEST_ID, 4, NEST_DEFAULT_PLACEMENT),
+      defaultWindow(CAMPAIGN_CALENDAR_ID, 3, CALENDAR_DEFAULT_PLACEMENT),
+      defaultWindow(CAMPAIGN_INGEST_ID, 2, INGEST_DEFAULT_PLACEMENT),
+      defaultWindow(CAMPAIGN_TRIGGERS_ID, 1, TRIGGERS_DEFAULT_PLACEMENT),
     ],
   };
 }
@@ -179,6 +228,22 @@ function ensureKnownWindows(windows) {
   if (!next.some((item) => item.id === CAMPAIGN_LEDGER_ID)) {
     const z = next.reduce((max, item) => Math.max(max, item.z), 0) + 1;
     next = [...next, defaultWindow(CAMPAIGN_LEDGER_ID, z, LEDGER_DEFAULT_PLACEMENT)];
+  }
+  if (!next.some((item) => item.id === CAMPAIGN_NEST_ID)) {
+    const z = next.reduce((max, item) => Math.max(max, item.z), 0) + 1;
+    next = [...next, defaultWindow(CAMPAIGN_NEST_ID, z, NEST_DEFAULT_PLACEMENT)];
+  }
+  if (!next.some((item) => item.id === CAMPAIGN_CALENDAR_ID)) {
+    const z = next.reduce((max, item) => Math.max(max, item.z), 0) + 1;
+    next = [...next, defaultWindow(CAMPAIGN_CALENDAR_ID, z, CALENDAR_DEFAULT_PLACEMENT)];
+  }
+  if (!next.some((item) => item.id === CAMPAIGN_INGEST_ID)) {
+    const z = next.reduce((max, item) => Math.max(max, item.z), 0) + 1;
+    next = [...next, defaultWindow(CAMPAIGN_INGEST_ID, z, INGEST_DEFAULT_PLACEMENT)];
+  }
+  if (!next.some((item) => item.id === CAMPAIGN_TRIGGERS_ID)) {
+    const z = next.reduce((max, item) => Math.max(max, item.z), 0) + 1;
+    next = [...next, defaultWindow(CAMPAIGN_TRIGGERS_ID, z, TRIGGERS_DEFAULT_PLACEMENT)];
   }
   return next;
 }
