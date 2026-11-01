@@ -1,3 +1,4 @@
+import WindowFrame from '../shell/WindowFrame';
 import CausalRulesPanel from './CausalRulesPanel';
 import CouncilCalendarPanel from './CouncilCalendarPanel';
 import IngestRunsPanel from './IngestRunsPanel';
@@ -22,6 +23,8 @@ export default function CampaignDesk({
   onToggleTrigger,
   onClearTriggers,
   onIngestFixture,
+  politicsWindow = null,
+  onWorkspaceAction,
 }) {
   return (
     <section
@@ -38,7 +41,11 @@ export default function CampaignDesk({
         </p>
       </header>
 
-      <PoliticsMeter state={state} />
+      {politicsWindow?.open ? (
+        <WindowFrame windowRecord={politicsWindow} onAction={onWorkspaceAction}>
+          <PoliticsMeter state={state} />
+        </WindowFrame>
+      ) : null}
       <CausalRulesPanel state={state} />
       <NestExplorer apiBase={apiBase} homeId="mv" refreshKey={ingestRefreshKey} />
       <CouncilCalendarPanel

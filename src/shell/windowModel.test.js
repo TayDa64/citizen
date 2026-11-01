@@ -23,7 +23,7 @@ describe('windowModel', () => {
 
     expect(workspace.placementMode).toBe(PLACEMENT_MODE_DESKTOP);
     expect(workspace.placementMode).toBe('desktop');
-    expect(workspace.windows).toHaveLength(3);
+    expect(workspace.windows).toHaveLength(4);
     expect(runway.id).toBe(CAMPAIGN_RUNWAY_ID);
     expect(runway.open).toBe(true);
     expect(runway.minimized).toBe(false);
@@ -52,7 +52,7 @@ describe('windowModel', () => {
     const again = reduceWorkspace(closed, { type: 'create', id: CAMPAIGN_RUNWAY_ID });
     const runway = windowById(again);
 
-    expect(again.windows).toHaveLength(3);
+    expect(again.windows).toHaveLength(4);
     expect(runway.open).toBe(true);
     expect(runway.minimized).toBe(false);
     expect(runway.userArranged).toBe(true);
@@ -62,7 +62,7 @@ describe('windowModel', () => {
 
   test('create inserts a missing id once and autoplaces only that new window', () => {
     const created = reduceWorkspace(createDefaultWorkspace(), { type: 'create', id: 'scratch-pad' });
-    expect(created.windows).toHaveLength(4);
+    expect(created.windows).toHaveLength(5);
     const scratch = windowById(created, 'scratch-pad');
     expect(scratch.userArranged).toBe(false);
     expect(scratch.placement.mode).toBe('desktop');
@@ -71,7 +71,7 @@ describe('windowModel', () => {
     expect(windowById(created).userArranged).toBe(false);
 
     const focused = reduceWorkspace(created, { type: 'create', id: 'scratch-pad' });
-    expect(focused.windows).toHaveLength(4);
+    expect(focused.windows).toHaveLength(5);
     expect(windowById(focused, 'scratch-pad').placement).toEqual(scratch.placement);
     expect(focused.focusedId).toBe('scratch-pad');
   });
@@ -205,7 +205,7 @@ describe('windowModel', () => {
     expect(runway.open).toBe(false);
     expect(runway.placement).toEqual(placed);
     expect(runway.userArranged).toBe(true);
-    expect(next.windows).toHaveLength(3);
+    expect(next.windows).toHaveLength(4);
     expect(next.commands).toBeUndefined();
     expect(game.company).toBe(company);
     expect(game.company.cash).toBe(15000);
@@ -232,7 +232,7 @@ describe('windowModel', () => {
 
     const reset = reduceWorkspace(workspace, { type: 'reset' });
     expect(reset.placementMode).toBe('desktop');
-    expect(reset.windows).toHaveLength(3);
+    expect(reset.windows).toHaveLength(4);
     expect(windowById(reset).userArranged).toBe(false);
     expect(windowById(reset).pinned).toBe(false);
     expect(windowById(reset).open).toBe(true);
@@ -258,7 +258,7 @@ describe('windowModel', () => {
       ],
     });
     expect(spatial.placementMode).toBe('desktop');
-    expect(spatial.windows).toHaveLength(3);
+    expect(spatial.windows).toHaveLength(4);
     expect(windowById(spatial).placement).toEqual(RUNWAY_DEFAULT_PLACEMENT);
     expect(windowById(spatial).userArranged).toBe(false);
     expect(JSON.stringify(spatial)).not.toMatch(/anchor|quaternion|spatial/);

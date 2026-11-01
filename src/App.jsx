@@ -57,7 +57,13 @@ import OfficeEnvironment from './shell/OfficeEnvironment';
 import NavigationShell, { OfficeStatus } from './shell/NavigationShell';
 import { campaignRunwayModel } from './shell/simulationAdapter';
 import WindowManager from './shell/WindowManager';
-import { CAMPAIGN_RUNWAY_ID, COMPANY_METRICS_ID, COMPANY_OPS_ID, reduceWorkspace } from './shell/windowModel';
+import {
+  CAMPAIGN_POLITICS_ID,
+  CAMPAIGN_RUNWAY_ID,
+  COMPANY_METRICS_ID,
+  COMPANY_OPS_ID,
+  reduceWorkspace,
+} from './shell/windowModel';
 import { readWorkspace, writeWorkspace } from './shell/workspaceStore';
 
 function removalBlockedMessage(error, label) {
@@ -750,6 +756,8 @@ function App({ initialPlayerRole } = {}) {
                 onToggleTrigger={onToggleTrigger}
                 onClearTriggers={onClearTriggers}
                 onIngestFixture={onIngestFixture}
+                politicsWindow={workspace.windows.find((item) => item.id === CAMPAIGN_POLITICS_ID) ?? null}
+                onWorkspaceAction={dispatchWorkspace}
               />
             ) : (
               <p className="island-hint" data-testid="ops-campaign-hint">
