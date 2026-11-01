@@ -93,8 +93,11 @@ describe('CIT-80 jurisdiction nest (006)', { concurrency: 1, timeout: 120_000 },
       );
 
       await applyMigration(db.pool, 'migrations/006_jurisdiction_nest.sql', 'up');
-      // CIT-81: ingest_runs.scheduled_meeting_id lands in 007; apply before ingestAndPersist.
+      // CIT-81 / CIT-125: ingest_runs columns land in 007 + 010; apply before ingestAndPersist.
       await applyMigration(db.pool, 'migrations/007_scheduled_meetings.sql', 'up');
+      await applyMigration(db.pool, 'migrations/008_ingest_retrieval_indexes.sql', 'up');
+      await applyMigration(db.pool, 'migrations/009_due_open_index.sql', 'up');
+      await applyMigration(db.pool, 'migrations/010_restack_campaign_projection.sql', 'up');
 
       const backfilled = await db.pool.query(
         `SELECT jurisdiction_id FROM real_world_triggers
@@ -174,6 +177,9 @@ describe('CIT-80 jurisdiction nest (006)', { concurrency: 1, timeout: 120_000 },
     const db = await migratedDatabase();
     try {
       await applyMigration(db.pool, 'migrations/007_scheduled_meetings.sql', 'up');
+      await applyMigration(db.pool, 'migrations/008_ingest_retrieval_indexes.sql', 'up');
+      await applyMigration(db.pool, 'migrations/009_due_open_index.sql', 'up');
+      await applyMigration(db.pool, 'migrations/010_restack_campaign_projection.sql', 'up');
       await assert.rejects(
         () => ingestAndPersist(db.pool, { adapter: 'firecrawl' }),
         (error) => error instanceof TriggerValidationError,

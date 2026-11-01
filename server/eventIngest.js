@@ -195,14 +195,34 @@ function mapIngestRunRow(row) {
   };
 }
 
+/**
+ * Durable projection of the campaign a run restacked (or tried to).
+ * Matches the JSON shapes findTornMonths historically read from result_json.
+ */
+export function restackCampaignIdFromResult(resultJson, explicit = null) {
+  if (explicit != null && explicit !== '') return explicit;
+  if (resultJson == null || typeof resultJson !== 'object') return null;
+  const fromRestack = resultJson.restack?.campaignId;
+  if (fromRestack != null && fromRestack !== '') return fromRestack;
+  if (resultJson.restackFailed === true && resultJson.campaignId) {
+    return resultJson.campaignId;
+  }
+  return null;
+}
+
 export async function insertIngestRun(pool, fields) {
+  const restackCampaignId = restackCampaignIdFromResult(
+    fields.resultJson,
+    fields.restackCampaignId ?? null,
+  );
   const result = await pool.query(
     `INSERT INTO ingest_runs (
        started_at, finished_at, adapter, fixture_id, status, changed, error,
-       trigger_client_ids, result_json, scheduled_meeting_id
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::text[], $9::jsonb, $10)
+       trigger_client_ids, result_json, scheduled_meeting_id, restack_campaign_id
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::text[], $9::jsonb, $10, $11)
      RETURNING id, started_at, finished_at, adapter, fixture_id, status, changed,
-               error, trigger_client_ids, result_json, scheduled_meeting_id`,
+               error, trigger_client_ids, result_json, scheduled_meeting_id,
+               restack_campaign_id`,
     [
       fields.startedAt,
       fields.finishedAt,
@@ -214,6 +234,7 @@ export async function insertIngestRun(pool, fields) {
       fields.triggerClientIds ?? [],
       fields.resultJson == null ? null : JSON.stringify(fields.resultJson),
       fields.scheduledMeetingId ?? null,
+      restackCampaignId,
     ],
   );
   return mapIngestRunRow(result.rows[0]);

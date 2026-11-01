@@ -126,41 +126,94 @@ export async function applicableTriggersForCampaign(pool, campaignId) {
 const RESTACK_COMMAND_TYPES = new Set(['clear_triggers', 'apply_trigger']);
 const STACK_CHANGE_TYPES = new Set(['clear_triggers', 'apply_trigger', 'remove_trigger']);
 
+function mapCommitRow(row) {
+  return {
+    seq: row.seq,
+    command: row.command_json,
+    result: row.result_json,
+    createdAt: row.created_at instanceof Date ? row.created_at : new Date(row.created_at),
+  };
+}
+
 /**
  * Ingest runs that restacked (or tried to restack) this campaign, oldest first.
- * The only durable evidence that a clear_triggers commit came from the server
- * restack rather than from a player or the client's own restack-before-advance.
+ * Uses restack_campaign_id (mig 010) so compensation Index Scans instead of
+ * seq-scanning result_json. The only durable evidence that a clear_triggers
+ * commit came from the server restack rather than from a player or the
+ * client's own restack-before-advance.
  */
 async function restackRunsForCampaign(client, campaignId) {
   const result = await client.query(
     `SELECT started_at, finished_at, status
      FROM ingest_runs
-     WHERE finished_at IS NOT NULL
-       AND (
-         (status = 'error' AND result_json->>'restackFailed' = 'true'
-            AND result_json->>'campaignId' = $1)
-         OR (status = 'success' AND result_json->'restack'->>'campaignId' = $1)
-       )
+     WHERE restack_campaign_id = $1
+       AND finished_at IS NOT NULL
      ORDER BY started_at ASC`,
     [campaignId],
   );
   return result.rows;
 }
 
-async function commitsForCampaign(client, campaignId) {
+/**
+ * Earliest clear_triggers seq that falls inside any restack run window for this
+ * campaign. Compensation only needs the ledger from just before that clear.
+ */
+async function earliestRestackClearSeq(client, campaignId) {
   const result = await client.query(
+    `SELECT MIN(tc.seq) AS min_clear_seq
+     FROM turn_commits tc
+     WHERE tc.campaign_id = $1
+       AND tc.command_json->>'type' = 'clear_triggers'
+       AND EXISTS (
+         SELECT 1
+         FROM ingest_runs ir
+         WHERE ir.restack_campaign_id = $1
+           AND ir.finished_at IS NOT NULL
+           AND tc.created_at >= ir.started_at
+           AND tc.created_at <= ir.finished_at
+       )`,
+    [campaignId],
+  );
+  const minClear = result.rows[0]?.min_clear_seq;
+  return minClear == null ? null : Number(minClear);
+}
+
+/**
+ * Bound turn_commits for compensation: from the commit before the earliest
+ * restack clear onward, plus the latest pre-window apply_trigger per trigger
+ * id (counterfactualBurn rebuilds the old stack from those commands).
+ */
+async function commitsForCompensation(client, campaignId) {
+  const minClearSeq = await earliestRestackClearSeq(client, campaignId);
+  if (minClearSeq == null) return [];
+  const fromSeq = Math.max(1, minClearSeq - 1);
+
+  const windowed = await client.query(
     `SELECT seq, command_json, result_json, created_at
      FROM turn_commits
      WHERE campaign_id = $1
+       AND seq >= $2
      ORDER BY seq ASC`,
-    [campaignId],
+    [campaignId, fromSeq],
   );
-  return result.rows.map((row) => ({
-    seq: row.seq,
-    command: row.command_json,
-    result: row.result_json,
-    createdAt: row.created_at instanceof Date ? row.created_at : new Date(row.created_at),
-  }));
+
+  const priorApplies = fromSeq > 1
+    ? await client.query(
+      `SELECT DISTINCT ON (command_json->'trigger'->>'id')
+         seq, command_json, result_json, created_at
+       FROM turn_commits
+       WHERE campaign_id = $1
+         AND seq < $2
+         AND command_json->>'type' = 'apply_trigger'
+       ORDER BY command_json->'trigger'->>'id', seq DESC`,
+      [campaignId, fromSeq],
+    )
+    : { rows: [] };
+
+  const bySeq = new Map();
+  for (const row of priorApplies.rows) bySeq.set(row.seq, mapCommitRow(row));
+  for (const row of windowed.rows) bySeq.set(row.seq, mapCommitRow(row));
+  return [...bySeq.values()].sort((left, right) => left.seq - right.seq);
 }
 
 /** Latest apply_trigger command for `triggerId` before `seq` (it carries source/timestamp). */
@@ -232,7 +285,8 @@ function stackIdsOf(view) {
 export async function findTornMonths(client, campaignId) {
   const runs = await restackRunsForCampaign(client, campaignId);
   if (runs.length === 0) return [];
-  const commits = await commitsForCampaign(client, campaignId);
+  const commits = await commitsForCompensation(client, campaignId);
+  if (commits.length === 0) return [];
   const compensated = new Set(
     commits
       .filter((commit) => commit.command?.type === 'compensate_torn_month')
