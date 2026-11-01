@@ -311,3 +311,47 @@
 .runway-chip--projection {
   background: #4a3824;
 }
+
+/* Phone width stacks the desktop windows. Absolute x/width from the 1280
+   layout otherwise forces the document to scroll sideways. */
+@media (max-width: 480px) {
+  .nav-rail {
+    float: none;
+    width: 100%;
+  }
+
+  .window-layer {
+    position: static;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .window-frame {
+    position: relative !important;
+    left: auto !important;
+    top: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+  }
+
+  .window-frame__glow {
+    display: none;
+  }
+
+  .window-frame__scrim,
+  .window-frame__body {
+    height: auto;
+    overflow: visible;
+  }
+
+  .window-titlebar {
+    flex-wrap: wrap;
+  }
+
+  .workflow-diagram__canvas {
+    width: 100%;
+    max-width: 100%;
+  }
+}

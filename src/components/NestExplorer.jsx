@@ -41,12 +41,7 @@ export default function NestExplorer({ apiBase, homeId = 'mv', refreshKey = 0 })
   }, [apiBase, homeId, refreshKey]);
 
   return (
-    <section
-      className="nest-explorer"
-      aria-labelledby="nest-explorer-heading"
-      data-testid="nest-explorer"
-    >
-      <h3 id="nest-explorer-heading">Jurisdiction nest</h3>
+    <section className="nest-explorer" data-testid="nest-explorer">
       <p className="nest-explorer__blurb">
         Home + ancestors bind this campaign. Same-tier peers (e.g. Sunnyvale) do{' '}
         <strong>not</strong> bind — fail closed. Bound to <code>GET /api/jurisdictions</code>.

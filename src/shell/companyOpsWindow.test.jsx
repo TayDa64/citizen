@@ -194,6 +194,20 @@ describe('company-ops window mount', () => {
     expect(screen.getByTestId('campaign-desk')).toBeInTheDocument();
   });
 
+  test('campaign Ops desk switches to company ops and does not add a second apply tax', async () => {
+    const user = userEvent.setup();
+    render(<App initialPlayerRole={PLAYER_ROLE_CAMPAIGN} />);
+    expect(screen.getAllByRole('slider', { name: /tax rate/i })).toHaveLength(1);
+
+    await user.click(screen.getByRole('button', { name: 'Ops desk' }));
+
+    expect(screen.getByTestId('active-role-label')).toHaveTextContent('Active lens: Company ops');
+    expect(screen.queryByTestId('campaign-desk')).not.toBeInTheDocument();
+    expect(screen.getAllByTestId('ops-tax-apply')).toHaveLength(1);
+    expect(screen.getAllByTestId('ops-tax-form')).toHaveLength(1);
+    expect(document.querySelectorAll('#civic-tax-rate')).toHaveLength(1);
+  });
+
   test('close and lens switch keep an unsubmitted tax draft and do not change burn', async () => {
     const user = userEvent.setup();
     render(<App initialPlayerRole={PLAYER_ROLE_COMPANY_OPS} />);

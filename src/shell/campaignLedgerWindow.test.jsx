@@ -117,6 +117,9 @@ describe('campaign-ledger window mount', () => {
     expect(screen.getByTestId('island-campaign')).toBeInTheDocument();
     expect(screen.getByTestId('island-company-ops')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Turn ledger' })).toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { name: 'Turn ledger', exact: true })).toHaveLength(1);
+    expect(screen.getAllByRole('region', { name: 'Turn ledger', exact: true })).toHaveLength(1);
+    expect(screen.getByTestId('turn-ledger')).toHaveTextContent(/append-only decisions/i);
   });
 
   test('company ops lens does not mount the ledger', () => {

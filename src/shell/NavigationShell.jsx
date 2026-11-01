@@ -1,6 +1,6 @@
 import IslandSwitcher from '../components/IslandSwitcher';
 import TurnSaveAlert from '../components/TurnSaveAlert';
-import { roleLabel } from '../playerRole';
+import { PLAYER_ROLE_COMPANY_OPS, roleLabel } from '../playerRole';
 import {
   CAMPAIGN_CALENDAR_ID,
   CAMPAIGN_CAUSAL_ID,
@@ -16,6 +16,13 @@ import {
 } from './windowModel';
 
 export default function NavigationShell({ role, onChangeRole, turn, onWorkspaceAction }) {
+  const openOpsDesk = () => {
+    if (role !== PLAYER_ROLE_COMPANY_OPS) {
+      onChangeRole?.(PLAYER_ROLE_COMPANY_OPS);
+    }
+    onWorkspaceAction({ type: 'create', id: COMPANY_OPS_ID });
+  };
+
   return (
     <aside className="nav-rail" aria-label="Office rail">
       <p className="nav-rail__mark">Office</p>
@@ -36,7 +43,7 @@ export default function NavigationShell({ role, onChangeRole, turn, onWorkspaceA
       <button
         type="button"
         className="nav-rail__button"
-        onClick={() => onWorkspaceAction({ type: 'create', id: COMPANY_OPS_ID })}
+        onClick={openOpsDesk}
       >
         Ops desk
       </button>
