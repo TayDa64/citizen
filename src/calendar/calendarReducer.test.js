@@ -274,6 +274,27 @@ describe('calendar reducer — Phase C minutes', () => {
     });
     expect(next.status).toBe('ingested');
   });
+
+  test('CIT-123: url-only or timestamp-only minutes stay wait (AND with persist)', () => {
+    const waiting = seedRow3458MinutesWait(1);
+    const urlOnly = reduceMeetingRow(waiting, mvLibraryMinutes3458.frozenNowFile, {
+      type: 'minutes_check',
+      outcome: 'ok',
+      minutesUrl: 'https://example.local/url-only.pdf',
+      minutesPublishedAt: null,
+    });
+    expect(urlOnly.status).toBe('minutes_wait');
+    expect(urlOnly.stdout).toBe('minutes=wait');
+
+    const tsOnly = reduceMeetingRow(waiting, mvLibraryMinutes3458.frozenNowFile, {
+      type: 'minutes_check',
+      outcome: 'ok',
+      minutesUrl: null,
+      minutesPublishedAt: '2026-10-20T16:35:16.597Z',
+    });
+    expect(tsOnly.status).toBe('minutes_wait');
+    expect(tsOnly.stdout).toBe('minutes=wait');
+  });
 });
 
 describe('calendar reducer — publication Phase C (wage bulletin)', () => {

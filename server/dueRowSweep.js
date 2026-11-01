@@ -194,7 +194,9 @@ async function recordSweepRun(pool, {
 }
 
 /**
- * Apply one due row: reduce → persist → optional Phase C ingest/restack.
+ * Apply one due row: reduce → optional Phase C ingest → latch meeting.
+ * CIT-123: never write terminal `ingested` until ingestAndPersist succeeds
+ * (matching triggers + audit). On ingest failure keep prior non-terminal row.
  */
 export async function processDueMeeting(pool, row, nowIso, {
   signal = null,
@@ -204,17 +206,17 @@ export async function processDueMeeting(pool, row, nowIso, {
   const startedAt = new Date();
   const resolved = signal ?? resolveFixtureSignal(row, nowIso, signalOverrides);
   const after = reduceMeetingRow(stripReducerMeta(row), nowIso, resolved);
-  const saved = await updateScheduledMeeting(pool, {
-    ...after,
-    id: row.id,
-    jurisdictionId: row.jurisdictionId,
-  });
 
   const stdout = after.stdout;
   const fixtureId = after.fixtureId ?? resolved.fixtureId ?? row.fixtureId;
 
   // Terminal unchanged (60d) stays closed — reducer already latched.
   if (TERMINAL_STATUSES.has(after.status) && after.status === 'unchanged') {
+    const saved = await updateScheduledMeeting(pool, {
+      ...after,
+      id: row.id,
+      jurisdictionId: row.jurisdictionId,
+    });
     await recordSweepRun(pool, {
       startedAt,
       meetingId: row.id,
@@ -241,8 +243,14 @@ export async function processDueMeeting(pool, row, nowIso, {
         fixtureId: ingestFixtureId,
       };
       if (campaignId) request.campaignId = campaignId;
+      // Persist triggers + audit first; latch ingested only on success.
       const ingest = await ingestAndPersist(pool, request, {
         scheduledMeetingId: row.id,
+      });
+      const saved = await updateScheduledMeeting(pool, {
+        ...after,
+        id: row.id,
+        jurisdictionId: row.jurisdictionId,
       });
       // CIT-101: restack / commitTurn only when ingest changed=true (not mere upsert).
       const triggerChanged = ingest.changed === true;
@@ -256,7 +264,13 @@ export async function processDueMeeting(pool, row, nowIso, {
         changed: triggerChanged,
       };
     } catch (error) {
-      // Meeting row already advanced; audit error without deleting pointers.
+      // Keep prior non-terminal status so re-sweep can retry; stamp lastError.
+      await updateScheduledMeeting(pool, {
+        ...stripReducerMeta(row),
+        id: row.id,
+        jurisdictionId: row.jurisdictionId,
+        lastError: error?.message || String(error),
+      });
       await recordSweepRun(pool, {
         startedAt,
         meetingId: row.id,
@@ -264,13 +278,37 @@ export async function processDueMeeting(pool, row, nowIso, {
         status: 'error',
         changed: false,
         error: error?.message || String(error),
-        resultJson: { stdout, phase: after.phase, status: after.status },
+        resultJson: {
+          stdout,
+          phase: after.phase,
+          status: row.status,
+          intendedStatus: after.status,
+          latchDeferred: true,
+        },
       });
       throw error;
     }
   }
 
+  // Fail closed: reducer said ingested but no persistable pack → keep prior non-terminal.
+  const meetingWrite = after.status === 'ingested'
+    ? {
+      ...stripReducerMeta(row),
+      minutesUrl: after.minutesUrl ?? row.minutesUrl,
+      minutesPublishedAt: after.minutesPublishedAt ?? row.minutesPublishedAt,
+      observedSourceUrl: after.observedSourceUrl ?? row.observedSourceUrl,
+      lastError: 'ingested_without_persistable_pack',
+      stdout: 'ingested_deferred',
+      changed: false,
+    }
+    : after;
+
   // Phase A/B and empty/blocked / Final+null Phase C: audit only, changed=false.
+  const saved = await updateScheduledMeeting(pool, {
+    ...meetingWrite,
+    id: row.id,
+    jurisdictionId: row.jurisdictionId,
+  });
   await recordSweepRun(pool, {
     startedAt,
     meetingId: row.id,
@@ -278,17 +316,18 @@ export async function processDueMeeting(pool, row, nowIso, {
     status: 'success',
     changed: false,
     resultJson: {
-      stdout,
-      phase: after.phase,
-      status: after.status,
+      stdout: meetingWrite.stdout ?? stdout,
+      phase: meetingWrite.phase ?? after.phase,
+      status: meetingWrite.status,
       signalType: resolved.type,
       signalOutcome: resolved.outcome ?? null,
+      coercedFromIngested: after.status === 'ingested' && meetingWrite.status !== 'ingested',
     },
   });
 
   return {
     meeting: saved,
-    stdout,
+    stdout: meetingWrite.stdout ?? stdout,
     triggerChanged: false,
     triggers: [],
     restack: null,

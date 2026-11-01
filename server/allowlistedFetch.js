@@ -250,21 +250,68 @@ export async function applyMinutesPath(pool, mapped, {
   });
   const before = { ...seed, id: meeting.id, jurisdictionId: 'mv' };
   const after = reduceMeetingRow(before, nowIso, mapped.minutesSignal);
-  const saved = await updateScheduledMeeting(pool, {
-    ...after,
-    id: meeting.id,
-    jurisdictionId: 'mv',
-  });
 
   let ingest = null;
+  let saved;
+  // CIT-123: latch ingested only after successful http_stub persist.
   if (ingestStub && mapped.observations.length > 0 && after.status === 'ingested') {
-    ingest = await ingestAndPersist(
-      pool,
-      { adapter: 'http_stub', observations: mapped.observations },
-      { scheduledMeetingId: meeting.id },
-    );
+    try {
+      ingest = await ingestAndPersist(
+        pool,
+        { adapter: 'http_stub', observations: mapped.observations },
+        { scheduledMeetingId: meeting.id },
+      );
+      saved = await updateScheduledMeeting(pool, {
+        ...after,
+        id: meeting.id,
+        jurisdictionId: 'mv',
+      });
+    } catch (error) {
+      saved = await updateScheduledMeeting(pool, {
+        ...before,
+        id: meeting.id,
+        jurisdictionId: 'mv',
+        lastError: error?.message || String(error),
+      });
+      await insertIngestRun(pool, {
+        startedAt,
+        finishedAt: new Date(),
+        adapter: 'http_stub',
+        fixtureId: after.fixtureId ?? 'mv-library-minutes-3458',
+        status: 'error',
+        changed: false,
+        error: error?.message || String(error),
+        triggerClientIds: [],
+        scheduledMeetingId: meeting.id,
+        resultJson: {
+          stdout: after.stdout,
+          phase: after.phase,
+          status: before.status,
+          intendedStatus: after.status,
+          latchDeferred: true,
+          via: ALLOWLISTED_HTTPS_ID,
+        },
+      });
+      throw error;
+    }
   } else {
-    // Blocked / empty / no observations → changed=false; do not delete pointers.
+    // Blocked / empty / no observations → never terminal-ingested; keep pointers.
+    const meetingWrite = after.status === 'ingested'
+      ? {
+        ...after,
+        status: 'minutes_wait',
+        phase: 'C',
+        nextCheckAt: nowIso,
+        lastError: after.lastError ?? 'ingested_without_observations',
+        changed: false,
+        stdout: 'minutes=wait',
+      }
+      : after;
+    saved = await updateScheduledMeeting(pool, {
+      ...meetingWrite,
+      id: meeting.id,
+      jurisdictionId: 'mv',
+    });
     await insertIngestRun(pool, {
       startedAt,
       finishedAt: new Date(),
@@ -272,13 +319,13 @@ export async function applyMinutesPath(pool, mapped, {
       fixtureId: after.fixtureId ?? 'mv-library-minutes-3458',
       status: 'success',
       changed: false,
-      error: after.lastError,
+      error: meetingWrite.lastError,
       triggerClientIds: [],
       scheduledMeetingId: meeting.id,
       resultJson: {
-        stdout: after.stdout,
-        phase: after.phase,
-        status: after.status,
+        stdout: meetingWrite.stdout,
+        phase: meetingWrite.phase,
+        status: meetingWrite.status,
         via: ALLOWLISTED_HTTPS_ID,
         signalOutcome: mapped.minutesSignal?.outcome ?? null,
       },
