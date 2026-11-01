@@ -20,9 +20,14 @@ import {
 } from '../sourceAllowlist.js';
 import {
   MV_LIBRARY_MINUTES_OBSERVATION_ID,
-  MV_LIBRARY_MINUTES_PUBLISHED_AT,
   MV_LIBRARY_MINUTES_SOURCE_URL,
+  mvLibraryMinutes3458Fixture,
 } from './fixtures/mvLibraryMinutes3458.js';
+import {
+  MAX_OBSERVATION_EVIDENCE_CHARS,
+  isKnownLibraryMinutesSourceUrl,
+  passesLibraryMinutesContentGate,
+} from './ingestSanitize.js';
 
 export const ALLOWLISTED_HTTPS_ID = 'allowlisted_https';
 
@@ -137,7 +142,8 @@ export function mapFetchToCalendarSignal(envelope) {
 /**
  * Map a minutes fetch envelope to http_stub Observation bodies.
  * Uses the same contract hints as the library minutes fixture pack.
- * Empty/blocked → empty array (caller must not delete / must changed=false).
+ * Empty/blocked/garbage/partial → empty array (fail closed; changed=false).
+ * Requires body + minutesUrl + minutesPublishedAt (aligned with minutes signal).
  * @param {object} envelope
  */
 export function mapFetchToHttpStubObservations(envelope) {
@@ -151,6 +157,7 @@ export function mapFetchToHttpStubObservations(envelope) {
 
   const bodyText = typeof envelope.bodyText === 'string' ? envelope.bodyText.trim() : '';
   if (!bodyText) return [];
+  if (bodyText.length > MAX_OBSERVATION_EVIDENCE_CHARS) return [];
 
   const externalEventId = String(envelope.externalEventId ?? '3458');
   if (externalEventId !== '3458') {
@@ -158,32 +165,35 @@ export function mapFetchToHttpStubObservations(envelope) {
     return [];
   }
 
-  const observedAt = typeof envelope.minutesPublishedAt === 'string'
-    && !Number.isNaN(Date.parse(envelope.minutesPublishedAt))
-    ? new Date(envelope.minutesPublishedAt).toISOString()
-    : MV_LIBRARY_MINUTES_PUBLISHED_AT;
+  // Align with mapFetchToMinutesSignal: no fixture URL/ts fallbacks.
+  const minutesUrl = typeof envelope.minutesUrl === 'string' ? envelope.minutesUrl.trim() : '';
+  const minutesPublishedAt = typeof envelope.minutesPublishedAt === 'string'
+    ? envelope.minutesPublishedAt
+    : null;
+  if (!minutesUrl || !minutesPublishedAt || Number.isNaN(Date.parse(minutesPublishedAt))) {
+    return [];
+  }
+  if (!isKnownLibraryMinutesSourceUrl(minutesUrl)) {
+    return [];
+  }
+  // Content gate: refuse arbitrary HTML that would stamp hardcoded effects.
+  if (!passesLibraryMinutesContentGate(bodyText)) {
+    return [];
+  }
 
-  const sourceUrl = typeof envelope.minutesUrl === 'string' && envelope.minutesUrl.trim() !== ''
-    ? envelope.minutesUrl.trim()
-    : MV_LIBRARY_MINUTES_SOURCE_URL;
-
-  // minutesUrl may be on granicus CDN — Observation sourceUrl is provenance,
-  // not the allowlisted fetch host. Fetch host was already gated.
+  const fixtureHints = mvLibraryMinutes3458Fixture.observations[0].hints;
   return [
     {
       id: MV_LIBRARY_MINUTES_OBSERVATION_ID,
-      sourceUrl,
-      observedAt,
+      sourceUrl: MV_LIBRARY_MINUTES_SOURCE_URL,
+      observedAt: new Date(minutesPublishedAt).toISOString(),
       evidence: bodyText,
       hints: {
-        type: 'policy_change',
-        label: 'Library board minutes',
-        effect: {
-          talentCost: 0.05,
-          hype: 0.04,
-        },
+        type: fixtureHints.type,
+        label: fixtureHints.label,
+        effect: { ...fixtureHints.effect },
         rationale:
-          'Allowlisted HTTPS minutes body maps stipend → talentCost and '
+          'Allowlisted HTTPS minutes body passed content gate; maps stipend → talentCost and '
           + 'board attention → hype via http_stub (not firecrawl).',
       },
     },
@@ -255,15 +265,74 @@ export async function liveFetchAllowlisted(rawUrl, options = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
+    // Fail closed on cross-host redirects: never follow without re-allowlisting.
     const response = await fetchImpl(parsed.href, {
       method: 'GET',
-      redirect: 'follow',
+      redirect: 'manual',
       signal: controller.signal,
       headers: {
         Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'User-Agent': 'CitizenAllowlistedFetch/1.0 (+https://github.com/TayDa64/citizen)',
       },
     });
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get('location');
+      let redirectOk = false;
+      if (typeof location === 'string' && location.trim() !== '') {
+        try {
+          const next = new URL(location, parsed.href);
+          assertAllowlistedHttpsUrl(next.href);
+          redirectOk = true;
+        } catch {
+          redirectOk = false;
+        }
+      }
+      if (!redirectOk) {
+        return {
+          kind: 'calendar_fetch',
+          sourceId: ALLOWLISTED_SOURCE_ID,
+          fetchedUrl: parsed.href,
+          fetchedAt: new Date().toISOString(),
+          status: response.status,
+          ok: false,
+          bodyText: '',
+          error: 'allowlist_redirect_rejected',
+        };
+      }
+      // Same-allowlist redirect: one follow, still manual (no chains).
+      const followed = await fetchImpl(new URL(location, parsed.href).href, {
+        method: 'GET',
+        redirect: 'manual',
+        signal: controller.signal,
+        headers: {
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'User-Agent': 'CitizenAllowlistedFetch/1.0 (+https://github.com/TayDa64/citizen)',
+        },
+      });
+      if (followed.status >= 300 && followed.status < 400) {
+        return {
+          kind: 'calendar_fetch',
+          sourceId: ALLOWLISTED_SOURCE_ID,
+          fetchedUrl: parsed.href,
+          fetchedAt: new Date().toISOString(),
+          status: followed.status,
+          ok: false,
+          bodyText: '',
+          error: 'allowlist_redirect_rejected',
+        };
+      }
+      const followedBody = await followed.text();
+      return {
+        kind: 'calendar_fetch',
+        sourceId: ALLOWLISTED_SOURCE_ID,
+        fetchedUrl: parsed.href,
+        fetchedAt: new Date().toISOString(),
+        status: followed.status,
+        ok: followed.ok,
+        bodyText: followedBody,
+        error: followed.ok ? null : `http_${followed.status}`,
+      };
+    }
     const bodyText = await response.text();
     return {
       kind: 'calendar_fetch',

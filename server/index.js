@@ -180,7 +180,12 @@ async function handleRequest(req, res, pool) {
   if (req.method === 'GET' && pathname === '/api/ingest/runs') {
     const limitRaw = requestUrl.searchParams.get('limit');
     const limit = limitRaw == null ? 50 : Number(limitRaw);
-    sendJson(res, 200, await listIngestRuns(pool, { limit }), origin);
+    const includeRaw = requestUrl.searchParams.get('includeResult');
+    const includeResult =
+      includeRaw === '1'
+      || includeRaw === 'true'
+      || includeRaw === 'yes';
+    sendJson(res, 200, await listIngestRuns(pool, { limit, includeResult }), origin);
     return;
   }
 

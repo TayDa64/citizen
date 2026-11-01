@@ -9,6 +9,7 @@
 
 import { collectFixtureObservations, listFixtureIds } from '../src/adapters/fixtureAdapter.js';
 import { collectHttpStubObservations } from '../src/adapters/httpStubAdapter.js';
+import { validateHttpStubObservations } from '../src/adapters/ingestSanitize.js';
 import {
   activeTriggersFromRegistry,
   describePipelineEvent,
@@ -25,6 +26,7 @@ import {
   createTrigger,
   isIdenticalTriggerDocument,
   listTriggersByClientIds,
+  recomputeCompanies,
 } from './triggers.js';
 
 const CAMPAIGN_ID_RE =
@@ -122,10 +124,11 @@ export function validateIngestRequest(input) {
 
   let observations = null;
   if (adapter === 'http_stub') {
-    if (!Array.isArray(input.observations)) {
-      issues.push(issue('observations', 'invalid_type', 'observations must be an array'));
+    const stub = validateHttpStubObservations(input.observations);
+    if (!stub.ok) {
+      issues.push(...stub.issues);
     } else {
-      observations = input.observations;
+      observations = stub.value;
     }
   }
 
@@ -216,14 +219,20 @@ export async function insertIngestRun(pool, fields) {
   return mapIngestRunRow(result.rows[0]);
 }
 
-export async function listIngestRuns(pool, { limit = 50 } = {}) {
+export async function listIngestRuns(pool, { limit = 50, includeResult = false } = {}) {
   const capped = Math.max(1, Math.min(200, Number(limit) || 50));
   const result = await pool.query(
-    `SELECT id, started_at, finished_at, adapter, fixture_id, status, changed,
-            error, trigger_client_ids, result_json, scheduled_meeting_id
-     FROM ingest_runs
-     ORDER BY started_at DESC
-     LIMIT $1`,
+    includeResult
+      ? `SELECT id, started_at, finished_at, adapter, fixture_id, status, changed,
+                error, trigger_client_ids, result_json, scheduled_meeting_id
+         FROM ingest_runs
+         ORDER BY started_at DESC
+         LIMIT $1`
+      : `SELECT id, started_at, finished_at, adapter, fixture_id, status, changed,
+                error, trigger_client_ids, NULL::jsonb AS result_json, scheduled_meeting_id
+         FROM ingest_runs
+         ORDER BY started_at DESC
+         LIMIT $1`,
     [capped],
   );
   return result.rows.map(mapIngestRunRow);
@@ -284,12 +293,14 @@ export async function ingestAndPersist(pool, request, { scheduledMeetingId = nul
         continue;
       }
       changed = true;
-      stored.push(await createTrigger(pool, trigger));
+      // CIT-120: defer companies restack until all triggers in this ingest land.
+      stored.push(await createTrigger(pool, trigger, { skipRecompute: true }));
     }
     const triggerClientIds = stored.map((trigger) => trigger.id);
     // CIT-80 / CIT-101: stamp known fixture jurisdictions (wage / library → mv).
     if (changed) {
       await stampTriggerJurisdictions(pool, triggerClientIds);
+      await recomputeCompanies(pool);
     }
     let restack = null;
     if (

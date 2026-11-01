@@ -64,21 +64,22 @@ describe('event pipeline — observation → interpretation → effect', () => {
   test('http stub adapter shares the same Observation shape (Firecrawl plug-in point)', () => {
     const observations = collectHttpStubObservations([
       {
-        id: 'obs-stub-news',
-        sourceUrl: 'https://example.local/news/sector',
-        observedAt: '2026-04-18T13:30:00.000Z',
-        evidence: 'Stub headline: sector hype rises.',
+        id: 'obs-civic-wage-bulletin-2026-04',
+        sourceUrl: 'https://example.local/civic/wage-bulletin-2026-04',
+        observedAt: '2026-04-02T14:55:00.000Z',
+        evidence:
+          'City council posted a living-wage bulletin raising the recommended startup wage band by roughly twelve percent for tech roles in the metro.',
         hints: {
-          type: 'news_spike',
-          label: 'Stub news',
-          effect: { hype: 0.1 },
-          rationale: 'Headline implies hype.',
+          type: 'policy_change',
+          label: 'Wage bulletin',
+          effect: { talentCost: 0.12 },
+          rationale: 'Living-wage bulletin implies higher talent cost for local hires.',
         },
       },
     ]);
     const pending = ingestObservation(observations[0]);
     expect(pending.provenance.adapterId).toBe('http_stub');
-    expect(toContractTrigger(pending).effect).toEqual({ hype: 0.1 });
+    expect(toContractTrigger(pending).effect).toEqual({ talentCost: 0.12 });
   });
 });
 
