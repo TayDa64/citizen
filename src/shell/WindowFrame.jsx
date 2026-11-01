@@ -1,5 +1,6 @@
 import { useId } from 'react';
 import {
+  CAMPAIGN_CAUSAL_ID,
   CAMPAIGN_POLITICS_ID,
   CAMPAIGN_RUNWAY_ID,
   COMPANY_METRICS_ID,
@@ -17,6 +18,8 @@ function titleFor(id) {
       return 'Company metrics';
     case CAMPAIGN_POLITICS_ID:
       return 'Politics';
+    case CAMPAIGN_CAUSAL_ID:
+      return 'Causal hub';
     default:
       return 'Window';
   }

@@ -1,6 +1,6 @@
 import { resolveFeatureView } from '../views/featureViews';
 import WindowFrame from './WindowFrame';
-import { COMPANY_METRICS_ID, COMPANY_OPS_ID } from './windowModel';
+import { CAMPAIGN_CAUSAL_ID, COMPANY_METRICS_ID, COMPANY_OPS_ID } from './windowModel';
 
 export default function WindowManager({ workspace, onAction, models, viewProps }) {
   const openWindows = [...workspace.windows]
@@ -12,7 +12,7 @@ export default function WindowManager({ workspace, onAction, models, viewProps }
       {openWindows.map((item) => {
         const View = resolveFeatureView(item.id);
         if (!View) return null;
-        if (item.id === COMPANY_OPS_ID || item.id === COMPANY_METRICS_ID) {
+        if (item.id === COMPANY_OPS_ID || item.id === COMPANY_METRICS_ID || item.id === CAMPAIGN_CAUSAL_ID) {
           const props = viewProps?.[item.id];
           if (props == null) return null;
           return (

@@ -2,6 +2,7 @@ import IslandSwitcher from '../components/IslandSwitcher';
 import TurnSaveAlert from '../components/TurnSaveAlert';
 import { roleLabel } from '../playerRole';
 import {
+  CAMPAIGN_CAUSAL_ID,
   CAMPAIGN_POLITICS_ID,
   CAMPAIGN_RUNWAY_ID,
   COMPANY_METRICS_ID,
@@ -46,6 +47,13 @@ export default function NavigationShell({ role, onChangeRole, turn, onWorkspaceA
         onClick={() => onWorkspaceAction({ type: 'create', id: CAMPAIGN_POLITICS_ID })}
       >
         Politics
+      </button>
+      <button
+        type="button"
+        className="nav-rail__button"
+        onClick={() => onWorkspaceAction({ type: 'create', id: CAMPAIGN_CAUSAL_ID })}
+      >
+        Causal hub
       </button>
       <button
         type="button"

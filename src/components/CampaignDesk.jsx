@@ -1,5 +1,4 @@
 import WindowFrame from '../shell/WindowFrame';
-import CausalRulesPanel from './CausalRulesPanel';
 import CouncilCalendarPanel from './CouncilCalendarPanel';
 import IngestRunsPanel from './IngestRunsPanel';
 import NestExplorer from './NestExplorer';
@@ -8,8 +7,8 @@ import TriggerPanel from './TriggerPanel';
 import TurnLedger from './TurnLedger';
 
 /**
- * Coherent campaign causal desk — CIT-114 causal surfaces + CIT-116 nest/calendar.
- * Binds real CAUSAL_RULES / politics / triggers / ledger / ingest / nest / meetings.
+ * Campaign desk for the campaign lens — nest, council calendar, world events,
+ * turn ledger, and ingest audit. Politics and the causal hub mount as windows.
  * No fake forms / invent calendar.
  */
 export default function CampaignDesk({
@@ -46,7 +45,6 @@ export default function CampaignDesk({
           <PoliticsMeter state={state} />
         </WindowFrame>
       ) : null}
-      <CausalRulesPanel state={state} />
       <NestExplorer apiBase={apiBase} homeId="mv" refreshKey={ingestRefreshKey} />
       <CouncilCalendarPanel
         apiBase={apiBase}

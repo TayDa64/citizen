@@ -58,6 +58,7 @@ import NavigationShell, { OfficeStatus } from './shell/NavigationShell';
 import { campaignRunwayModel } from './shell/simulationAdapter';
 import WindowManager from './shell/WindowManager';
 import {
+  CAMPAIGN_CAUSAL_ID,
   CAMPAIGN_POLITICS_ID,
   CAMPAIGN_RUNWAY_ID,
   COMPANY_METRICS_ID,
@@ -786,6 +787,7 @@ function App({ initialPlayerRole } = {}) {
               models={{ [CAMPAIGN_RUNWAY_ID]: runwayModel }}
               viewProps={{
                 [COMPANY_METRICS_ID]: { state },
+                ...(isCampaign ? { [CAMPAIGN_CAUSAL_ID]: { state } } : {}),
                 ...(isCompanyOps ? {
                   [COMPANY_OPS_ID]: {
                     taxRate: state.taxRate,
