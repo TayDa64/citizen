@@ -124,7 +124,9 @@ export const TRIGGERS_DEFAULT_PLACEMENT = Object.freeze({
 /**
  * Wide enough for the civic-band smoke at 1280×900, beside the rail.
  * Bottom stays above the ledger and the event windows. Painted above the
- * top-band windows so the tax slider and Advance Month stay clickable.
+ * other top-band windows so the tax slider and Advance Month stay clickable.
+ * The ops desk is the exception: that frame stacks above this one so its
+ * forms stay clickable on the company-ops lens.
  */
 export const DIAGRAM_DEFAULT_PLACEMENT = Object.freeze({
   mode: PLACEMENT_MODE_DESKTOP,
@@ -166,7 +168,10 @@ function defaultPersistable() {
     placementMode: PLACEMENT_MODE_DESKTOP,
     windows: [
       defaultWindow(CAMPAIGN_RUNWAY_ID, 10),
-      defaultWindow(COMPANY_OPS_ID, 9, OPS_DEFAULT_PLACEMENT),
+      // Above the diagram. The ops frame overlaps the diagram's right side, and
+      // the company-ops lens is the one that mounts it. Tax and hire on the
+      // diagram sit further left, so they stay clickable.
+      defaultWindow(COMPANY_OPS_ID, 12, OPS_DEFAULT_PLACEMENT),
       defaultWindow(COMPANY_METRICS_ID, 8, METRICS_DEFAULT_PLACEMENT),
       defaultWindow(CAMPAIGN_POLITICS_ID, 7, POLITICS_DEFAULT_PLACEMENT),
       defaultWindow(CAMPAIGN_CAUSAL_ID, 6, CAUSAL_DEFAULT_PLACEMENT),
@@ -276,6 +281,32 @@ function copyDrafts(drafts) {
   return next;
 }
 
+/** Factory z-order from before the ops desk was stacked above the diagram. */
+const BURIED_OPS_FACTORY_Z = Object.freeze({
+  [CAMPAIGN_RUNWAY_ID]: 10,
+  [COMPANY_OPS_ID]: 9,
+  [COMPANY_METRICS_ID]: 8,
+  [CAMPAIGN_POLITICS_ID]: 7,
+  [CAMPAIGN_CAUSAL_ID]: 6,
+  [CAMPAIGN_LEDGER_ID]: 5,
+  [CAMPAIGN_NEST_ID]: 4,
+  [CAMPAIGN_CALENDAR_ID]: 3,
+  [CAMPAIGN_INGEST_ID]: 2,
+  [CAMPAIGN_TRIGGERS_ID]: 1,
+  [WORKFLOW_DIAGRAM_ID]: 11,
+});
+
+function liftBuriedOpsDesk(windows) {
+  const factory = windows.length === Object.keys(BURIED_OPS_FACTORY_Z).length
+    && windows.every((item) => (
+      item.userArranged === false && BURIED_OPS_FACTORY_Z[item.id] === item.z
+    ));
+  if (!factory) return windows;
+  return windows.map((item) => (
+    item.id === COMPANY_OPS_ID ? { ...item, z: 12 } : item
+  ));
+}
+
 export function sanitizeWorkspace(file) {
   const valid = Boolean(file)
     && file.version === WORKSPACE_VERSION
@@ -286,7 +317,7 @@ export function sanitizeWorkspace(file) {
   return {
     version: WORKSPACE_VERSION,
     placementMode: PLACEMENT_MODE_DESKTOP,
-    windows: ensureKnownWindows(file.windows.map(cloneWindow)),
+    windows: liftBuriedOpsDesk(ensureKnownWindows(file.windows.map(cloneWindow))),
   };
 }
 

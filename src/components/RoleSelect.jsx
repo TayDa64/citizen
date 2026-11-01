@@ -20,7 +20,6 @@ export default function RoleSelect({ onSelect }) {
           type="button"
           className="role-select__choice"
           data-testid="role-company-ops"
-          aria-label={`Enter as ${roleLabel(PLAYER_ROLE_COMPANY_OPS)}`}
           onClick={() => onSelect?.(PLAYER_ROLE_COMPANY_OPS)}
         >
           <strong>{roleLabel(PLAYER_ROLE_COMPANY_OPS)}</strong>
@@ -30,7 +29,6 @@ export default function RoleSelect({ onSelect }) {
           type="button"
           className="role-select__choice"
           data-testid="role-campaign"
-          aria-label={`Enter as ${roleLabel(PLAYER_ROLE_CAMPAIGN)}`}
           onClick={() => onSelect?.(PLAYER_ROLE_CAMPAIGN)}
         >
           <strong>{roleLabel(PLAYER_ROLE_CAMPAIGN)}</strong>

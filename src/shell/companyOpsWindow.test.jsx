@@ -36,7 +36,8 @@ describe('company-ops window model', () => {
     expect(ops.placement.x).toBeGreaterThanOrEqual(runway.placement.x + runway.placement.width);
     expect(workspace.focusedId).toBe(CAMPAIGN_RUNWAY_ID);
     expect(workspace.drafts).toEqual({});
-    expect(runway.z).toBeGreaterThan(ops.z);
+    expect(ops.z).toBeGreaterThan(runway.z);
+    expect(ops.z).toBeGreaterThan(windowById(workspace, 'workflow-diagram').z);
   });
 
   test('a saved runway-only file gains company-ops without moving the runway', () => {
@@ -66,6 +67,27 @@ describe('company-ops window model', () => {
     expect(windowById(legacy, COMPANY_OPS_ID).placement).toEqual(OPS_DEFAULT_PLACEMENT);
     expect(legacy.drafts).toBeUndefined();
     expect(JSON.stringify(legacy)).not.toMatch(/taxRate|drafts/);
+  });
+
+  test('a saved factory stack lifts the ops desk above the diagram', () => {
+    const current = createDefaultWorkspace();
+    const buried = sanitizeWorkspace({
+      version: 1,
+      placementMode: 'desktop',
+      windows: current.windows.map((item) => (
+        item.id === COMPANY_OPS_ID ? { ...item, z: 9 } : item
+      )),
+    });
+    const moved = sanitizeWorkspace({
+      version: 1,
+      placementMode: 'desktop',
+      windows: current.windows.map((item) => (
+        item.id === COMPANY_OPS_ID ? { ...item, z: 9, userArranged: true } : item
+      )),
+    });
+
+    expect(windowById(buried, COMPANY_OPS_ID).z).toBe(12);
+    expect(windowById(moved, COMPANY_OPS_ID).z).toBe(9);
   });
 
   test('close keeps the in-memory draft and reset drops it without a TurnCommand', () => {
