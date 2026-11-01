@@ -6,6 +6,7 @@
 export const WORKSPACE_VERSION = 1;
 export const PLACEMENT_MODE_DESKTOP = 'desktop';
 export const CAMPAIGN_RUNWAY_ID = 'campaign-runway';
+export const CAMPAIGN_CAUSAL_ID = 'campaign-causal';
 export const CAMPAIGN_POLITICS_ID = 'campaign-politics';
 export const COMPANY_OPS_ID = 'company-ops';
 export const COMPANY_METRICS_ID = 'company-metrics';
@@ -55,6 +56,15 @@ export const POLITICS_DEFAULT_PLACEMENT = Object.freeze({
   height: 320,
 });
 
+/** Under the metrics chart, beside politics, still above Advance Month. */
+export const CAUSAL_DEFAULT_PLACEMENT = Object.freeze({
+  mode: PLACEMENT_MODE_DESKTOP,
+  x: OPS_DEFAULT_PLACEMENT.x,
+  y: POLITICS_DEFAULT_PLACEMENT.y,
+  width: METRICS_DEFAULT_PLACEMENT.width,
+  height: POLITICS_DEFAULT_PLACEMENT.height,
+});
+
 function copyPlacement(placement) {
   return {
     mode: PLACEMENT_MODE_DESKTOP,
@@ -86,10 +96,11 @@ function defaultPersistable() {
     version: WORKSPACE_VERSION,
     placementMode: PLACEMENT_MODE_DESKTOP,
     windows: [
-      defaultWindow(CAMPAIGN_RUNWAY_ID, 4),
-      defaultWindow(COMPANY_OPS_ID, 3, OPS_DEFAULT_PLACEMENT),
-      defaultWindow(COMPANY_METRICS_ID, 2, METRICS_DEFAULT_PLACEMENT),
-      defaultWindow(CAMPAIGN_POLITICS_ID, 1, POLITICS_DEFAULT_PLACEMENT),
+      defaultWindow(CAMPAIGN_RUNWAY_ID, 5),
+      defaultWindow(COMPANY_OPS_ID, 4, OPS_DEFAULT_PLACEMENT),
+      defaultWindow(COMPANY_METRICS_ID, 3, METRICS_DEFAULT_PLACEMENT),
+      defaultWindow(CAMPAIGN_POLITICS_ID, 2, POLITICS_DEFAULT_PLACEMENT),
+      defaultWindow(CAMPAIGN_CAUSAL_ID, 1, CAUSAL_DEFAULT_PLACEMENT),
     ],
   };
 }
@@ -149,6 +160,10 @@ function ensureKnownWindows(windows) {
   if (!next.some((item) => item.id === CAMPAIGN_POLITICS_ID)) {
     const z = next.reduce((max, item) => Math.max(max, item.z), 0) + 1;
     next = [...next, defaultWindow(CAMPAIGN_POLITICS_ID, z, POLITICS_DEFAULT_PLACEMENT)];
+  }
+  if (!next.some((item) => item.id === CAMPAIGN_CAUSAL_ID)) {
+    const z = next.reduce((max, item) => Math.max(max, item.z), 0) + 1;
+    next = [...next, defaultWindow(CAMPAIGN_CAUSAL_ID, z, CAUSAL_DEFAULT_PLACEMENT)];
   }
   return next;
 }

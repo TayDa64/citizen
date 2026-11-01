@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { describe, expect, test } from 'vitest';
 import App from '../App';
 import { PLAYER_ROLE_CAMPAIGN, PLAYER_ROLE_COMPANY_OPS } from '../playerRole';
@@ -94,7 +94,6 @@ describe('campaign-politics window mount', () => {
     expect(screen.getByTestId('island-campaign')).toBeInTheDocument();
     expect(screen.getByTestId('island-company-ops')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Politics' })).toBeInTheDocument();
-    expect(within(desk).getByTestId('causal-hub')).toBeInTheDocument();
   });
 
   test('company ops lens does not mount the politics meter', () => {
