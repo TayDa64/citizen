@@ -1,7 +1,6 @@
 import React, { useEffect, useReducer, useRef, useState } from 'react';
 import WorkflowDiagram from './WorkflowDiagram';
 import CampaignDesk from './components/CampaignDesk';
-import CompanyOpsForms from './components/CompanyOpsForms';
 import Dashboard from './components/Dashboard';
 import RoleSelect from './components/RoleSelect';
 import {
@@ -58,7 +57,7 @@ import OfficeEnvironment from './shell/OfficeEnvironment';
 import NavigationShell, { OfficeStatus } from './shell/NavigationShell';
 import { campaignRunwayModel } from './shell/simulationAdapter';
 import WindowManager from './shell/WindowManager';
-import { CAMPAIGN_RUNWAY_ID, reduceWorkspace } from './shell/windowModel';
+import { CAMPAIGN_RUNWAY_ID, COMPANY_OPS_ID, reduceWorkspace } from './shell/windowModel';
 import { readWorkspace, writeWorkspace } from './shell/workspaceStore';
 
 function removalBlockedMessage(error, label) {
@@ -739,13 +738,6 @@ function App({ initialPlayerRole } = {}) {
               turnRetrying={turnRetrying}
               onRetryTurn={onRetryTurn}
             />
-            {isCompanyOps ? (
-              <CompanyOpsForms
-                taxRate={state.taxRate}
-                onSetTax={onOpsSetTax}
-                onHire={onHire}
-              />
-            ) : null}
             {isCampaign ? (
               <CampaignDesk
                 state={state}
@@ -784,6 +776,17 @@ function App({ initialPlayerRole } = {}) {
             workspace={workspace}
             onAction={dispatchWorkspace}
             models={{ [CAMPAIGN_RUNWAY_ID]: runwayModel }}
+            viewProps={isCompanyOps ? {
+              [COMPANY_OPS_ID]: {
+                taxRate: state.taxRate,
+                onSetTax: onOpsSetTax,
+                onHire,
+                draft: workspace.drafts?.[COMPANY_OPS_ID] ?? null,
+                onDraftChange: (draft) => {
+                  dispatchWorkspace({ type: 'setDraft', id: COMPANY_OPS_ID, draft });
+                },
+              },
+            } : null}
           />
         </div>
       </OfficeEnvironment>

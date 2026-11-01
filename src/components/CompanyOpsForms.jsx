@@ -2,16 +2,57 @@ import { useState } from 'react';
 
 const DEPARTMENTS = Object.freeze(['tech', 'marketing', 'sales']);
 
+function seedTax(taxRate) {
+  const next = Number(taxRate);
+  return Number.isFinite(next) ? next : 0.25;
+}
+
 /**
  * Ops desk forms that drive real TurnCommands (set_tax, hire_employee).
  * Hire-only — no funding/exit/inventory/Gantt.
+ * Slider and hire fields are a session draft until submit. Pass `onDraftChange`
+ * to keep that draft on the in-memory workspace; omit it and the form keeps
+ * its own state for the same submit callbacks.
  */
-export default function CompanyOpsForms({ taxRate, onSetTax, onHire }) {
-  const [draftTax, setDraftTax] = useState(
-    Number.isFinite(Number(taxRate)) ? Number(taxRate) : 0.25,
-  );
-  const [department, setDepartment] = useState('tech');
-  const [skill, setSkill] = useState(1);
+export default function CompanyOpsForms({
+  taxRate,
+  onSetTax,
+  onHire,
+  draft = null,
+  onDraftChange = null,
+}) {
+  const seededTax = seedTax(taxRate);
+  const [localTax, setLocalTax] = useState(seededTax);
+  const [localDepartment, setLocalDepartment] = useState('tech');
+  const [localSkill, setLocalSkill] = useState(1);
+  const controlled = typeof onDraftChange === 'function';
+
+  const draftTax = controlled
+    ? (draft != null && Number.isFinite(Number(draft.taxRate)) ? Number(draft.taxRate) : seededTax)
+    : localTax;
+  const department = controlled
+    ? (typeof draft?.department === 'string' && DEPARTMENTS.includes(draft.department)
+      ? draft.department
+      : 'tech')
+    : localDepartment;
+  const skill = controlled
+    ? (draft != null && draft.skill != null ? draft.skill : 1)
+    : localSkill;
+
+  const publish = (patch) => {
+    if (!controlled) {
+      if (patch.taxRate !== undefined) setLocalTax(patch.taxRate);
+      if (patch.department !== undefined) setLocalDepartment(patch.department);
+      if (patch.skill !== undefined) setLocalSkill(patch.skill);
+      return;
+    }
+    onDraftChange({
+      taxRate: draftTax,
+      department,
+      skill,
+      ...patch,
+    });
+  };
 
   return (
     <section className="company-ops-forms" aria-labelledby="company-ops-forms-heading" data-testid="company-ops-forms">
@@ -40,7 +81,7 @@ export default function CompanyOpsForms({ taxRate, onSetTax, onHire }) {
             step="0.01"
             value={draftTax}
             aria-valuetext={`${Math.round(draftTax * 100)}%`}
-            onChange={(event) => setDraftTax(Number(event.target.value))}
+            onChange={(event) => publish({ taxRate: Number(event.target.value) })}
           />
         </label>
         <p data-testid="ops-tax-readout">Tax: {Math.round(draftTax * 100)}%</p>
@@ -65,7 +106,7 @@ export default function CompanyOpsForms({ taxRate, onSetTax, onHire }) {
             id="ops-hire-department"
             data-testid="ops-hire-department"
             value={department}
-            onChange={(event) => setDepartment(event.target.value)}
+            onChange={(event) => publish({ department: event.target.value })}
           >
             {DEPARTMENTS.map((dept) => (
               <option key={dept} value={dept}>
@@ -84,7 +125,7 @@ export default function CompanyOpsForms({ taxRate, onSetTax, onHire }) {
             max="1"
             step="0.1"
             value={skill}
-            onChange={(event) => setSkill(event.target.value)}
+            onChange={(event) => publish({ skill: event.target.value })}
           />
         </label>
         <button type="submit" data-testid="ops-hire-submit">
