@@ -1,7 +1,7 @@
 import IslandSwitcher from '../components/IslandSwitcher';
 import TurnSaveAlert from '../components/TurnSaveAlert';
 import { roleLabel } from '../playerRole';
-import { CAMPAIGN_RUNWAY_ID } from './windowModel';
+import { CAMPAIGN_RUNWAY_ID, COMPANY_OPS_ID } from './windowModel';
 
 export default function NavigationShell({ role, onChangeRole, turn, onWorkspaceAction }) {
   return (
@@ -20,6 +20,13 @@ export default function NavigationShell({ role, onChangeRole, turn, onWorkspaceA
         onClick={() => onWorkspaceAction({ type: 'create', id: CAMPAIGN_RUNWAY_ID })}
       >
         Campaign runway
+      </button>
+      <button
+        type="button"
+        className="nav-rail__button"
+        onClick={() => onWorkspaceAction({ type: 'create', id: COMPANY_OPS_ID })}
+      >
+        Ops desk
       </button>
       <button
         type="button"

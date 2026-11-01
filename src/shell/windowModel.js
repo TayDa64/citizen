@@ -6,6 +6,7 @@
 export const WORKSPACE_VERSION = 1;
 export const PLACEMENT_MODE_DESKTOP = 'desktop';
 export const CAMPAIGN_RUNWAY_ID = 'campaign-runway';
+export const COMPANY_OPS_ID = 'company-ops';
 export const TITLE_BAR_HEIGHT = 40;
 
 const MIN_WINDOW_WIDTH = 280;
@@ -21,17 +22,30 @@ export const RUNWAY_DEFAULT_PLACEMENT = Object.freeze({
   height: 360,
 });
 
-function defaultPlacement() {
+/** Sits to the right of the runway so the rail and the runway title stay clear. */
+export const OPS_DEFAULT_PLACEMENT = Object.freeze({
+  mode: PLACEMENT_MODE_DESKTOP,
+  x: RAIL_CLEARANCE + RUNWAY_DEFAULT_PLACEMENT.width + 16,
+  y: 24,
+  width: 420,
+  height: 540,
+});
+
+function copyPlacement(placement) {
   return {
-    mode: RUNWAY_DEFAULT_PLACEMENT.mode,
-    x: RUNWAY_DEFAULT_PLACEMENT.x,
-    y: RUNWAY_DEFAULT_PLACEMENT.y,
-    width: RUNWAY_DEFAULT_PLACEMENT.width,
-    height: RUNWAY_DEFAULT_PLACEMENT.height,
+    mode: PLACEMENT_MODE_DESKTOP,
+    x: placement.x,
+    y: placement.y,
+    width: placement.width,
+    height: placement.height,
   };
 }
 
-function defaultWindow(id, z = 1) {
+function defaultPlacement() {
+  return copyPlacement(RUNWAY_DEFAULT_PLACEMENT);
+}
+
+function defaultWindow(id, z = 1, placement = defaultPlacement()) {
   return {
     id,
     open: true,
@@ -39,7 +53,7 @@ function defaultWindow(id, z = 1) {
     pinned: false,
     z,
     userArranged: false,
-    placement: defaultPlacement(),
+    placement: copyPlacement(placement),
   };
 }
 
@@ -47,7 +61,10 @@ function defaultPersistable() {
   return {
     version: WORKSPACE_VERSION,
     placementMode: PLACEMENT_MODE_DESKTOP,
-    windows: [defaultWindow(CAMPAIGN_RUNWAY_ID, 1)],
+    windows: [
+      defaultWindow(CAMPAIGN_RUNWAY_ID, 2),
+      defaultWindow(COMPANY_OPS_ID, 1, OPS_DEFAULT_PLACEMENT),
+    ],
   };
 }
 
@@ -90,9 +107,25 @@ function isValidWindow(windowRecord) {
     && isFiniteNumber(placement.height);
 }
 
-function ensureRunway(windows) {
-  if (windows.some((item) => item.id === CAMPAIGN_RUNWAY_ID)) return windows;
-  return [defaultWindow(CAMPAIGN_RUNWAY_ID, 1), ...windows];
+function ensureKnownWindows(windows) {
+  let next = windows;
+  if (!next.some((item) => item.id === CAMPAIGN_RUNWAY_ID)) {
+    next = [defaultWindow(CAMPAIGN_RUNWAY_ID, 1), ...next];
+  }
+  if (!next.some((item) => item.id === COMPANY_OPS_ID)) {
+    const z = next.reduce((max, item) => Math.max(max, item.z), 0) + 1;
+    next = [...next, defaultWindow(COMPANY_OPS_ID, z, OPS_DEFAULT_PLACEMENT)];
+  }
+  return next;
+}
+
+function copyDrafts(drafts) {
+  if (!drafts || typeof drafts !== 'object') return {};
+  const next = {};
+  for (const [id, draft] of Object.entries(drafts)) {
+    if (draft && typeof draft === 'object') next[id] = { ...draft };
+  }
+  return next;
 }
 
 export function sanitizeWorkspace(file) {
@@ -105,7 +138,7 @@ export function sanitizeWorkspace(file) {
   return {
     version: WORKSPACE_VERSION,
     placementMode: PLACEMENT_MODE_DESKTOP,
-    windows: ensureRunway(file.windows.map(cloneWindow)),
+    windows: ensureKnownWindows(file.windows.map(cloneWindow)),
   };
 }
 
@@ -116,15 +149,17 @@ export function createDefaultWorkspace() {
     placementMode: file.placementMode,
     windows: file.windows.map(cloneWindow),
     focusedId: CAMPAIGN_RUNWAY_ID,
+    drafts: {},
   };
 }
 
-function withWorkspace(workspace, windows, focusedId = workspace.focusedId) {
+function withWorkspace(workspace, windows, focusedId = workspace.focusedId, drafts = workspace.drafts) {
   return {
     version: WORKSPACE_VERSION,
     placementMode: PLACEMENT_MODE_DESKTOP,
     windows,
     focusedId,
+    drafts: copyDrafts(drafts),
   };
 }
 
@@ -255,6 +290,16 @@ export function reduceWorkspace(workspace, action, gameState) {
       }));
     case 'focus':
       return focusWindow(current, action.id);
+    case 'setDraft': {
+      if (!current.windows.some((item) => item.id === action.id)) return current;
+      const drafts = copyDrafts(current.drafts);
+      if (action.draft == null) {
+        delete drafts[action.id];
+      } else {
+        drafts[action.id] = { ...action.draft };
+      }
+      return withWorkspace(current, current.windows.map(cloneWindow), current.focusedId, drafts);
+    }
     case 'reset':
       return createDefaultWorkspace();
     default: {

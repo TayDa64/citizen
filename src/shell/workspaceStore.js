@@ -26,6 +26,7 @@ function hydrate(file) {
       placement: { ...item.placement },
     })),
     focusedId: focusedIdOf(file.windows),
+    drafts: {},
   };
 }
 

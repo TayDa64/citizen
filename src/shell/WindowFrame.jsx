@@ -1,9 +1,25 @@
 import { useId } from 'react';
-import { CAMPAIGN_RUNWAY_ID, TITLE_BAR_HEIGHT } from './windowModel';
+import { CAMPAIGN_RUNWAY_ID, COMPANY_OPS_ID, TITLE_BAR_HEIGHT } from './windowModel';
 
 function titleFor(id) {
-  if (id === CAMPAIGN_RUNWAY_ID) return 'Campaign runway';
-  return 'Window';
+  switch (id) {
+    case CAMPAIGN_RUNWAY_ID:
+      return 'Campaign runway';
+    case COMPANY_OPS_ID:
+      return 'Ops desk';
+    default:
+      return 'Window';
+  }
+}
+
+function pointerDownOnControl(event) {
+  const native = event.nativeEvent ?? event;
+  const nodes = typeof native.composedPath === 'function' ? native.composedPath() : [];
+  nodes.push(native.target, event.target);
+  return nodes.some((node) => {
+    const element = node?.nodeType === 1 ? node : node?.parentElement;
+    return Boolean(element?.closest?.('button, a, input, select, textarea, label'));
+  });
 }
 
 function readBounds(node) {
@@ -26,9 +42,15 @@ export default function WindowFrame({ windowRecord, onAction, children }) {
     onAction({ type: 'focus', id: windowRecord.id });
   };
 
+  const keepControlClick = (event) => {
+    event.stopPropagation();
+  };
+
   const onTitlePointerDown = (event) => {
     if (event.button !== 0) return;
-    if (event.target instanceof Element && event.target.closest('button')) return;
+    // A title-bar control must still receive its click. preventDefault on
+    // pointerdown suppresses the click, which drops Close / Pin / Minimize.
+    if (pointerDownOnControl(event)) return;
     event.preventDefault();
     focus();
     const originX = placement.x;
@@ -114,7 +136,7 @@ export default function WindowFrame({ windowRecord, onAction, children }) {
   return (
     <section
       className={`window-frame${minimized ? ' window-frame--minimized' : ''}`}
-      data-testid={windowRecord.id === CAMPAIGN_RUNWAY_ID ? 'campaign-runway' : undefined}
+      data-testid={windowRecord.id}
       role="region"
       aria-labelledby={titleId}
       style={{
@@ -134,6 +156,7 @@ export default function WindowFrame({ windowRecord, onAction, children }) {
             <button
               type="button"
               aria-pressed={pinned}
+              onPointerDown={keepControlClick}
               onClick={() => onAction({
                 type: 'pin',
                 id: windowRecord.id,
@@ -144,6 +167,7 @@ export default function WindowFrame({ windowRecord, onAction, children }) {
             </button>
             <button
               type="button"
+              onPointerDown={keepControlClick}
               onClick={() => onAction({
                 type: minimized ? 'restore' : 'minimize',
                 id: windowRecord.id,
@@ -153,6 +177,7 @@ export default function WindowFrame({ windowRecord, onAction, children }) {
             </button>
             <button
               type="button"
+              onPointerDown={keepControlClick}
               onClick={() => onAction({ type: 'close', id: windowRecord.id })}
             >
               Close
