@@ -1,6 +1,7 @@
 import { useId } from 'react';
 import {
   CAMPAIGN_CAUSAL_ID,
+  CAMPAIGN_LEDGER_ID,
   CAMPAIGN_POLITICS_ID,
   CAMPAIGN_RUNWAY_ID,
   COMPANY_METRICS_ID,
@@ -20,6 +21,8 @@ function titleFor(id) {
       return 'Politics';
     case CAMPAIGN_CAUSAL_ID:
       return 'Causal hub';
+    case CAMPAIGN_LEDGER_ID:
+      return 'Turn ledger';
     default:
       return 'Window';
   }

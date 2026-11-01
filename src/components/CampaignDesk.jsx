@@ -8,8 +8,8 @@ import TurnLedger from './TurnLedger';
 
 /**
  * Campaign desk for the campaign lens — nest, council calendar, world events,
- * turn ledger, and ingest audit. Politics and the causal hub mount as windows.
- * No fake forms / invent calendar.
+ * and ingest audit. Politics, the causal hub, and the turn ledger mount as
+ * windows. No fake forms / invent calendar.
  */
 export default function CampaignDesk({
   state,
@@ -23,6 +23,7 @@ export default function CampaignDesk({
   onClearTriggers,
   onIngestFixture,
   politicsWindow = null,
+  ledgerWindow = null,
   onWorkspaceAction,
 }) {
   return (
@@ -60,7 +61,11 @@ export default function CampaignDesk({
         onClearTriggers={onClearTriggers}
         onIngestFixture={onIngestFixture}
       />
-      <TurnLedger entries={ledger} />
+      {ledgerWindow?.open ? (
+        <WindowFrame windowRecord={ledgerWindow} onAction={onWorkspaceAction}>
+          <TurnLedger entries={ledger} />
+        </WindowFrame>
+      ) : null}
       <IngestRunsPanel apiBase={apiBase} refreshKey={ingestRefreshKey} />
     </section>
   );
