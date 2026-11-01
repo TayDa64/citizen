@@ -1,5 +1,5 @@
 import { useId } from 'react';
-import { CAMPAIGN_RUNWAY_ID, COMPANY_OPS_ID, TITLE_BAR_HEIGHT } from './windowModel';
+import { CAMPAIGN_RUNWAY_ID, COMPANY_METRICS_ID, COMPANY_OPS_ID, TITLE_BAR_HEIGHT } from './windowModel';
 
 function titleFor(id) {
   switch (id) {
@@ -7,6 +7,8 @@ function titleFor(id) {
       return 'Campaign runway';
     case COMPANY_OPS_ID:
       return 'Ops desk';
+    case COMPANY_METRICS_ID:
+      return 'Company metrics';
     default:
       return 'Window';
   }

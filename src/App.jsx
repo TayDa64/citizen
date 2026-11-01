@@ -57,7 +57,7 @@ import OfficeEnvironment from './shell/OfficeEnvironment';
 import NavigationShell, { OfficeStatus } from './shell/NavigationShell';
 import { campaignRunwayModel } from './shell/simulationAdapter';
 import WindowManager from './shell/WindowManager';
-import { CAMPAIGN_RUNWAY_ID, COMPANY_OPS_ID, reduceWorkspace } from './shell/windowModel';
+import { CAMPAIGN_RUNWAY_ID, COMPANY_METRICS_ID, COMPANY_OPS_ID, reduceWorkspace } from './shell/windowModel';
 import { readWorkspace, writeWorkspace } from './shell/workspaceStore';
 
 function removalBlockedMessage(error, label) {
@@ -770,24 +770,28 @@ function App({ initialPlayerRole } = {}) {
               ledger={ledger}
               showLedger={false}
               showPolitics={false}
+              showMetrics={false}
+            />
+            <WindowManager
+              workspace={workspace}
+              onAction={dispatchWorkspace}
+              models={{ [CAMPAIGN_RUNWAY_ID]: runwayModel }}
+              viewProps={{
+                [COMPANY_METRICS_ID]: { state },
+                ...(isCompanyOps ? {
+                  [COMPANY_OPS_ID]: {
+                    taxRate: state.taxRate,
+                    onSetTax: onOpsSetTax,
+                    onHire,
+                    draft: workspace.drafts?.[COMPANY_OPS_ID] ?? null,
+                    onDraftChange: (draft) => {
+                      dispatchWorkspace({ type: 'setDraft', id: COMPANY_OPS_ID, draft });
+                    },
+                  },
+                } : {}),
+              }}
             />
           </main>
-          <WindowManager
-            workspace={workspace}
-            onAction={dispatchWorkspace}
-            models={{ [CAMPAIGN_RUNWAY_ID]: runwayModel }}
-            viewProps={isCompanyOps ? {
-              [COMPANY_OPS_ID]: {
-                taxRate: state.taxRate,
-                onSetTax: onOpsSetTax,
-                onHire,
-                draft: workspace.drafts?.[COMPANY_OPS_ID] ?? null,
-                onDraftChange: (draft) => {
-                  dispatchWorkspace({ type: 'setDraft', id: COMPANY_OPS_ID, draft });
-                },
-              },
-            } : null}
-          />
         </div>
       </OfficeEnvironment>
     </div>

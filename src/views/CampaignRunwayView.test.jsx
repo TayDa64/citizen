@@ -19,13 +19,13 @@ describe('CampaignRunwayView', () => {
     const model = renderRunway();
 
     expect(screen.getByTestId('runway-turn')).toHaveTextContent('0');
-    expect(screen.getByTestId('runway-tax')).toHaveTextContent('25%');
-    expect(screen.getByTestId('runway-cash').textContent.replace(/,/g, '')).toContain('$15000');
-    expect(screen.getByTestId('runway-burn')).toHaveTextContent('$2,200');
-    expect(screen.getByTestId('runway-base-burn')).toHaveTextContent('$2,200');
+    expect(screen.queryByTestId('runway-tax')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('runway-cash')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('runway-burn')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('runway-base-burn')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('runway-talent-factor')).not.toBeInTheDocument();
     expect(screen.getByTestId('runway-hype')).toHaveTextContent('0.3');
     expect(screen.getByTestId('runway-talent-cost').textContent.replace(/,/g, '')).toContain('4000');
-    expect(screen.getByTestId('runway-talent-factor')).toHaveTextContent('1.00');
     expect(screen.getByTestId('runway-headroom')).toHaveTextContent('75%');
     expect(screen.getByTestId('runway-hype-bias')).toHaveTextContent('0');
     expect(screen.getByTestId('runway-hype-bias')).toHaveTextContent(/bias is 0 at 25% tax/i);
@@ -34,15 +34,16 @@ describe('CampaignRunwayView', () => {
     expect(screen.getByTestId('runway-authority')).toHaveTextContent(/companies/i);
 
     expect(screen.getByTestId('runway-chip-turn')).toHaveTextContent(/campaign observed/i);
-    expect(screen.getByTestId('runway-chip-cash')).toHaveTextContent(/campaign observed/i);
-    expect(screen.getByTestId('runway-chip-burn')).toHaveTextContent(/preview/i);
-    expect(screen.getByTestId('runway-chip-base-burn')).toHaveTextContent(/model/i);
+    expect(screen.queryByTestId('runway-chip-cash')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('runway-chip-burn')).not.toBeInTheDocument();
     expect(screen.getByTestId('runway-chip-hype')).toHaveTextContent(/observed/i);
     expect(screen.getByTestId('runway-chip-talent-cost')).toHaveTextContent(/local dollars/i);
     expect(screen.getByTestId('runway-chip-pathway')).toHaveTextContent(/projection/i);
     expect(screen.getByTestId('runway-field-pathway').className).toMatch(/projection/);
 
-    expect(screen.queryByTestId('runway-talent-factor-clamp')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('cash-value')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('burn-value')).not.toBeInTheDocument();
+    expect(document.querySelector('.metrics-chart')).not.toBeInTheDocument();
     expect(screen.queryByRole('slider')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /hire/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /advance month/i })).not.toBeInTheDocument();
@@ -51,12 +52,13 @@ describe('CampaignRunwayView', () => {
     expect(screen.getByTestId('campaign-runway-view').textContent).not.toMatch(BANNED_COPY);
   });
 
-  test('shows the talent-factor clamp note only when the flag is set', () => {
+  test('leaves the talent-factor clamp to the metrics window', () => {
     renderRunway({
       ...initialState,
       company: { ...initialState.company, talentCost: 40000 },
     });
-    expect(screen.getByTestId('runway-talent-factor-clamp')).toHaveTextContent(/capped at 3×/);
+    expect(screen.queryByTestId('runway-talent-factor-clamp')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('talent-cost-factor-clamp')).not.toBeInTheDocument();
   });
 
   test('api chips name the companies read model', () => {
@@ -76,7 +78,7 @@ describe('CampaignRunwayView', () => {
     const runway = screen.getByTestId('campaign-runway');
     expect(runway).toHaveTextContent(/campaign runway/i);
     expect(runway).not.toHaveTextContent(/economic intelligence/i);
-    expect(screen.getByTestId('runway-burn')).toHaveTextContent('$2,200');
+    expect(screen.getByTestId('runway-hype')).toHaveTextContent('0.3');
     expect(screen.getAllByTestId('burn-value')).toHaveLength(1);
     expect(screen.getAllByTestId('cash-value')).toHaveLength(1);
     expect(await screen.findAllByRole('heading', { name: 'Cash & Burn Rate' })).toHaveLength(1);

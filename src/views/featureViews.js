@@ -1,5 +1,6 @@
+import { CompanyMetrics } from '../components/Dashboard';
 import CompanyOpsForms from '../components/CompanyOpsForms';
-import { CAMPAIGN_RUNWAY_ID, COMPANY_OPS_ID } from '../shell/windowModel';
+import { CAMPAIGN_RUNWAY_ID, COMPANY_METRICS_ID, COMPANY_OPS_ID } from '../shell/windowModel';
 import CampaignRunwayView from './CampaignRunwayView';
 
 export function resolveFeatureView(viewId) {
@@ -8,6 +9,8 @@ export function resolveFeatureView(viewId) {
       return CampaignRunwayView;
     case COMPANY_OPS_ID:
       return CompanyOpsForms;
+    case COMPANY_METRICS_ID:
+      return CompanyMetrics;
     default:
       return null;
   }

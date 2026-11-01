@@ -7,6 +7,7 @@ export const WORKSPACE_VERSION = 1;
 export const PLACEMENT_MODE_DESKTOP = 'desktop';
 export const CAMPAIGN_RUNWAY_ID = 'campaign-runway';
 export const COMPANY_OPS_ID = 'company-ops';
+export const COMPANY_METRICS_ID = 'company-metrics';
 export const TITLE_BAR_HEIGHT = 40;
 
 const MIN_WINDOW_WIDTH = 280;
@@ -29,6 +30,18 @@ export const OPS_DEFAULT_PLACEMENT = Object.freeze({
   y: 24,
   width: 420,
   height: 540,
+});
+
+/**
+ * Below the ops window and wide enough that the cash/burn plot-line label
+ * stays on one line. Clear of the rail, the runway, and the ops window.
+ */
+export const METRICS_DEFAULT_PLACEMENT = Object.freeze({
+  mode: PLACEMENT_MODE_DESKTOP,
+  x: RAIL_CLEARANCE,
+  y: OPS_DEFAULT_PLACEMENT.y + OPS_DEFAULT_PLACEMENT.height + 16,
+  width: 960,
+  height: 480,
 });
 
 function copyPlacement(placement) {
@@ -62,8 +75,9 @@ function defaultPersistable() {
     version: WORKSPACE_VERSION,
     placementMode: PLACEMENT_MODE_DESKTOP,
     windows: [
-      defaultWindow(CAMPAIGN_RUNWAY_ID, 2),
+      defaultWindow(CAMPAIGN_RUNWAY_ID, 3),
       defaultWindow(COMPANY_OPS_ID, 1, OPS_DEFAULT_PLACEMENT),
+      defaultWindow(COMPANY_METRICS_ID, 2, METRICS_DEFAULT_PLACEMENT),
     ],
   };
 }
@@ -115,6 +129,10 @@ function ensureKnownWindows(windows) {
   if (!next.some((item) => item.id === COMPANY_OPS_ID)) {
     const z = next.reduce((max, item) => Math.max(max, item.z), 0) + 1;
     next = [...next, defaultWindow(COMPANY_OPS_ID, z, OPS_DEFAULT_PLACEMENT)];
+  }
+  if (!next.some((item) => item.id === COMPANY_METRICS_ID)) {
+    const z = next.reduce((max, item) => Math.max(max, item.z), 0) + 1;
+    next = [...next, defaultWindow(COMPANY_METRICS_ID, z, METRICS_DEFAULT_PLACEMENT)];
   }
   return next;
 }
