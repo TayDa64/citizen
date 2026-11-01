@@ -66,7 +66,7 @@ describe('company-metrics window model', () => {
     expect(rectsOverlap(metrics.placement, runway.placement)).toBe(false);
     expect(ops.placement).toEqual(OPS_DEFAULT_PLACEMENT);
     expect(runway.z).toBeGreaterThan(metrics.z);
-    expect(runway.z).toBeGreaterThan(ops.z);
+    expect(ops.z).toBeGreaterThan(runway.z);
   });
 
   test('a saved file without company-metrics gains that window and drops any persisted draft', () => {

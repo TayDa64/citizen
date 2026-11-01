@@ -143,7 +143,10 @@
 .window-layer {
   position: absolute;
   inset: 0;
-  z-index: 30;
+  /* No z-index here. A stacking context on this layer would pin every
+     window-manager frame above the desk frames, so focusing Politics (or
+     the ledger, nest, calendar, ingest, or event board) could never paint
+     them above the diagram. Frame z-index does that ordering instead. */
   pointer-events: none;
 }
 
