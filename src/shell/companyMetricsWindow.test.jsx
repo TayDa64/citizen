@@ -42,9 +42,12 @@ describe('company-metrics window model', () => {
     expect(metrics.userArranged).toBe(false);
     expect(metrics.placement).toEqual(METRICS_DEFAULT_PLACEMENT);
     expect(metrics.placement.mode).toBe('desktop');
-    expect(metrics.placement.x).toBeGreaterThanOrEqual(240);
+    expect(metrics.placement.x).toBeGreaterThanOrEqual(runway.placement.x + runway.placement.width);
+    expect(metrics.placement.y + metrics.placement.height).toBeLessThanOrEqual(
+      runway.placement.y + runway.placement.height,
+    );
+    expect(metrics.placement.width).toBeGreaterThanOrEqual(520);
     expect(rectsOverlap(metrics.placement, runway.placement)).toBe(false);
-    expect(rectsOverlap(metrics.placement, ops.placement)).toBe(false);
     expect(ops.placement).toEqual(OPS_DEFAULT_PLACEMENT);
     expect(runway.z).toBeGreaterThan(metrics.z);
     expect(runway.z).toBeGreaterThan(ops.z);

@@ -33,15 +33,16 @@ export const OPS_DEFAULT_PLACEMENT = Object.freeze({
 });
 
 /**
- * Below the ops window and wide enough that the cash/burn plot-line label
- * stays on one line. Clear of the rail, the runway, and the ops window.
+ * Same top band as the runway, to its right. That band already clears
+ * Advance Month. The campaign lens does not mount the ops window, so this
+ * column is free there. Wide enough for the plot-line label to stay one line.
  */
 export const METRICS_DEFAULT_PLACEMENT = Object.freeze({
   mode: PLACEMENT_MODE_DESKTOP,
-  x: RAIL_CLEARANCE,
-  y: OPS_DEFAULT_PLACEMENT.y + OPS_DEFAULT_PLACEMENT.height + 16,
-  width: 960,
-  height: 480,
+  x: OPS_DEFAULT_PLACEMENT.x,
+  y: OPS_DEFAULT_PLACEMENT.y,
+  width: 560,
+  height: RUNWAY_DEFAULT_PLACEMENT.height,
 });
 
 function copyPlacement(placement) {
@@ -76,8 +77,8 @@ function defaultPersistable() {
     placementMode: PLACEMENT_MODE_DESKTOP,
     windows: [
       defaultWindow(CAMPAIGN_RUNWAY_ID, 3),
-      defaultWindow(COMPANY_OPS_ID, 1, OPS_DEFAULT_PLACEMENT),
-      defaultWindow(COMPANY_METRICS_ID, 2, METRICS_DEFAULT_PLACEMENT),
+      defaultWindow(COMPANY_OPS_ID, 2, OPS_DEFAULT_PLACEMENT),
+      defaultWindow(COMPANY_METRICS_ID, 1, METRICS_DEFAULT_PLACEMENT),
     ],
   };
 }
